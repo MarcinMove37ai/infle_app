@@ -205,6 +205,37 @@ export default function RegisterPage() {
     setLoading(true);
     setError('');
 
+    // Sprawdzenie czy wszystkie wymagane pola są wypełnione
+    if (!formData.firstName.trim()) {
+      setError('Imię jest wymagane');
+      setLoading(false);
+      return;
+    }
+
+    if (!formData.lastName.trim()) {
+      setError('Nazwisko jest wymagane');
+      setLoading(false);
+      return;
+    }
+
+    if (!formData.email.trim()) {
+      setError('Adres email jest wymagany');
+      setLoading(false);
+      return;
+    }
+
+    if (!formData.phone.trim()) {
+      setError('Numer telefonu jest wymagany');
+      setLoading(false);
+      return;
+    }
+
+    if (!formData.socialLink.trim()) {
+      setError('Link do profilu Instagram/LinkedIn jest wymagany');
+      setLoading(false);
+      return;
+    }
+
     // Podstawowa walidacja
     if (formData.password !== formData.confirmPassword) {
       setError('Hasła nie są identyczne');
@@ -426,13 +457,14 @@ export default function RegisterPage() {
                   id="phone"
                   name="phone"
                   type="tel"
+                  required
                   value={formData.phone}
                   onChange={handleChange}
                   className="w-full px-4 pt-6 pb-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-200 text-gray-900 hover:border-gray-300 peer"
                   placeholder=" "
                 />
                 <label htmlFor="phone" className="absolute left-4 top-4 text-gray-500 text-sm transition-all duration-200 peer-placeholder-shown:top-4 peer-placeholder-shown:text-base peer-placeholder-shown:text-gray-500 peer-focus:top-2 peer-focus:text-xs peer-focus:text-blue-600 peer-[:not(:placeholder-shown)]:top-2 peer-[:not(:placeholder-shown)]:text-xs peer-[:not(:placeholder-shown)]:text-gray-600">
-                  Telefon
+                  Telefon *
                 </label>
               </div>
               <div className="relative">
@@ -440,6 +472,7 @@ export default function RegisterPage() {
                   id="socialLink"
                   name="socialLink"
                   type="url"
+                  required
                   value={formData.socialLink}
                   onChange={handleChange}
                   className={`w-full px-4 pt-6 pb-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-200 ${
@@ -448,7 +481,7 @@ export default function RegisterPage() {
                   placeholder=" "
                 />
                 <label htmlFor="socialLink" className="absolute left-4 top-4 text-gray-500 text-sm transition-all duration-200 peer-placeholder-shown:top-4 peer-placeholder-shown:text-base peer-placeholder-shown:text-gray-500 peer-focus:top-2 peer-focus:text-xs peer-focus:text-blue-600 peer-[:not(:placeholder-shown)]:top-2 peer-[:not(:placeholder-shown)]:text-xs peer-[:not(:placeholder-shown)]:text-gray-600 z-20">
-                  Instagram/LinkedIn
+                  Instagram/LinkedIn *
                 </label>
                 {checkingProfile && (
                   <>
