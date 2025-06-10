@@ -30,6 +30,7 @@ export default function RegisterPage() {
   const [instagramProfile, setInstagramProfile] = useState<InstagramProfileResponse | null>(null);
   const [instagramLoading, setInstagramLoading] = useState(false);
   const [checkingProfile, setCheckingProfile] = useState(false);
+  const [loadingProgress, setLoadingProgress] = useState(0);
 
   const router = useRouter();
 
@@ -51,14 +52,36 @@ export default function RegisterPage() {
     return url.includes('instagram.com') && url.includes('/');
   };
 
+  const simulateProgress = () => {
+    setLoadingProgress(0);
+    const intervals = [
+      { time: 500, progress: 10 },
+      { time: 1000, progress: 20 },
+      { time: 1500, progress: 35 },
+      { time: 2500, progress: 50 },
+      { time: 4000, progress: 65 },
+      { time: 5500, progress: 80 },
+      { time: 7000, progress: 95 },
+      { time: 8000, progress: 100 }
+    ];
+
+    intervals.forEach(({ time, progress }) => {
+      setTimeout(() => {
+        setLoadingProgress(progress);
+      }, time);
+    });
+  };
+
   const checkInstagramProfile = async (url: string) => {
     if (!isInstagramUrl(url)) {
       setInstagramProfile(null);
+      setLoadingProgress(0);
       return;
     }
 
     setInstagramLoading(true);
     setCheckingProfile(true);
+    simulateProgress();
 
     try {
       const response = await fetch('/api/instagram-profile', {
@@ -84,8 +107,12 @@ export default function RegisterPage() {
     } catch (error) {
       setInstagramProfile(null);
     } finally {
-      setInstagramLoading(false);
-      setCheckingProfile(false);
+      // Krótkie opóźnienie aby pokazać 100%
+      setTimeout(() => {
+        setInstagramLoading(false);
+        setCheckingProfile(false);
+        setLoadingProgress(0);
+      }, 200);
     }
   };
 
@@ -96,6 +123,7 @@ export default function RegisterPage() {
         checkInstagramProfile(formData.socialLink);
       } else {
         setInstagramProfile(null);
+        setLoadingProgress(0);
       }
     }, 1000); // 1 sekunda opóźnienia
 
@@ -335,18 +363,26 @@ export default function RegisterPage() {
                 <label htmlFor="socialLink" className="block text-sm font-medium text-gray-700 mb-2">
                   Link Instagram
                   {checkingProfile && (
-                    <span className="ml-2 text-xs text-blue-600">Sprawdzanie...</span>
+                    <span className="ml-2 text-xs text-green-600">{loadingProgress}%</span>
                   )}
                 </label>
-                <input
-                  id="socialLink"
-                  name="socialLink"
-                  type="url"
-                  value={formData.socialLink}
-                  onChange={handleChange}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-200 text-gray-900 placeholder-gray-500 hover:border-gray-300"
-                  placeholder="instagram.com/username"
-                />
+                <div className="relative">
+                  <input
+                    id="socialLink"
+                    name="socialLink"
+                    type="url"
+                    value={formData.socialLink}
+                    onChange={handleChange}
+                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-200 text-gray-900 placeholder-gray-500 hover:border-gray-300 relative z-10 bg-transparent"
+                    placeholder="instagram.com/username"
+                  />
+                  {checkingProfile && (
+                    <div
+                      className="absolute inset-0 bg-green-100 border border-green-300 rounded-xl transition-all duration-300 ease-out z-0"
+                      style={{ clipPath: `inset(0 ${100 - loadingProgress}% 0 0)` }}
+                    ></div>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -392,7 +428,7 @@ export default function RegisterPage() {
 
                 {/* Username centered at bottom */}
                 <div className="text-center">
-                  <p className="text-sm font-semibold text-gray-900 break-all">@{instagramProfile.username}</p>
+                  <p className="text-sm font-semibold text-gray-900 truncate">@{instagramProfile.username}</p>
                 </div>
               </div>
             )}
