@@ -27,12 +27,6 @@ COPY . .
 # Wyłączenie telemetrii Next.js
 ENV NEXT_TELEMETRY_DISABLED=1
 
-# Ustawienie zmiennych środowiskowych na sztywno z Railway
-ENV DATABASE_URL="postgresql://postgres:tSLruyOZAuDJyoOHNHHjEFTHaAelfeDc@tramway.proxy.rlwy.net:51981/railway"
-ENV RESEND_API_KEY="re_e4nfVevz_D8jArRGgFXtuaRBSnmoWpfbq"
-ENV NEXTAUTH_SECRET="twoj-bardzo-tajny-sekret-min-32-znaki-abcd1234"
-ENV NEXTAUTH_URL="https://app.inflee.app"
-
 # Uruchomienie procesu budowania aplikacji
 RUN npm run build
 
