@@ -448,7 +448,7 @@ export default function RegisterPage() {
                   placeholder=" "
                 />
                 <label htmlFor="socialLink" className="absolute left-4 top-4 text-gray-500 text-sm transition-all duration-200 peer-placeholder-shown:top-4 peer-placeholder-shown:text-base peer-placeholder-shown:text-gray-500 peer-focus:top-2 peer-focus:text-xs peer-focus:text-blue-600 peer-[:not(:placeholder-shown)]:top-2 peer-[:not(:placeholder-shown)]:text-xs peer-[:not(:placeholder-shown)]:text-gray-600 z-20">
-                  Instagra/LinkedIn
+                  Instagram/LinkedIn
                 </label>
                 {checkingProfile && (
                   <>
