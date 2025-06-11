@@ -1,5 +1,6 @@
 // src/app/api/instagram-profile/route.ts
 import { NextRequest, NextResponse } from 'next/server';
+import { saveInstagramProfile } from '@/lib/profileStorage';
 
 // Typy wewnątrz pliku route.ts
 interface InstagramProfileResponse {
@@ -13,6 +14,7 @@ interface InstagramProfileResponse {
   full_name: string | null;
   bio: string | null;
   detection_method: string;
+  savedProfileId?: string | null; // NOWE POLE
   raw_data?: {
     page_title: string;
     meta_description: string;
@@ -98,7 +100,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
       }, { status: 500 });
     }
 
-    const profileData = await checkInstagramProfileWithApify(url, apifyToken);
+    const profileData = await checkInstagramProfileWithApify(url, apifyToken, request);
 
     console.log('✅ Profile check completed successfully via Apify');
     console.log('=== INSTAGRAM API CALL END ===');
@@ -140,7 +142,8 @@ function extractUsername(url: string): string | null {
 // Główna funkcja sprawdzająca profil Instagram za pomocą Apify
 async function checkInstagramProfileWithApify(
   instagramUrl: string,
-  apifyToken: string
+  apifyToken: string,
+  request: NextRequest // NOWY PARAMETR
 ): Promise<InstagramProfileResponse> {
   try {
     console.log(`🔍 Checking profile via Apify synchronous endpoint: ${instagramUrl}`);
@@ -210,15 +213,16 @@ async function checkInstagramProfileWithApify(
       private: apifyData.private
     });
 
-    // Mapuj dane z Apify na nasz format
-    const mappedData = mapApifyDataToResponse(apifyData);
+    // Mapuj dane z Apify na nasz format (PRZEKAŻ REQUEST)
+    const mappedData = await mapApifyDataToResponse(apifyData, request);
 
     console.log('🎯 Final mapped response:', {
       exist: mappedData.exist,
       is_public: mappedData.is_public,
       username: mappedData.username,
       followers_count: mappedData.followers_count,
-      detection_method: mappedData.detection_method
+      detection_method: mappedData.detection_method,
+      savedProfileId: mappedData.savedProfileId // NOWY LOG
     });
 
     return mappedData;
@@ -233,8 +237,23 @@ async function checkInstagramProfileWithApify(
 }
 
 // Funkcja mapująca dane z Apify na nasz format
-function mapApifyDataToResponse(apifyData: ApifyInstagramResponse): InstagramProfileResponse {
+async function mapApifyDataToResponse(apifyData: ApifyInstagramResponse, request: NextRequest): Promise<InstagramProfileResponse> {
   console.log('🔄 Mapping Apify data to response format...');
+
+  // NOWY KOD - Zapis profilu do bazy danych
+  let savedProfileId: string | null = null;
+  try {
+    console.log('💾 Attempting to save Instagram profile to database...');
+    savedProfileId = await saveInstagramProfile(apifyData, request);
+    if (savedProfileId) {
+      console.log('✅ Instagram profile saved to database with ID:', savedProfileId);
+    } else {
+      console.log('⚠️ Failed to save Instagram profile to database');
+    }
+  } catch (error) {
+    console.error('❌ Error during profile save:', error);
+    // Kontynuuj normalnie - zapis profilu nie powinien blokować sprawdzenia
+  }
 
   const originalProfilePicUrl = apifyData.profilePicUrlHD || apifyData.profilePicUrl || null;
 
@@ -258,6 +277,7 @@ function mapApifyDataToResponse(apifyData: ApifyInstagramResponse): InstagramPro
     full_name: apifyData.fullName,
     bio: apifyData.biography,
     detection_method: 'APIFY_API',
+    savedProfileId: savedProfileId, // NOWE POLE
     raw_data: {
       page_title: apifyData.fullName ? `${apifyData.fullName} (@${apifyData.username})` : `@${apifyData.username}`,
       meta_description: apifyData.biography || '',
@@ -290,6 +310,7 @@ function createNotFoundResponse(username: string): InstagramProfileResponse {
     full_name: null,
     bio: null,
     detection_method: 'APIFY_API_NOT_FOUND',
+    savedProfileId: null, // NOWE POLE
   };
 }
 

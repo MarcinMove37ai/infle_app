@@ -10,6 +10,7 @@ interface InstagramProfileResponse {
   username: string;
   followers_count: number | null;
   posts_count: number | null;
+  savedProfileId?: string | null; // NOWE POLE
 }
 
 interface LinkedInProfileResponse {
@@ -19,6 +20,7 @@ interface LinkedInProfileResponse {
   connections: number | null;
   full_name: string | null;
   headline: string | null;
+  savedProfileId?: string | null; // NOWE POLE
 }
 
 type SocialProfile = InstagramProfileResponse | LinkedInProfileResponse | null;
@@ -45,6 +47,9 @@ export default function RegisterPage() {
   const [loadingProgress, setLoadingProgress] = useState(0);
   const [platformType, setPlatformType] = useState<PlatformType>(null);
   const [showSocialProfile, setShowSocialProfile] = useState(false);
+
+  // NOWE POLE - ID sprawdzonego profilu
+  const [checkedProfileId, setCheckedProfileId] = useState<string | null>(null);
 
   const router = useRouter();
 
@@ -107,6 +112,13 @@ export default function RegisterPage() {
       if (response.ok && data.exist) {
         if (data.profilepic_url && data.followers_count !== null && data.posts_count !== null) {
           setSocialProfile(data);
+
+          // NOWY KOD - zapisz ID profilu
+          if (data.savedProfileId) {
+            setCheckedProfileId(data.savedProfileId);
+            console.log('✅ Saved Instagram profile ID for registration:', data.savedProfileId);
+          }
+
           return true;
         }
       }
@@ -132,6 +144,13 @@ export default function RegisterPage() {
       if (response.ok && data.exist) {
         if (data.profilepic_url && data.followers !== null && data.connections !== null) {
           setSocialProfile(data);
+
+          // NOWY KOD - zapisz ID profilu
+          if (data.savedProfileId) {
+            setCheckedProfileId(data.savedProfileId);
+            console.log('✅ Saved LinkedIn profile ID for registration:', data.savedProfileId);
+          }
+
           return true;
         }
       }
@@ -210,10 +229,18 @@ export default function RegisterPage() {
   }, [formData.socialLink]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+
     setFormData(prev => ({
       ...prev,
-      [e.target.name]: e.target.value
+      [name]: value
     }));
+
+    // NOWY KOD - reset ID profilu przy zmianie linku
+    if (name === 'socialLink') {
+      setCheckedProfileId(null);
+      console.log('🔄 Reset profile ID due to social link change');
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -277,6 +304,7 @@ export default function RegisterPage() {
           socialLink: formData.socialLink,
           profilePicture: socialProfile?.profilepic_url || null,
           password: formData.password,
+          checkedProfileId: checkedProfileId, // NOWE POLE - przekaż ID profilu
         }),
       });
 
@@ -284,6 +312,7 @@ export default function RegisterPage() {
 
       if (response.ok) {
         setRegistrationSuccess(true);
+        console.log('✅ Registration successful with profile ID:', checkedProfileId);
       } else {
         setError(data.error || 'Wystąpił błąd podczas rejestracji');
       }

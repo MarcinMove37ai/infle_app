@@ -10,20 +10,91 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// Enum dla typów profili społecznościowych
+enum SocialProfileType {
+  INSTAGRAM_ONLY
+  LINKEDIN_ONLY
+  BOTH
+  NONE
+}
+
 model User {
-  id                String    @id @default(cuid())
-  email             String    @unique
-  firstName         String
-  lastName          String
-  phone             String?
-  socialLink        String?
-  profilePicture    String?   // ← NOWA LINIA
-  password          String
-  emailVerified     DateTime?
-  verificationToken String?
-  resetToken        String?   // 🔥 NOWE POLE
-  resetTokenExpiry  DateTime? // 🔥 NOWE POLE
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  id                  String              @id @default(cuid())
+  email               String              @unique
+  firstName           String
+  lastName            String
+  phone               String?
+  socialLink          String?
+  profilePicture      String?
+  password            String
+  emailVerified       DateTime?
+  verificationToken   String?
+  resetToken          String?
+  resetTokenExpiry    DateTime?
+
+  // Nowe pola dla profili społecznościowych
+  instagramProfileId  String?
+  linkedinProfileId   String?
+  socialProfileType   SocialProfileType   @default(NONE)
+
+  // Relacje do profili społecznościowych (opcjonalne)
+  instagramProfile    InstagramProfileCheck? @relation(fields: [instagramProfileId], references: [id])
+  linkedinProfile     LinkedInProfileCheck?  @relation(fields: [linkedinProfileId], references: [id])
+
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+
   @@map("users")
+}
+
+model InstagramProfileCheck {
+  id                String    @id @default(cuid())
+  instagramUrl      String
+  instagramId       String?
+  username          String
+  fullName          String?
+  biography         String?
+  followersCount    Int?
+  followsCount      Int?
+  postsCount        Int?
+  profilePicUrl     String?
+  profilePicUrlHD   String?
+  isBusinessAccount Boolean   @default(false)
+  isPrivate         Boolean   @default(false)
+  isVerified        Boolean   @default(false)
+  businessCategory  String?
+  checkedAt         DateTime  @default(now())
+  userIp            String?
+  userAgent         String?
+
+  // Relacja zwrotna do User (jeden profil może być powiązany z wieloma userami)
+  users             User[]
+
+  @@map("instagram_profile_checks")
+}
+
+model LinkedInProfileCheck {
+  id                String    @id @default(cuid())
+  linkedinUrl       String
+  firstName         String?
+  lastName          String?
+  fullName          String?
+  headline          String?
+  aboutExcerpt      String?   // Biografia skrócona do 500 znaków
+  connectionsCount  Int?
+  followersCount    Int?
+  profilePicUrl     String?
+  jobTitle          String?
+  companyName       String?
+  companyIndustry   String?
+  location          String?
+  topSkills         String?   // Top 5 umiejętności jako string
+  checkedAt         DateTime  @default(now())
+  userIp            String?
+  userAgent         String?
+
+  // Relacja zwrotna do User (jeden profil może być powiązany z wieloma userami)
+  users             User[]
+
+  @@map("linkedin_profile_checks")
 }

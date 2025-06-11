@@ -4,6 +4,8 @@ import { prisma } from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
 import { Resend } from 'resend';
 import crypto from 'crypto';
+import { getProfileType } from '@/lib/profileStorage';
+import { SocialProfileType } from '@prisma/client'; // NOWY IMPORT - enum
 
 // Funkcja do lazy initialization Resend
 function getResendClient() {
@@ -29,7 +31,17 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const { firstName, lastName, email, phone, socialLink, password, profilePicture } = body;
+    const { firstName, lastName, email, phone, socialLink, password, profilePicture, checkedProfileId } = body;
+
+    console.log('📝 Registration request received:', {
+      firstName,
+      lastName,
+      email,
+      phone: phone ? 'provided' : 'not provided',
+      socialLink: socialLink ? 'provided' : 'not provided',
+      profilePicture: profilePicture ? 'provided' : 'not provided',
+      checkedProfileId: checkedProfileId || 'not provided'
+    });
 
     // Walidacja podstawowa
     if (!firstName || !lastName || !email || !password) {
@@ -58,13 +70,42 @@ export async function POST(request: Request) {
       );
     }
 
+    // NOWA LOGIKA - Sprawdź czy mamy ID sprawdzonego profilu i określ typ
+    let instagramProfileId: string | null = null;
+    let linkedinProfileId: string | null = null;
+    let socialProfileType: SocialProfileType = SocialProfileType.NONE; // POPRAWIONE - użycie enum
+
+    if (checkedProfileId) {
+      console.log('🔗 Linking user with profile ID:', checkedProfileId);
+
+      try {
+        const profileType = await getProfileType(checkedProfileId);
+        if (profileType === 'instagram') {
+          instagramProfileId = checkedProfileId;
+          socialProfileType = SocialProfileType.INSTAGRAM_ONLY; // POPRAWIONE - użycie enum
+          console.log('✅ Will link user to Instagram profile');
+        } else if (profileType === 'linkedin') {
+          linkedinProfileId = checkedProfileId;
+          socialProfileType = SocialProfileType.LINKEDIN_ONLY; // POPRAWIONE - użycie enum
+          console.log('✅ Will link user to LinkedIn profile');
+        } else {
+          console.log('⚠️ Profile ID provided but profile not found in database');
+        }
+      } catch (error) {
+        console.error('❌ Error checking profile type:', error);
+        // Kontynuuj rejestrację bez powiązania profilu
+      }
+    } else {
+      console.log('ℹ️ No profile ID provided, creating user without social profile link');
+    }
+
     // Hashowanie hasła
     const hashedPassword = await bcrypt.hash(password, 12);
 
     // Generuj token weryfikacyjny
     const verificationToken = crypto.randomBytes(32).toString('hex');
 
-    // Utworzenie użytkownika z tokenem weryfikacyjnym
+    // Utworzenie użytkownika z tokenem weryfikacyjnym i powiązaniem profilu
     const user = await prisma.user.create({
       data: {
         firstName,
@@ -72,10 +113,22 @@ export async function POST(request: Request) {
         email: email.toLowerCase().trim(),
         phone: phone?.trim() || null,
         socialLink: socialLink?.trim() || null,
-        profilePicture: profilePicture?.trim() || null,  // ← DODAJ TĘ LINIĘ
+        profilePicture: profilePicture?.trim() || null,
         password: hashedPassword,
         verificationToken,
+        // NOWE POLA - powiązanie z profilem społecznościowym
+        instagramProfileId,
+        linkedinProfileId,
+        socialProfileType,
       }
+    });
+
+    console.log('✅ User created successfully:', {
+      id: user.id,
+      email: user.email,
+      socialProfileType: user.socialProfileType,
+      instagramProfileId: user.instagramProfileId,
+      linkedinProfileId: user.linkedinProfileId
     });
 
     // Wyślij email weryfikacyjny
@@ -149,8 +202,9 @@ export async function POST(request: Request) {
           </html>
         `
       });
+      console.log('✅ Verification email sent successfully');
     } catch (emailError) {
-      console.error('Email sending error:', emailError);
+      console.error('❌ Email sending error:', emailError);
       // User został utworzony, ale email się nie wysłał - to nie jest krytyczny błąd
     }
 
@@ -164,7 +218,7 @@ export async function POST(request: Request) {
     }, { status: 201 });
 
   } catch (error) {
-    console.error('Registration error:', error);
+    console.error('❌ Registration error:', error);
     return NextResponse.json(
       { error: 'Wystąpił błąd podczas tworzenia konta' },
       { status: 500 }

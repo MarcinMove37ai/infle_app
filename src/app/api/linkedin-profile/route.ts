@@ -1,5 +1,6 @@
 // src/app/api/linkedin-profile/route.ts
 import { NextRequest, NextResponse } from 'next/server';
+import { saveLinkedInProfile } from '@/lib/profileStorage';
 
 // Typy dla LinkedIn
 interface LinkedInProfileResponse {
@@ -12,6 +13,7 @@ interface LinkedInProfileResponse {
   full_name: string | null;
   headline: string | null;
   detection_method: string;
+  savedProfileId?: string | null; // NOWE POLE
   raw_data?: {
     page_title: string;
     meta_description: string;
@@ -94,7 +96,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
       }, { status: 500 });
     }
 
-    const profileData = await checkLinkedInProfileWithApify(url, apifyToken);
+    const profileData = await checkLinkedInProfileWithApify(url, apifyToken, request);
 
     console.log('✅ Profile check completed successfully via Apify');
     console.log('=== LINKEDIN API CALL END ===');
@@ -136,7 +138,8 @@ function extractLinkedInUsername(url: string): string | null {
 // Główna funkcja sprawdzająca profil LinkedIn za pomocą Apify
 async function checkLinkedInProfileWithApify(
   linkedinUrl: string,
-  apifyToken: string
+  apifyToken: string,
+  request: NextRequest // NOWY PARAMETR
 ): Promise<LinkedInProfileResponse> {
   try {
     console.log(`🔍 Checking LinkedIn profile via Apify synchronous endpoint: ${linkedinUrl}`);
@@ -144,7 +147,7 @@ async function checkLinkedInProfileWithApify(
     // Przygotuj payload dla Apify LinkedIn scraper
     const apifyPayload = {
       profileUrls: [linkedinUrl],
-      includeSkills: false,
+      includeSkills: true, // ZMIANA - włączamy skills dla naszego zapisu
       includeExperience: false,
       includeEducation: false,
       includeRecommendations: false,
@@ -206,8 +209,8 @@ async function checkLinkedInProfileWithApify(
       headline: apifyData.headline
     });
 
-    // Mapuj dane z Apify na nasz format
-    const mappedData = mapApifyLinkedInDataToResponse(apifyData);
+    // Mapuj dane z Apify na nasz format (PRZEKAŻ REQUEST)
+    const mappedData = await mapApifyLinkedInDataToResponse(apifyData, request);
 
     console.log('🎯 Final mapped LinkedIn response:', {
       exist: mappedData.exist,
@@ -215,7 +218,8 @@ async function checkLinkedInProfileWithApify(
       username: mappedData.username,
       followers: mappedData.followers,
       connections: mappedData.connections,
-      detection_method: mappedData.detection_method
+      detection_method: mappedData.detection_method,
+      savedProfileId: mappedData.savedProfileId // NOWY LOG
     });
 
     return mappedData;
@@ -230,8 +234,23 @@ async function checkLinkedInProfileWithApify(
 }
 
 // Funkcja mapująca dane z Apify LinkedIn na nasz format
-function mapApifyLinkedInDataToResponse(apifyData: ApifyLinkedInResponse): LinkedInProfileResponse {
+async function mapApifyLinkedInDataToResponse(apifyData: ApifyLinkedInResponse, request: NextRequest): Promise<LinkedInProfileResponse> {
   console.log('🔄 Mapping Apify LinkedIn data to response format...');
+
+  // NOWY KOD - Zapis profilu do bazy danych
+  let savedProfileId: string | null = null;
+  try {
+    console.log('💾 Attempting to save LinkedIn profile to database...');
+    savedProfileId = await saveLinkedInProfile(apifyData, request);
+    if (savedProfileId) {
+      console.log('✅ LinkedIn profile saved to database with ID:', savedProfileId);
+    } else {
+      console.log('⚠️ Failed to save LinkedIn profile to database');
+    }
+  } catch (error) {
+    console.error('❌ Error during LinkedIn profile save:', error);
+    // Kontynuuj normalnie - zapis profilu nie powinien blokować sprawdzenia
+  }
 
   const originalProfilePicUrl = apifyData.profilePicHighQuality || apifyData.profilePic || null;
 
@@ -254,6 +273,7 @@ function mapApifyLinkedInDataToResponse(apifyData: ApifyLinkedInResponse): Linke
     full_name: apifyData.fullName,
     headline: apifyData.headline,
     detection_method: 'APIFY_LINKEDIN_API',
+    savedProfileId: savedProfileId, // NOWE POLE
     raw_data: {
       page_title: apifyData.fullName ? `${apifyData.fullName} - LinkedIn` : `LinkedIn Profile`,
       meta_description: apifyData.headline || apifyData.about || '',
@@ -285,6 +305,7 @@ function createLinkedInNotFoundResponse(username: string): LinkedInProfileRespon
     full_name: null,
     headline: null,
     detection_method: 'APIFY_LINKEDIN_API_NOT_FOUND',
+    savedProfileId: null, // NOWE POLE
   };
 }
 
