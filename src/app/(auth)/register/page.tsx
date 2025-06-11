@@ -44,6 +44,7 @@ export default function RegisterPage() {
   const [checkingProfile, setCheckingProfile] = useState(false);
   const [loadingProgress, setLoadingProgress] = useState(0);
   const [platformType, setPlatformType] = useState<PlatformType>(null);
+  const [showSocialProfile, setShowSocialProfile] = useState(false);
 
   const router = useRouter();
 
@@ -104,7 +105,6 @@ export default function RegisterPage() {
       const data = await response.json();
 
       if (response.ok && data.exist) {
-        // Sprawdź czy wszystkie wymagane dane są dostępne
         if (data.profilepic_url && data.followers_count !== null && data.posts_count !== null) {
           setSocialProfile(data);
           return true;
@@ -130,7 +130,6 @@ export default function RegisterPage() {
       const data = await response.json();
 
       if (response.ok && data.exist) {
-        // Sprawdź czy wszystkie wymagane dane są dostępne
         if (data.profilepic_url && data.followers !== null && data.connections !== null) {
           setSocialProfile(data);
           return true;
@@ -143,12 +142,29 @@ export default function RegisterPage() {
     }
   };
 
+  // ZAKTUALIZOWANA FUNKCJA - kluczowa poprawka do animacji
+  const showProfileSmooth = () => {
+    // Krótkie opóźnienie, aby pozwolić Reactowi wyrenderować ukryty element
+    // przed dodaniem klasy uruchamiającej animację. To rozwiązuje problem "nagłego" pojawiania się.
+    setTimeout(() => {
+      setShowSocialProfile(true);
+    }, 10);
+  };
+
+  const hideProfileSmooth = () => {
+    setShowSocialProfile(false);
+    // Czas opóźnienia zsynchronizowany z czasem trwania animacji (duration-500)
+    setTimeout(() => {
+      setSocialProfile(null);
+      setPlatformType(null);
+    }, 500);
+  };
+
   const checkSocialProfile = async (url: string) => {
     const platform = detectPlatform(url);
 
     if (!platform) {
-      setSocialProfile(null);
-      setPlatformType(null);
+      hideProfileSmooth();
       setLoadingProgress(0);
       return;
     }
@@ -167,10 +183,12 @@ export default function RegisterPage() {
     }
 
     if (!success) {
-      setSocialProfile(null);
+      hideProfileSmooth();
+    } else {
+      // Po ustawieniu danych profilu, wywołujemy płynne pokazanie
+      showProfileSmooth();
     }
 
-    // Krótkie opóźnienie aby pokazać 100%
     setTimeout(() => {
       setSocialLoading(false);
       setCheckingProfile(false);
@@ -178,17 +196,15 @@ export default function RegisterPage() {
     }, 200);
   };
 
-  // Debounced social check
   useEffect(() => {
     const timer = setTimeout(() => {
       if (formData.socialLink) {
         checkSocialProfile(formData.socialLink);
       } else {
-        setSocialProfile(null);
-        setPlatformType(null);
+        hideProfileSmooth();
         setLoadingProgress(0);
       }
-    }, 1000); // 1 sekunda opóźnienia
+    }, 1000);
 
     return () => clearTimeout(timer);
   }, [formData.socialLink]);
@@ -205,7 +221,6 @@ export default function RegisterPage() {
     setLoading(true);
     setError('');
 
-    // Sprawdzenie czy wszystkie wymagane pola są wypełnione
     if (!formData.firstName.trim()) {
       setError('Imię jest wymagane');
       setLoading(false);
@@ -236,7 +251,6 @@ export default function RegisterPage() {
       return;
     }
 
-    // Podstawowa walidacja
     if (formData.password !== formData.confirmPassword) {
       setError('Hasła nie są identyczne');
       setLoading(false);
@@ -280,7 +294,6 @@ export default function RegisterPage() {
     }
   };
 
-  // Helper functions for profile display
   const isInstagramProfile = (profile: SocialProfile): profile is InstagramProfileResponse => {
     return profile !== null && 'followers_count' in profile;
   };
@@ -289,12 +302,10 @@ export default function RegisterPage() {
     return profile !== null && 'followers' in profile;
   };
 
-  // Komunikat sukcesu po rejestracji (bez zmian)
   if (registrationSuccess) {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center py-6 px-4 sm:px-6 lg:px-8">
         <div className="max-w-md w-full space-y-6">
-          {/* Logo Section */}
           <div className="text-center">
             <div className="flex items-center justify-center mb-6">
               <div className="w-20 h-20 bg-white rounded-xl shadow-lg border border-gray-200 flex items-center justify-center p-2 hover:shadow-xl transition-shadow duration-300 mr-3">
@@ -315,7 +326,6 @@ export default function RegisterPage() {
             </div>
           </div>
 
-          {/* Success Message */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-all duration-300 ease-out p-6 md:p-8">
             <div className="text-center">
               <h2 className="text-2xl font-bold text-gray-900 mb-4">
@@ -326,7 +336,7 @@ export default function RegisterPage() {
                 <div className="text-center">
                   <div className="flex justify-center mb-0.5">
                     <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 002 2v10a2 2 0 002 2z"></path>
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
                     </svg>
                   </div>
                   <p className="text-blue-800 font-medium mb-2 text-lg">
@@ -341,7 +351,7 @@ export default function RegisterPage() {
               <div className="bg-gray-50 rounded-xl p-6 mb-6">
                 <h3 className="text-sm font-semibold text-gray-700 mb-4 text-center flex items-center justify-center">
                   <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="9 5l7 7-7 7"></path>
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path>
                   </svg>
                   Następne kroki:
                 </h3>
@@ -370,7 +380,6 @@ export default function RegisterPage() {
   return (
     <div className="min-h-screen bg-gray-100 flex items-center justify-center py-6 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-6">
-        {/* Logo Section */}
         <div className="text-center">
           <div className="flex items-center justify-center mb-6">
             <div className="w-20 h-20 bg-white rounded-xl shadow-lg border border-gray-200 flex items-center justify-center p-2 hover:shadow-xl transition-shadow duration-300 cursor-pointer mr-3">
@@ -391,9 +400,7 @@ export default function RegisterPage() {
           </div>
         </div>
 
-        {/* Register Form */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-all duration-300 ease-out p-6 md:p-8">
-          {/* Form Header */}
           <div className="mb-6 text-center">
             <h2 className="text-xl font-semibold text-gray-700">
               Utwórz nowe konto
@@ -498,7 +505,7 @@ export default function RegisterPage() {
                           : 'rgba(59, 130, 246, 0.15)'
                       }}
                     ></div>
-                    <div className="absolute inset-0 flex items-center justify-center z-40 pointer-events-none">
+                    <div className="absolute inset-0 flex items-center justify-center z-40 pointer-events-none top-1">
                       <div className={`px-2 py-0.5 rounded-md text-xs font-medium backdrop-blur-sm border ${
                         platformType === 'instagram'
                           ? 'bg-green-50/90 text-green-700 border-green-200/50'
@@ -512,112 +519,111 @@ export default function RegisterPage() {
               </div>
             </div>
 
-            {/* Social Profile Display */}
+            {/* Social Profile Block */}
             {socialProfile && (
-              <div className={`${
-                platformType === 'instagram'
-                  ? 'bg-gradient-to-r from-green-50 to-emerald-50 border-green-200'
-                  : 'bg-gradient-to-r from-blue-50 to-cyan-50 border-blue-200'
-              } border rounded-xl p-4 transition-all duration-300 ease-in-out`}>
+              <div
+                className={`
+                  transition-all duration-500 ease-in-out
+                  ${showSocialProfile
+                    ? 'max-h-96 opacity-100 transform scale-100 translate-y-0'
+                    : 'max-h-0 opacity-0 transform scale-95 -translate-y-4 overflow-hidden'
+                  }
+                `}
+              >
+                <div
+                  className={`
+                    ${platformType === 'instagram'
+                      ? 'bg-gradient-to-r from-green-50 to-emerald-50 border-green-200'
+                      : 'bg-gradient-to-r from-blue-50 to-cyan-50 border-blue-200'
+                    }
+                    border rounded-xl p-4 mt-6
+                  `}
+                >
+                  {isInstagramProfile(socialProfile) && (
+                    <>
+                      <div className="grid grid-cols-3 gap-4 items-center mb-3">
+                        <div className="text-center">
+                          <div className="w-20 h-20 rounded-full mx-auto p-0.5 bg-gradient-to-tr from-yellow-400 via-red-500 to-purple-500">
+                            <img
+                              src={socialProfile.profilepic_url!}
+                              alt="Profile"
+                              className="w-full h-full rounded-full object-cover border-2 border-white"
+                              onError={(e) => {
+                                const target = e.target as HTMLImageElement;
+                                target.style.display = 'none';
+                              }}
+                            />
+                          </div>
+                        </div>
 
-                {/* Instagram Profile */}
-                {isInstagramProfile(socialProfile) && (
-                  <>
-                    {/* Top row: Photo | Posts | Followers */}
-                    <div className="grid grid-cols-3 gap-4 items-center mb-3">
-                      {/* Profile Picture */}
-                      <div className="text-center">
-                        <div className="w-20 h-20 rounded-full mx-auto p-0.5 bg-gradient-to-tr from-yellow-400 via-red-500 to-purple-500">
-                          <img
-                            src={socialProfile.profilepic_url!}
-                            alt="Profile"
-                            className="w-full h-full rounded-full object-cover border-2 border-white"
-                            onError={(e) => {
-                              const target = e.target as HTMLImageElement;
-                              target.style.display = 'none';
-                            }}
-                          />
+                        <div className="text-center">
+                          <div className="text-2xl font-bold text-blue-600 mb-1">
+                            {formatNumber(socialProfile.posts_count)}
+                          </div>
+                          <div className="text-xs text-gray-600 font-medium">Posts</div>
+                        </div>
+
+                        <div className="text-center">
+                          <div className="text-2xl font-bold text-pink-600 mb-1">
+                            {formatNumber(socialProfile.followers_count)}
+                          </div>
+                          <div className="text-xs text-gray-600 font-medium">Followers</div>
                         </div>
                       </div>
 
-                      {/* Posts */}
+                      <div className="border-t border-green-200 mb-3"></div>
+
                       <div className="text-center">
-                        <div className="text-2xl font-bold text-blue-600 mb-1">
-                          {formatNumber(socialProfile.posts_count)}
-                        </div>
-                        <div className="text-xs text-gray-600 font-medium">Posts</div>
+                        <p className="text-sm font-semibold text-gray-900 truncate">@{socialProfile.username}</p>
                       </div>
+                    </>
+                  )}
 
-                      {/* Followers */}
-                      <div className="text-center">
-                        <div className="text-2xl font-bold text-pink-600 mb-1">
-                          {formatNumber(socialProfile.followers_count)}
+                  {isLinkedInProfile(socialProfile) && (
+                    <>
+                      <div className="grid grid-cols-3 gap-4 items-center mb-3">
+                        <div className="text-center">
+                          <div className="w-20 h-20 rounded-full mx-auto p-0.5 bg-gradient-to-tr from-blue-500 to-cyan-500">
+                            <img
+                              src={socialProfile.profilepic_url!}
+                              alt="Profile"
+                              className="w-full h-full rounded-full object-cover border-2 border-white"
+                              onError={(e) => {
+                                const target = e.target as HTMLImageElement;
+                                target.style.display = 'none';
+                              }}
+                            />
+                          </div>
                         </div>
-                        <div className="text-xs text-gray-600 font-medium">Followers</div>
-                      </div>
-                    </div>
 
-                    {/* Horizontal Divider */}
-                    <div className="border-t border-green-200 mb-3"></div>
+                        <div className="text-center">
+                          <div className="text-2xl font-bold text-blue-600 mb-1">
+                            {formatNumber(socialProfile.followers)}
+                          </div>
+                          <div className="text-xs text-gray-600 font-medium">Followers</div>
+                        </div>
 
-                    {/* Username centered at bottom */}
-                    <div className="text-center">
-                      <p className="text-sm font-semibold text-gray-900 truncate">@{socialProfile.username}</p>
-                    </div>
-                  </>
-                )}
-
-                {/* LinkedIn Profile */}
-                {isLinkedInProfile(socialProfile) && (
-                  <>
-                    {/* Top row: Photo | Followers | Connections */}
-                    <div className="grid grid-cols-3 gap-4 items-center mb-3">
-                      {/* Profile Picture */}
-                      <div className="text-center">
-                        <div className="w-20 h-20 rounded-full mx-auto p-0.5 bg-gradient-to-tr from-blue-500 to-cyan-500">
-                          <img
-                            src={socialProfile.profilepic_url!}
-                            alt="Profile"
-                            className="w-full h-full rounded-full object-cover border-2 border-white"
-                            onError={(e) => {
-                              const target = e.target as HTMLImageElement;
-                              target.style.display = 'none';
-                            }}
-                          />
+                        <div className="text-center">
+                          <div className="text-2xl font-bold text-cyan-600 mb-1">
+                            {formatNumber(socialProfile.connections)}
+                          </div>
+                          <div className="text-xs text-gray-600 font-medium">Connections</div>
                         </div>
                       </div>
 
-                      {/* Followers */}
+                      <div className="border-t border-blue-200 mb-3"></div>
+
                       <div className="text-center">
-                        <div className="text-2xl font-bold text-blue-600 mb-1">
-                          {formatNumber(socialProfile.followers)}
-                        </div>
-                        <div className="text-xs text-gray-600 font-medium">Followers</div>
+                        <p className="text-sm font-semibold text-gray-900 truncate">
+                          {socialProfile.full_name || `@${socialProfile.username}`}
+                        </p>
+                        {socialProfile.headline && (
+                          <p className="text-xs text-gray-600 mt-1 truncate">{socialProfile.headline}</p>
+                        )}
                       </div>
-
-                      {/* Connections */}
-                      <div className="text-center">
-                        <div className="text-2xl font-bold text-cyan-600 mb-1">
-                          {formatNumber(socialProfile.connections)}
-                        </div>
-                        <div className="text-xs text-gray-600 font-medium">Connections</div>
-                      </div>
-                    </div>
-
-                    {/* Horizontal Divider */}
-                    <div className="border-t border-blue-200 mb-3"></div>
-
-                    {/* Name and headline */}
-                    <div className="text-center">
-                      <p className="text-sm font-semibold text-gray-900 truncate">
-                        {socialProfile.full_name || `@${socialProfile.username}`}
-                      </p>
-                      {socialProfile.headline && (
-                        <p className="text-xs text-gray-600 mt-1 truncate">{socialProfile.headline}</p>
-                      )}
-                    </div>
-                  </>
-                )}
+                    </>
+                  )}
+                </div>
               </div>
             )}
 
@@ -658,7 +664,7 @@ export default function RegisterPage() {
               <div className="bg-red-50 border border-red-200 rounded-xl p-4">
                 <div className="flex items-center">
                   <svg className="w-5 h-5 text-red-600 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                   </svg>
                   <div className="text-red-700 text-sm font-medium">{error}</div>
                 </div>

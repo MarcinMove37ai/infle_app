@@ -117,24 +117,26 @@ export default function ResetPasswordPage({ params }: ResetPasswordPageProps) {
   return (
     <div className="min-h-screen bg-gray-100 flex items-center justify-center py-6 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-6">
-        {/* Logo Section */}
-        <div className="text-center">
-          <div className="flex justify-center mb-6">
-            <div className="w-16 h-16 bg-white rounded-xl shadow-lg border border-gray-200 flex items-center justify-center p-2 hover:shadow-xl transition-shadow duration-300 cursor-pointer">
-              <img
-                src="/logo.png"
-                alt="inflee.app logo"
-                className="w-full h-full object-contain"
-              />
+          {/* Logo Section */}
+          <div className="text-center">
+            <div className="flex items-center justify-center mb-6">
+              <div className="w-20 h-20 bg-white rounded-xl shadow-lg border border-gray-200 flex items-center justify-center p-2 hover:shadow-xl transition-shadow duration-300 mr-3">
+                <img
+                  src="/logo.png"
+                  alt="inflee.app logo"
+                  className="w-full h-full object-contain"
+                />
+              </div>
+              <div className="text-left">
+                <h1 className="text-2xl font-bold bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent">
+                  inflee.app
+                </h1>
+                <p className="text-xs text-gray-500 font-medium tracking-wide uppercase leading-tight">
+                  Edukuj | Rośnij | Zarabiaj
+                </p>
+              </div>
             </div>
           </div>
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent mb-2">
-            inflee.app
-          </h1>
-          <p className="text-sm text-gray-500 font-medium tracking-wide uppercase leading-tight">
-            Edukuj | Rośnij | Zarabiaj
-          </p>
-        </div>
 
         {/* Content */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-all duration-300 ease-out p-6 md:p-8">
@@ -242,36 +244,46 @@ export default function ResetPasswordPage({ params }: ResetPasswordPageProps) {
               </div>
 
               <form className="space-y-6" onSubmit={handleSubmit}>
-                <div>
-                  <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
-                    Nowe hasło *
-                  </label>
-                  <input
-                    id="password"
-                    name="password"
-                    type="password"
-                    required
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-200 text-gray-900 placeholder-gray-500 hover:border-gray-300"
-                    placeholder="Minimum 6 znaków"
-                  />
-                </div>
+                <div className="space-y-4">
+                  {/* Password Field with Floating Label */}
+                  <div className="relative">
+                    <input
+                      id="password"
+                      name="password"
+                      type="password"
+                      required
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="peer w-full px-4 pt-6 pb-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-200 text-gray-900 placeholder-transparent hover:border-gray-300"
+                      placeholder="Nowe hasło"
+                    />
+                    <label
+                      htmlFor="password"
+                      className="absolute left-4 top-2 text-xs font-medium text-gray-500 transition-all duration-200 peer-placeholder-shown:text-base peer-placeholder-shown:text-gray-400 peer-placeholder-shown:top-4 peer-focus:top-2 peer-focus:text-xs peer-focus:text-blue-600 peer-focus:font-medium"
+                    >
+                      Nowe hasło *
+                    </label>
+                  </div>
 
-                <div>
-                  <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-2">
-                    Potwierdź nowe hasło *
-                  </label>
-                  <input
-                    id="confirmPassword"
-                    name="confirmPassword"
-                    type="password"
-                    required
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-200 text-gray-900 placeholder-gray-500 hover:border-gray-300"
-                    placeholder="Powtórz nowe hasło"
-                  />
+                  {/* Confirm Password Field with Floating Label */}
+                  <div className="relative">
+                    <input
+                      id="confirmPassword"
+                      name="confirmPassword"
+                      type="password"
+                      required
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      className="peer w-full px-4 pt-6 pb-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-200 text-gray-900 placeholder-transparent hover:border-gray-300"
+                      placeholder="Potwierdź nowe hasło"
+                    />
+                    <label
+                      htmlFor="confirmPassword"
+                      className="absolute left-4 top-2 text-xs font-medium text-gray-500 transition-all duration-200 peer-placeholder-shown:text-base peer-placeholder-shown:text-gray-400 peer-placeholder-shown:top-4 peer-focus:top-2 peer-focus:text-xs peer-focus:text-blue-600 peer-focus:font-medium"
+                    >
+                      Potwierdź nowe hasło *
+                    </label>
+                  </div>
                 </div>
 
                 {error && (
