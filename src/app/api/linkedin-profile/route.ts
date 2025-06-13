@@ -1,8 +1,7 @@
 // src/app/api/linkedin-profile/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { saveLinkedInProfile } from '@/lib/profileStorage';
+import { saveLinkedInProfile, normalizeLinkedInData } from '@/lib/profileStorage';
 
-// Typy dla LinkedIn
 interface LinkedInProfileResponse {
   exist: boolean;
   is_public: boolean;
@@ -12,8 +11,12 @@ interface LinkedInProfileResponse {
   connections: number | null;
   full_name: string | null;
   headline: string | null;
+  jobTitle: string | null;        // DODANE POLE
+  companyName: string | null;     // DODANE POLE
+  location: string | null;        // DODANE POLE
+  topSkills: string | null;       // DODANE POLE
   detection_method: string;
-  savedProfileId?: string | null; // NOWE POLE
+  savedProfileId?: string | null;
   raw_data?: {
     page_title: string;
     meta_description: string;
@@ -206,7 +209,9 @@ async function checkLinkedInProfileWithApify(
       fullName: apifyData.fullName,
       followers: apifyData.followers,
       connections: apifyData.connections,
-      headline: apifyData.headline
+      headline: apifyData.headline,
+      jobTitle: apifyData.jobTitle,
+      companyName: apifyData.companyName
     });
 
     // Mapuj dane z Apify na nasz format (PRZEKAŻ REQUEST)
@@ -218,8 +223,12 @@ async function checkLinkedInProfileWithApify(
       username: mappedData.username,
       followers: mappedData.followers,
       connections: mappedData.connections,
+      jobTitle: mappedData.jobTitle,
+      companyName: mappedData.companyName,
+      location: mappedData.location,
+      topSkills: mappedData.topSkills ? mappedData.topSkills.substring(0, 50) + '...' : null,
       detection_method: mappedData.detection_method,
-      savedProfileId: mappedData.savedProfileId // NOWY LOG
+      savedProfileId: mappedData.savedProfileId
     });
 
     return mappedData;
@@ -252,6 +261,16 @@ async function mapApifyLinkedInDataToResponse(apifyData: ApifyLinkedInResponse, 
     // Kontynuuj normalnie - zapis profilu nie powinien blokować sprawdzenia
   }
 
+  // 🔧 NORMALIZACJA DANYCH - użyj tej samej funkcji co do zapisu
+  const normalizedData = normalizeLinkedInData(apifyData);
+
+  console.log('🔧 Normalized LinkedIn data:', {
+    jobTitle: normalizedData.jobTitle,
+    companyName: normalizedData.companyName,
+    location: normalizedData.location,
+    topSkills: normalizedData.topSkills ? normalizedData.topSkills.substring(0, 50) + '...' : null
+  });
+
   const originalProfilePicUrl = apifyData.profilePicHighQuality || apifyData.profilePic || null;
 
   // Stwórz proxy URL dla obrazu profilowego (jeśli istnieje)
@@ -272,6 +291,13 @@ async function mapApifyLinkedInDataToResponse(apifyData: ApifyLinkedInResponse, 
     connections: apifyData.connections || null,
     full_name: apifyData.fullName,
     headline: apifyData.headline,
+
+    // ✅ DODANE BRAKUJĄCE POLA Z ZNORMALIZOWANYCH DANYCH
+    jobTitle: normalizedData.jobTitle,
+    companyName: normalizedData.companyName,
+    location: normalizedData.location,
+    topSkills: normalizedData.topSkills,
+
     detection_method: 'APIFY_LINKEDIN_API',
     savedProfileId: savedProfileId, // NOWE POLE
     raw_data: {
@@ -283,13 +309,22 @@ async function mapApifyLinkedInDataToResponse(apifyData: ApifyLinkedInResponse, 
         'public_linkedin_profile',
         ...(apifyData.followers > 0 ? ['has_followers'] : []),
         ...(apifyData.connections > 0 ? ['has_connections'] : []),
-        ...(apifyData.companyName ? ['has_company'] : []),
-        ...(apifyData.jobTitle ? ['has_job_title'] : []),
+        ...(normalizedData.companyName ? ['has_company'] : []),
+        ...(normalizedData.jobTitle ? ['has_job_title'] : []),
+        ...(normalizedData.location ? ['has_location'] : []),
+        ...(normalizedData.topSkills ? ['has_skills'] : []),
       ]
     }
   };
 
   console.log('✅ LinkedIn mapping completed successfully');
+  console.log('🎯 Response includes all fields:', {
+    jobTitle: response.jobTitle,
+    companyName: response.companyName,
+    location: response.location,
+    topSkills: response.topSkills ? response.topSkills.substring(0, 50) + '...' : null
+  });
+
   return response;
 }
 
@@ -304,6 +339,10 @@ function createLinkedInNotFoundResponse(username: string): LinkedInProfileRespon
     connections: null,
     full_name: null,
     headline: null,
+    jobTitle: null,        // DODANE POLE
+    companyName: null,     // DODANE POLE
+    location: null,        // DODANE POLE
+    topSkills: null,       // DODANE POLE
     detection_method: 'APIFY_LINKEDIN_API_NOT_FOUND',
     savedProfileId: null, // NOWE POLE
   };

@@ -1,15 +1,18 @@
+// src/app/dashboard/layout.tsx
 "use client"
 
-import PersistentAdminLayout from '@/components/layout/PersistentAdminLayout'
+// POPRAWNY IMPORT - importujemy komponent, który zawiera w sobie Provider
+import PersistentAdminLayoutWithProvider from '@/components/layout/PersistentAdminLayout'
 
 export default function DashboardLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
+  // Używamy komponentu z Providerem
   return (
-    <PersistentAdminLayout>
+    <PersistentAdminLayoutWithProvider>
       {children}
-    </PersistentAdminLayout>
+    </PersistentAdminLayoutWithProvider>
   )
 }

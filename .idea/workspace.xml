@@ -5,8 +5,30 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="46749596-836e-4f8d-af4b-57221a03aed3" name="Changes" comment="">
+      <change afterPath="$PROJECT_DIR$/src/app/(dashboard)/linkedin_app/page.tsx" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/app/api/user/instagram-profile/route.ts" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/app/api/user/linkedin-profile/route.ts" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/components/pages/LinkedInApp.tsx" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/components/profile/InstagramProfileBar.tsx" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/components/profile/LinkedInProfileBar.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/vcs.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/vcs.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/ignore_py_files/project_schema.json" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/prisma/schema.prisma" beforeDir="false" afterPath="$PROJECT_DIR$/prisma/schema.prisma" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/app/(dashboard)/layout.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/app/(dashboard)/layout.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/app/(dashboard)/raport-odbiorcow/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/app/(dashboard)/instagram_app/page.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/app/api/instagram-profile/route.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/app/api/instagram-profile/route.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/app/api/linkedin-profile/route.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/app/api/linkedin-profile/route.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/app/api/proxy-image/route.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/app/api/proxy-image/route.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/components/layout/AdminLayout.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/components/layout/LayoutContext.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/components/layout/PersistentAdminLayout.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/components/layout/PersistentAdminLayout.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/components/pages/DashboardContent.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/components/pages/DashboardContent.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/components/pages/RaportOdbiorcowContent.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/components/pages/InstagramApp.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/components/pages/index.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/components/pages/index.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/lib/auth.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/lib/auth.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/lib/profileStorage.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/lib/profileStorage.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/types/types.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/types/types.ts" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -20,7 +42,9 @@
   &quot;associatedIndex&quot;: 1
 }</component>
   <component name="ProjectId" id="2yBv88XAQtBqcDuh0Z3nTXtXkUq" />
-  <component name="ProjectLevelVcsManager" settingsEditedManually="true" />
+  <component name="ProjectLevelVcsManager" settingsEditedManually="true">
+    <ConfirmationsSetting value="2" id="Add" />
+  </component>
   <component name="ProjectViewState">
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
@@ -30,9 +54,15 @@
     "Python.create_project_schema.executor": "Run",
     "RunOnceActivity.ShowReadmeOnStart": "true",
     "git-widget-placeholder": "master",
-    "last_opened_file_path": "D:/inflee.app/infle_app"
+    "last_opened_file_path": "D:/inflee.app/infle_app/src/components/pages"
   }
 }]]></component>
+  <component name="RecentsManager">
+    <key name="CopyFile.RECENT_KEYS">
+      <recent name="D:\inflee.app\infle_app\src\components\pages" />
+      <recent name="D:\inflee.app\infle_app\src\app\(dashboard)\linkedin_app" />
+    </key>
+  </component>
   <component name="SharedIndexes">
     <attachedChunks>
       <set>

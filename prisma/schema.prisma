@@ -57,9 +57,10 @@ model InstagramProfileCheck {
   followersCount    Int?
   followsCount      Int?
   postsCount        Int?
+  highlightReelCount Int?     // NOWE POLE - liczba highlight reels
   profilePicUrl     String?
   profilePicUrlHD   String?
-  isBusinessAccount Boolean   @default(false)
+  isBusinessAccount Boolean   @default(false) // TYMCZASOWO - usuniemy po migracji
   isPrivate         Boolean   @default(false)
   isVerified        Boolean   @default(false)
   businessCategory  String?

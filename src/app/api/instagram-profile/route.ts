@@ -11,8 +11,10 @@ interface InstagramProfileResponse {
   followers_count: number | null;
   following_count: number | null;
   posts_count: number | null;
+  highlight_reel_count?: number | null; // NOWE POLE - liczba highlight reels
   full_name: string | null;
   bio: string | null;
+  is_verified: boolean; // DODANE POLE - status weryfikacji
   detection_method: string;
   savedProfileId?: string | null; // NOWE POLE
   raw_data?: {
@@ -32,7 +34,7 @@ interface InstagramApiError {
   details?: string;
 }
 
-// Typ odpowiedzi z Apify
+// Typ odpowiedzi z Apify - POPRAWIONY
 interface ApifyInstagramResponse {
   inputUrl: string;
   id: string;
@@ -48,7 +50,8 @@ interface ApifyInstagramResponse {
   isBusinessAccount: boolean;
   joinedRecently: boolean;
   businessCategoryName: string;
-  private: boolean;
+  private?: boolean;           // Stare pole z Apify
+  is_private?: boolean;        // Nowe pole z Apify
   verified: boolean;
   profilePicUrl: string;
   profilePicUrlHD: string;
@@ -198,6 +201,12 @@ async function checkInstagramProfileWithApify(
 
     if (results.length > 0) {
       console.log(`📦 First result preview:`, JSON.stringify(results[0], null, 2).substring(0, 500));
+
+      // DODANE: Debug logowanie pól związanych z prywatnością
+      console.log('🔍 PRIVACY FIELDS DEBUG:');
+      console.log('📥 apifyData.is_private:', results[0].is_private);
+      console.log('📥 apifyData.private (old field):', (results[0] as any).private);
+      console.log('📤 Final isPrivate value:', results[0].is_private ?? (results[0] as any).private ?? false);
     }
 
     if (!results || results.length === 0) {
@@ -210,7 +219,9 @@ async function checkInstagramProfileWithApify(
       username: apifyData.username,
       fullName: apifyData.fullName,
       followersCount: apifyData.followersCount,
-      private: apifyData.private
+      is_private: apifyData.is_private,
+      private: (apifyData as any).private,
+      final_isPrivate: apifyData.is_private ?? (apifyData as any).private ?? false
     });
 
     // Mapuj dane z Apify na nasz format (PRZEKAŻ REQUEST)
@@ -236,46 +247,76 @@ async function checkInstagramProfileWithApify(
   }
 }
 
-// Funkcja mapująca dane z Apify na nasz format
+// Funkcja mapująca dane z Apify na nasz format - POPRAWIONA
 async function mapApifyDataToResponse(apifyData: ApifyInstagramResponse, request: NextRequest): Promise<InstagramProfileResponse> {
   console.log('🔄 Mapping Apify data to response format...');
 
-  // NOWY KOD - Zapis profilu do bazy danych
-  let savedProfileId: string | null = null;
-  try {
-    console.log('💾 Attempting to save Instagram profile to database...');
-    savedProfileId = await saveInstagramProfile(apifyData, request);
-    if (savedProfileId) {
-      console.log('✅ Instagram profile saved to database with ID:', savedProfileId);
-    } else {
-      console.log('⚠️ Failed to save Instagram profile to database');
-    }
-  } catch (error) {
-    console.error('❌ Error during profile save:', error);
-    // Kontynuuj normalnie - zapis profilu nie powinien blokować sprawdzenia
-  }
+  // OBSŁUGA ZARÓWNO private JAK I is_private
+  const isPrivate = apifyData.is_private ?? apifyData.private ?? false;
 
+  // DODANE: Szczegółowe logowanie prywatnością
+  console.log('🔍 DETAILED PRIVACY DEBUG:');
+  console.log('📥 Raw Apify is_private:', apifyData.is_private);
+  console.log('📥 Raw Apify private:', apifyData.private);
+  console.log('📥 Final isPrivate value:', isPrivate);
+  console.log('📤 Calculated is_public:', !isPrivate);
+  console.log('🎯 Expected display text:', isPrivate ? 'Prywatne' : 'Publiczne');
+
+  // NOWY KOD - Tworzenie proxy URL PRZED zapisem do bazy
   const originalProfilePicUrl = apifyData.profilePicUrlHD || apifyData.profilePicUrl || null;
-
-  // Stwórz proxy URL dla obrazu profilowego (jeśli istnieje)
   let proxiedProfilePicUrl = null;
+  let proxiedProfilePicUrlHD = null;
+
   if (originalProfilePicUrl) {
     // Enkoduj URL obrazu dla bezpieczeństwa
     const encodedImageUrl = encodeURIComponent(originalProfilePicUrl);
     proxiedProfilePicUrl = `/api/proxy-image?url=${encodedImageUrl}`;
+    proxiedProfilePicUrlHD = proxiedProfilePicUrl; // Używamy tego samego proxy URL
     console.log('🔄 Created proxy URL for profile picture');
+  }
+
+  // NOWY KOD - Zapis profilu do bazy danych Z PROXY URL
+  let savedProfileId: string | null = null;
+
+  // POPRAWKA: Zapisuj do bazy tylko gdy mamy wymagane dane
+  if (originalProfilePicUrl) {
+    try {
+      console.log('💾 Attempting to save Instagram profile to database...');
+
+      // MAPOWANIE DANYCH Z PROXY URL DO ZAPISU W BAZIE - POPRAWIONE TYPY
+      const profileDataForSave = {
+        ...apifyData,
+        profilePicUrl: proxiedProfilePicUrl || '', // Używamy pustego stringa zamiast null
+        profilePicUrlHD: proxiedProfilePicUrlHD || '', // Używamy pustego stringa zamiast null
+        is_private: isPrivate  // Używamy ustalonej wartości
+      };
+
+      savedProfileId = await saveInstagramProfile(profileDataForSave, request);
+      if (savedProfileId) {
+        console.log('✅ Instagram profile saved to database with ID:', savedProfileId);
+      } else {
+        console.log('⚠️ Failed to save Instagram profile to database');
+      }
+    } catch (error) {
+      console.error('❌ Error during profile save:', error);
+      // Kontynuuj normalnie - zapis profilu nie powinien blokować sprawdzenia
+    }
+  } else {
+    console.log('⚠️ Skipping database save - no profile picture URL available');
   }
 
   const response: InstagramProfileResponse = {
     exist: true,
-    is_public: !apifyData.private,
+    is_public: !isPrivate,
     profilepic_url: proxiedProfilePicUrl,
     username: apifyData.username,
     followers_count: apifyData.followersCount,
     following_count: apifyData.followsCount,
     posts_count: apifyData.postsCount,
+    highlight_reel_count: apifyData.highlightReelCount, // NOWE POLE - mapowanie z Apify
     full_name: apifyData.fullName,
     bio: apifyData.biography,
+    is_verified: apifyData.verified, // DODANE MAPOWANIE - status weryfikacji
     detection_method: 'APIFY_API',
     savedProfileId: savedProfileId, // NOWE POLE
     raw_data: {
@@ -284,7 +325,7 @@ async function mapApifyDataToResponse(apifyData: ApifyInstagramResponse, request
       json_data_found: true,
       html_indicators: [
         'apify_api_data',
-        apifyData.private ? 'private_account' : 'public_account',
+        isPrivate ? 'private_account' : 'public_account',
         apifyData.verified ? 'verified_account' : 'unverified_account',
         apifyData.isBusinessAccount ? 'business_account' : 'personal_account',
         ...(apifyData.followersCount > 0 ? ['has_followers'] : []),
@@ -294,6 +335,11 @@ async function mapApifyDataToResponse(apifyData: ApifyInstagramResponse, request
   };
 
   console.log('✅ Mapping completed successfully');
+  console.log('🎯 FINAL PRIVACY VALIDATION:');
+  console.log('📥 Input isPrivate:', isPrivate);
+  console.log('📤 Output is_public:', response.is_public);
+  console.log('🔄 Cross-check (should be opposite):', isPrivate === !response.is_public ? '✅ CORRECT' : '❌ ERROR');
+
   return response;
 }
 
@@ -307,8 +353,10 @@ function createNotFoundResponse(username: string): InstagramProfileResponse {
     followers_count: null,
     following_count: null,
     posts_count: null,
+    highlight_reel_count: null, // NOWE POLE
     full_name: null,
     bio: null,
+    is_verified: false, // DODANE POLE - dla nie znalezionych profili
     detection_method: 'APIFY_API_NOT_FOUND',
     savedProfileId: null, // NOWE POLE
   };

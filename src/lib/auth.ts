@@ -3,14 +3,18 @@ import CredentialsProvider from 'next-auth/providers/credentials';
 import { prisma } from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
 
-// Rozszerzenie typów NextAuth - DODANO profilePicture
+// Rozszerzenie typów NextAuth - DODANO pola profili społecznościowych
 declare module 'next-auth' {
   interface User {
     id: string;
     email: string;
     name?: string | null;
     emailVerified?: Date | null;
-    profilePicture?: string | null; // DODANE POLE
+    profilePicture?: string | null;
+    // NOWE POLA
+    instagramProfileId?: string | null;
+    linkedinProfileId?: string | null;
+    socialProfileType?: string | null;
   }
 
   interface Session {
@@ -19,7 +23,11 @@ declare module 'next-auth' {
       email: string;
       name?: string | null;
       emailVerified?: Date | null;
-      profilePicture?: string | null; // DODANE POLE
+      profilePicture?: string | null;
+      // NOWE POLA
+      instagramProfileId?: string | null;
+      linkedinProfileId?: string | null;
+      socialProfileType?: string | null;
     }
   }
 }
@@ -28,7 +36,11 @@ declare module 'next-auth/jwt' {
   interface JWT {
     id: string;
     emailVerified?: Date | null;
-    profilePicture?: string | null; // DODANE POLE
+    profilePicture?: string | null;
+    // NOWE POLA
+    instagramProfileId?: string | null;
+    linkedinProfileId?: string | null;
+    socialProfileType?: string | null;
   }
 }
 
@@ -46,7 +58,7 @@ export const authOptions: NextAuthOptions = {
           throw new Error('Brak emaila lub hasła');
         }
 
-        // Znajdź usera w bazie - DODANO SELECT profilePicture
+        // Znajdź usera w bazie - DODANO nowe pola
         const user = await prisma.user.findUnique({
           where: { email: credentials.email.toLowerCase() },
           select: {
@@ -56,7 +68,11 @@ export const authOptions: NextAuthOptions = {
             lastName: true,
             password: true,
             emailVerified: true,
-            profilePicture: true, // DODANE POLE
+            profilePicture: true,
+            // NOWE POLA
+            instagramProfileId: true,
+            linkedinProfileId: true,
+            socialProfileType: true,
           }
         });
 
@@ -76,13 +92,17 @@ export const authOptions: NextAuthOptions = {
           throw new Error('Email nie został zweryfikowany');
         }
 
-        // Zwróć użytkownika z profilePicture
+        // Zwróć użytkownika z wszystkimi polami
         return {
           id: user.id,
           email: user.email,
           name: `${user.firstName} ${user.lastName}`,
           emailVerified: user.emailVerified,
-          profilePicture: user.profilePicture, // DODANE POLE
+          profilePicture: user.profilePicture,
+          // NOWE POLA
+          instagramProfileId: user.instagramProfileId,
+          linkedinProfileId: user.linkedinProfileId,
+          socialProfileType: user.socialProfileType,
         };
       }
     })
@@ -99,7 +119,11 @@ export const authOptions: NextAuthOptions = {
       if (user) {
         token.id = user.id;
         token.emailVerified = user.emailVerified;
-        token.profilePicture = user.profilePicture; // DODANE POLE
+        token.profilePicture = user.profilePicture;
+        // NOWE POLA
+        token.instagramProfileId = user.instagramProfileId;
+        token.linkedinProfileId = user.linkedinProfileId;
+        token.socialProfileType = user.socialProfileType;
       }
       return token;
     },
@@ -108,7 +132,11 @@ export const authOptions: NextAuthOptions = {
       if (token) {
         session.user.id = token.id;
         session.user.emailVerified = token.emailVerified;
-        session.user.profilePicture = token.profilePicture; // DODANE POLE
+        session.user.profilePicture = token.profilePicture;
+        // NOWE POLA
+        session.user.instagramProfileId = token.instagramProfileId;
+        session.user.linkedinProfileId = token.linkedinProfileId;
+        session.user.socialProfileType = token.socialProfileType;
       }
       return session;
     }

@@ -23,15 +23,71 @@ import { useAuth } from '@/hooks/useAuth';
 import { UserRole } from '@/types/types';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 
+// POPRAWIONE Custom Icon Components
+interface CustomIconProps {
+  size?: number;
+  className?: string;
+  isActive?: boolean;
+}
+
+const InstagramIcon: React.FC<CustomIconProps> = ({ size = 20, className = '', isActive = false }) => {
+  return (
+    <div className="flex items-center justify-center" style={{ width: size, height: size }}>
+      <img
+        src="/ig.png"
+        alt="Instagram"
+        className={`transition-all duration-200 ${className}`}
+        style={{
+          width: size,
+          height: size,
+          opacity: isActive ? 1 : 0.7,
+          transform: isActive ? 'scale(1.1)' : 'scale(1)',
+        }}
+        onError={(e) => {
+          console.error('Instagram icon failed to load:', e);
+        }}
+        onLoad={() => {
+          console.log('Instagram icon loaded successfully');
+        }}
+      />
+    </div>
+  );
+};
+
+const LinkedInIcon: React.FC<CustomIconProps> = ({ size = 20, className = '', isActive = false }) => {
+  return (
+    <div className="flex items-center justify-center" style={{ width: size, height: size }}>
+      <img
+        src="/linkedin.png"
+        alt="LinkedIn"
+        className={`transition-all duration-200 ${className}`}
+        style={{
+          width: size,
+          height: size,
+          opacity: isActive ? 1 : 0.7,
+          transform: isActive ? 'scale(1.1)' : 'scale(1)',
+        }}
+        onError={(e) => {
+          console.error('LinkedIn icon failed to load:', e);
+        }}
+        onLoad={() => {
+          console.log('LinkedIn icon loaded successfully');
+        }}
+      />
+    </div>
+  );
+};
+
 type UserStatus = 'pending' | 'active' | 'blocked';
 
 interface MenuItem {
-  IconComponent: LucideIcon;
+  IconComponent: LucideIcon | React.FC<CustomIconProps>;
   label: string;
   path: string;
   roles: UserRole[];
   requiredStatus?: UserStatus[];
   fullWidth?: boolean;
+  iconType?: 'instagram' | 'linkedin'; // Dodana właściwość do identyfikacji
 }
 
 // CONTEXT PRO PERSISTENT STATE
@@ -89,13 +145,15 @@ const useLayout = () => {
   return context;
 };
 
+// POPRAWIONA LISTA MENU ITEMS
 const menuItems: MenuItem[] = [
   {
     IconComponent: Home,
     label: 'Dashboard',
     path: '/dashboard',
     roles: ['ADMIN', 'USER', 'GOD'],
-    requiredStatus: ['active']
+    requiredStatus: ['active'],
+    fullWidth: true
   },
   {
     IconComponent: Users,
@@ -105,11 +163,20 @@ const menuItems: MenuItem[] = [
     requiredStatus: ['active']
   },
   {
-    IconComponent: UserCheck,
-    label: 'Raport Odbiorców',
-    path: '/raport-odbiorcow',
+    IconComponent: InstagramIcon,
+    label: 'Instagram App',
+    path: '/instagram_app',
     roles: ['ADMIN', 'USER', 'GOD'],
-    requiredStatus: ['active']
+    requiredStatus: ['active'],
+    iconType: 'instagram'
+  },
+  {
+    IconComponent: LinkedInIcon,
+    label: 'LinkedIn App',
+    path: '/linkedin_app',
+    roles: ['ADMIN', 'USER', 'GOD'],
+    requiredStatus: ['active'],
+    iconType: 'linkedin'
   },
   {
     IconComponent: TrendingUp,
@@ -141,6 +208,19 @@ const menuItems: MenuItem[] = [
   }
 ];
 
+// FUNKCJA POMOCNICZA DO RENDEROWANIA IKON
+const renderMenuIcon = (item: MenuItem, isActive: boolean, size: number = 20) => {
+  const IconComponent = item.IconComponent;
+
+  // Sprawdź czy to custom ikona
+  if (item.iconType === 'instagram' || item.iconType === 'linkedin') {
+    return <IconComponent size={size} isActive={isActive} />;
+  } else {
+    // Standardowa Lucide ikona
+    return <IconComponent size={size} />;
+  }
+};
+
 const getCurrentPageLabel = (path: string | null) => {
   if (!path) return 'Dashboard';
   const normalizedPath = path.endsWith('/') ? path.slice(0, -1) : path;
@@ -148,7 +228,7 @@ const getCurrentPageLabel = (path: string | null) => {
   return menuItem?.label || 'Dashboard';
 };
 
-// SIDEBAR KOMPONENT - PERSISTENT Z POPRAWKAMI MOBILE
+// SIDEBAR KOMPONENT - PERSISTENT Z POPRAWKAMI
 const Sidebar: React.FC = () => {
   const { hoveredSidebar, setHoveredSidebar, isMobileMenuOpen, setIsMobileMenuOpen, setIsNavigating } = useLayout();
   const pathname = usePathname();
@@ -205,11 +285,9 @@ const Sidebar: React.FC = () => {
     if (isMobile) {
       setIsMobileMenuOpen(false);
     }
-    // Navigation loading will be cleared by the new page
     setTimeout(() => setIsNavigating(false), 500);
   };
 
-  // Funkcja wylogowania dla mobilnego sidebara
   const handleMobileLogout = async () => {
     try {
       setIsLoggingOut(true);
@@ -222,7 +300,6 @@ const Sidebar: React.FC = () => {
     }
   };
 
-  // BLOKADA RENDEROWANIA DOPÓKI NIE SPRAWDZIMY ROZMIARU EKRANU
   if (!isScreenSizeDetected) {
     return null;
   }
@@ -236,7 +313,6 @@ const Sidebar: React.FC = () => {
         bg-white shadow-xl rounded-r-3xl overflow-hidden backdrop-blur-sm
         transition-all duration-300 ease-out border-r border-gray-100`}>
         <div className="py-4">
-          {/* Skeleton for menu items */}
           <div className="px-3 space-y-2">
             {Array.from({ length: 4 }, (_, i) => (
               <div key={i} className="animate-pulse">
@@ -254,9 +330,8 @@ const Sidebar: React.FC = () => {
     );
   }
 
-  // MOBILE SIDEBAR - Z POPRAWKAMI
+  // MOBILE SIDEBAR
   if (isMobile) {
-    // Nie renderuj sidebara przed hydracją lub podczas ładowania auth
     if (!isClient || authLoading) {
       return null;
     }
@@ -271,9 +346,7 @@ const Sidebar: React.FC = () => {
           boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)'
         }}
       >
-        {/* Kontener dla całego sidebara z flex layout */}
         <div className="flex flex-col h-full">
-          {/* Główne menu - zajmuje dostępną przestrzeń */}
           <nav className="flex-1 py-6">
             <ul className="space-y-2 px-4">
               {filteredMenuItems.map((item, index) => (
@@ -296,7 +369,7 @@ const Sidebar: React.FC = () => {
                       flex-shrink-0 w-7 h-7 flex items-center justify-center
                       ${normalizedPathname === item.path ? 'text-blue-600' : 'text-gray-600'}
                     `}>
-                      {isClient && <item.IconComponent size={22} />}
+                      {renderMenuIcon(item, normalizedPathname === item.path, 22)}
                     </div>
                     <span className="ml-4 whitespace-nowrap font-medium text-base">
                       {item.label}
@@ -307,7 +380,6 @@ const Sidebar: React.FC = () => {
             </ul>
           </nav>
 
-          {/* Przycisk wyloguj na dole sidebara - tylko na mobile - POPRAWIONY FORMAT */}
           <div className="px-4 pb-6 pt-4 border-t border-gray-200/50 flex justify-center">
             <button
               onClick={handleMobileLogout}
@@ -330,7 +402,7 @@ const Sidebar: React.FC = () => {
     );
   }
 
-  // DESKTOP SIDEBAR - PŁYNNE ANIMACJE
+  // DESKTOP SIDEBAR
   return (
     <div
       className={`fixed left-0 z-40 top-16 h-[calc(100vh-4rem)]
@@ -370,7 +442,7 @@ const Sidebar: React.FC = () => {
                     transition-all duration-200
                     ${normalizedPathname === item.path ? 'text-blue-600 scale-110' : 'text-gray-600 group-hover/link:text-gray-700 group-hover/link:scale-105'}
                   `}>
-                    {isClient && <item.IconComponent size={20} />}
+                    {renderMenuIcon(item, normalizedPathname === item.path, 20)}
                   </div>
                   <span className={`
                     ml-4 whitespace-nowrap font-medium overflow-hidden
@@ -400,7 +472,7 @@ const Sidebar: React.FC = () => {
   );
 };
 
-// HEADER KOMPONENT - PERSISTENT Z POPRAWKAMI MOBILE
+// HEADER KOMPONENT - bez zmian
 const Header: React.FC = () => {
   const { isMobileMenuOpen, setIsMobileMenuOpen, hoveredSidebar } = useLayout();
   const { signOut, user, isLoading: authLoading } = useAuth();
@@ -450,7 +522,6 @@ const Header: React.FC = () => {
         transition: 'padding-left 0.3s ease-out',
       }}
     >
-      {/* Lewa strona nagłówka: przycisk mobilny i logo. Pozycja stała. */}
       <div className="flex items-center flex-shrink-0">
         {isMobile && isScreenSizeDetected && (
           <button
@@ -487,10 +558,8 @@ const Header: React.FC = () => {
               </div>
             </div>
         </div>
-
       </div>
 
-      {/* Prawa strona nagłówka: informacje o użytkowniku. Pozycja dynamiczna. */}
       <div
         className="flex items-center justify-end flex-grow"
         style={{
@@ -498,7 +567,6 @@ const Header: React.FC = () => {
           transition: 'margin-left 0.3s ease-out'
         }}
       >
-        {/* Loading state for user info */}
         {authLoading ? (
           <div className="flex items-center gap-3 animate-pulse">
             <div className="h-4 bg-gray-300 rounded w-24"></div>
@@ -506,15 +574,12 @@ const Header: React.FC = () => {
           </div>
         ) : (
           <div className="flex items-center gap-3">
-            {/* Wyświetlanie imienia i nazwiska na mobile/desktop */}
             <div className="text-sm font-medium text-gray-700">
               {user?.first_name && user?.last_name ? (
                   <>
-                      {/* Widok Desktop: Jedna linia */}
                       <span className="hidden md:block">
                           {`${user.first_name} ${user.last_name}`}
                       </span>
-                      {/* Widok Mobile: Dwie linie, wyrównane do prawej */}
                       <div className="flex flex-col items-end md:hidden">
                           <span>{user.first_name}</span>
                           <span>{user.last_name}</span>
@@ -525,7 +590,6 @@ const Header: React.FC = () => {
               )}
             </div>
 
-            {/* Zdjęcie profilowe - eleganckie dla desktop i mobile */}
             <div className="flex items-center">
               {user?.profilePicture ? (
                 <img
@@ -540,7 +604,6 @@ const Header: React.FC = () => {
                 />
               ) : null}
 
-              {/* Fallback - inicjały jeśli brak zdjęcia */}
               <div className={`w-8 h-8 md:w-10 md:h-10 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 flex items-center justify-center text-white text-xs md:text-sm font-semibold shadow-sm hover:shadow-md transition-shadow duration-200 ${user?.profilePicture ? 'hidden' : ''}`}>
                 {user?.first_name?.[0]?.toUpperCase()}{user?.last_name?.[0]?.toUpperCase()}
               </div>
@@ -548,13 +611,9 @@ const Header: React.FC = () => {
           </div>
         )}
 
-        {/* Pionowa linia podziału i przycisk wylogowania - TYLKO NA DESKTOP */}
         {!isMobile && isScreenSizeDetected && (
           <>
-            {/* Pionowa linia podziału */}
             <div className="h-8 w-px bg-gray-200 mx-3"></div>
-
-            {/* Przycisk wylogowania - tylko desktop */}
             <button
               onClick={handleLogout}
               disabled={isLoggingOut}
@@ -577,8 +636,7 @@ const Header: React.FC = () => {
   );
 };
 
-
-// GŁÓWNY PERSISTENT LAYOUT Z POPRAWKAMI
+// GŁÓWNY PERSISTENT LAYOUT - bez zmian
 interface PersistentAdminLayoutProps {
   children: ReactNode;
   disableMenu?: boolean;
@@ -616,10 +674,8 @@ const PersistentAdminLayout: React.FC<PersistentAdminLayoutProps> = ({
 
   return (
     <div className="flex h-screen bg-gray-100 font-sans overflow-hidden">
-      {/* PERSISTENT SIDEBAR - NIE PRZEŁADOWUJE SIĘ */}
       {!disableMenu && <Sidebar />}
 
-      {/* GŁÓWNY KONTENER - PŁYNNE DOPASOWANIE DO SIDEBARA Z POPRAWKAMI */}
       <div
         className={`flex-1 flex flex-col transition-all duration-300 ease-out ${
           isMobile || disableMenu || !isScreenSizeDetected
@@ -629,30 +685,25 @@ const PersistentAdminLayout: React.FC<PersistentAdminLayoutProps> = ({
               : 'ml-20'
         }`}
         style={{
-          paddingTop: '64px', // wysokość headera (4rem = 64px)
-          height: '100vh' // dokładnie 100vh
+          paddingTop: '64px',
+          height: '100vh'
         }}
       >
-        {/* PERSISTENT HEADER */}
         <Header />
 
-        {/* MAIN CONTENT AREA */}
         <main className="flex-1 px-4 pb-4 pt-1.5 overflow-auto bg-gray-100 relative">
-          {/* Navigation overlay - TYLKO NAD GŁÓWNĄ ZAWARTOŚCIĄ */}
           {isNavigating && (
             <div className="absolute inset-0 z-[100] bg-white/80 backdrop-blur-sm flex items-center justify-center rounded-xl">
               <LoadingSpinner message="Przechodzę do strony" fullScreen={false} size="md" />
             </div>
           )}
 
-          {/* Auth loading overlay - TYLKO NAD GŁÓWNĄ ZAWARTOŚCIĄ */}
           {authLoading && (
             <div className="absolute inset-0 z-[99] bg-white/90 backdrop-blur-sm flex items-center justify-center rounded-xl">
               <LoadingSpinner message="Ładowanie aplikacji" fullScreen={false} size="lg" />
             </div>
           )}
 
-          {/* Breadcrumb - ANIMOWANE DOPASOWANIE */}
           {!isFullWidthPage && !disableMenu && (
             <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-2 transition-all duration-300">
               <div className="flex flex-row items-center w-full md:w-auto gap-3">
@@ -680,7 +731,6 @@ const PersistentAdminLayout: React.FC<PersistentAdminLayoutProps> = ({
             </div>
           )}
 
-          {/* CONTENT CONTAINER - PŁYNNIE SKALOWANY */}
           <div className={`
             transition-all duration-300 ease-out
             ${isFullWidthPage || disableMenu
@@ -696,7 +746,6 @@ const PersistentAdminLayout: React.FC<PersistentAdminLayoutProps> = ({
   );
 };
 
-// EXPORT WRAPPER Z PROVIDEREM
 const PersistentAdminLayoutWithProvider: React.FC<PersistentAdminLayoutProps> = (props) => {
   return (
     <LayoutProvider>

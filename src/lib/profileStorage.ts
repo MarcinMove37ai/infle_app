@@ -13,15 +13,16 @@ interface ApifyInstagramData {
   followersCount: number;
   followsCount: number;
   postsCount: number;
+  highlightReelCount: number;
   profilePicUrl: string;
   profilePicUrlHD: string;
   isBusinessAccount: boolean;
-  private: boolean;
+  is_private: boolean;
   verified: boolean;
   businessCategoryName: string;
 }
 
-// Typ dla danych LinkedIn z Apify (na podstawie istniejącego kodu) - ROZSZERZONY
+// Typ dla danych LinkedIn z Apify
 interface ApifyLinkedInData {
   linkedinUrl: string;
   firstName: string;
@@ -38,10 +39,15 @@ interface ApifyLinkedInData {
   about: string;
   publicIdentifier: string;
   skills: any[];
-  // POLA LOKALIZACJI
   addressWithCountry?: string;
   addressWithoutCountry?: string;
   addressCountryOnly?: string;
+}
+
+// NOWY TYP - wynik sprawdzenia istniejącego profilu
+interface ExistingProfileResult {
+  exists: boolean;
+  profileId: string | null;
 }
 
 // Funkcja do wyciągania metadanych z request
@@ -54,10 +60,10 @@ export function extractRequestMetadata(request: NextRequest) {
   return { userIp, userAgent };
 }
 
-// ===== FUNKCJE DEDUPLIKACJI =====
+// ===== ZAKTUALIZOWANE FUNKCJE DEDUPLIKACJI =====
 
-// Funkcja sprawdzająca czy profil Instagram już istnieje
-async function checkExistingInstagramProfile(apifyData: ApifyInstagramData): Promise<string | null> {
+// ZMIENIONA: Funkcja sprawdzająca czy profil Instagram już istnieje
+async function checkExistingInstagramProfile(apifyData: ApifyInstagramData): Promise<ExistingProfileResult> {
   try {
     console.log('🔍 Checking for existing Instagram profile...');
 
@@ -68,11 +74,11 @@ async function checkExistingInstagramProfile(apifyData: ApifyInstagramData): Pro
       });
       if (existingById) {
         console.log('🔄 Instagram profile found by instagramId:', existingById.id);
-        return existingById.id;
+        return { exists: true, profileId: existingById.id };
       }
     }
 
-    // Fallback: sprawdź po username + URL (w przypadku braku ID)
+    // Fallback: sprawdź po username + URL
     if (apifyData.username && apifyData.inputUrl) {
       const existingByUsernameUrl = await prisma.instagramProfileCheck.findFirst({
         where: {
@@ -84,24 +90,24 @@ async function checkExistingInstagramProfile(apifyData: ApifyInstagramData): Pro
       });
       if (existingByUsernameUrl) {
         console.log('🔄 Instagram profile found by username+URL:', existingByUsernameUrl.id);
-        return existingByUsernameUrl.id;
+        return { exists: true, profileId: existingByUsernameUrl.id };
       }
     }
 
-    console.log('✨ No existing Instagram profile found, will create new one');
-    return null;
+    console.log('✨ No existing Instagram profile found');
+    return { exists: false, profileId: null };
   } catch (error) {
     console.error('❌ Error checking existing Instagram profile:', error);
-    return null;
+    return { exists: false, profileId: null };
   }
 }
 
-// Funkcja sprawdzająca czy profil LinkedIn już istnieje
-async function checkExistingLinkedInProfile(apifyData: ApifyLinkedInData): Promise<string | null> {
+// ZMIENIONA: Funkcja sprawdzająca czy profil LinkedIn już istnieje
+async function checkExistingLinkedInProfile(apifyData: ApifyLinkedInData): Promise<ExistingProfileResult> {
   try {
     console.log('🔍 Checking for existing LinkedIn profile...');
 
-    // Główny klucz: publicIdentifier
+    // Główny klucz: publicIdentifier lub kombinacja danych
     if (apifyData.publicIdentifier) {
       const existingByIdentifier = await prisma.linkedInProfileCheck.findFirst({
         where: {
@@ -119,7 +125,7 @@ async function checkExistingLinkedInProfile(apifyData: ApifyLinkedInData): Promi
       });
       if (existingByIdentifier) {
         console.log('🔄 LinkedIn profile found by identifier/URL/details:', existingByIdentifier.id);
-        return existingByIdentifier.id;
+        return { exists: true, profileId: existingByIdentifier.id };
       }
     }
 
@@ -130,15 +136,15 @@ async function checkExistingLinkedInProfile(apifyData: ApifyLinkedInData): Promi
       });
       if (existingByUrl) {
         console.log('🔄 LinkedIn profile found by URL:', existingByUrl.id);
-        return existingByUrl.id;
+        return { exists: true, profileId: existingByUrl.id };
       }
     }
 
-    console.log('✨ No existing LinkedIn profile found, will create new one');
-    return null;
+    console.log('✨ No existing LinkedIn profile found');
+    return { exists: false, profileId: null };
   } catch (error) {
     console.error('❌ Error checking existing LinkedIn profile:', error);
-    return null;
+    return { exists: false, profileId: null };
   }
 }
 
@@ -159,26 +165,19 @@ export function validateInstagramData(data: ApifyInstagramData): boolean {
   return true;
 }
 
-// Główna funkcja do zapisu profilu Instagram - Z DEDUPLIKACJĄ
+// ZMIENIONA: Główna funkcja do zapisu profilu Instagram - Z AKTUALIZACJĄ
 export async function saveInstagramProfile(
   apifyData: ApifyInstagramData,
   request: NextRequest
 ): Promise<string | null> {
   try {
-    console.log('💾 Saving Instagram profile to database...');
+    console.log('💾 Saving/updating Instagram profile...');
     console.log('📊 Profile data:', {
       username: apifyData.username,
       fullName: apifyData.fullName,
       followersCount: apifyData.followersCount,
-      private: apifyData.private
+      is_private: apifyData.is_private
     });
-
-    // DEDUPLIKACJA - sprawdź czy profil już istnieje
-    const existingProfileId = await checkExistingInstagramProfile(apifyData);
-    if (existingProfileId) {
-      console.log('🔄 Instagram profile already exists, returning existing ID:', existingProfileId);
-      return existingProfileId;
-    }
 
     // Walidacja danych
     if (!validateInstagramData(apifyData)) {
@@ -199,26 +198,46 @@ export async function saveInstagramProfile(
       followersCount: apifyData.followersCount || 0,
       followsCount: apifyData.followsCount || 0,
       postsCount: apifyData.postsCount || 0,
+      highlightReelCount: apifyData.highlightReelCount || 0,
       profilePicUrl: apifyData.profilePicUrl || null,
       profilePicUrlHD: apifyData.profilePicUrlHD || null,
       isBusinessAccount: apifyData.isBusinessAccount || false,
-      isPrivate: apifyData.private || false,
+      isPrivate: apifyData.is_private || false,
       isVerified: apifyData.verified || false,
       businessCategory: apifyData.businessCategoryName || null,
       userIp,
-      userAgent
+      userAgent,
+      checkedAt: new Date() // Używamy pola checkedAt zamiast updatedAt
     };
 
-    // Zapis do bazy danych
-    const savedProfile = await prisma.instagramProfileCheck.create({
-      data: profileData
-    });
+    // SPRAWDŹ CZY PROFIL ISTNIEJE
+    const existingProfile = await checkExistingInstagramProfile(apifyData);
 
-    console.log('✅ NEW Instagram profile saved successfully with ID:', savedProfile.id);
-    return savedProfile.id;
+    if (existingProfile.exists && existingProfile.profileId) {
+      // AKTUALIZUJ ISTNIEJĄCY PROFIL
+      console.log('🔄 Updating existing Instagram profile:', existingProfile.profileId);
+
+      const updatedProfile = await prisma.instagramProfileCheck.update({
+        where: { id: existingProfile.profileId },
+        data: profileData
+      });
+
+      console.log('✅ Instagram profile UPDATED successfully:', updatedProfile.id);
+      return updatedProfile.id;
+    } else {
+      // UTWÓRZ NOWY PROFIL
+      console.log('✨ Creating new Instagram profile');
+
+      const savedProfile = await prisma.instagramProfileCheck.create({
+        data: profileData
+      });
+
+      console.log('✅ NEW Instagram profile created successfully:', savedProfile.id);
+      return savedProfile.id;
+    }
 
   } catch (error) {
-    console.error('❌ Error saving Instagram profile:', error);
+    console.error('❌ Error saving/updating Instagram profile:', error);
     return null;
   }
 }
@@ -328,26 +347,19 @@ export function normalizeLinkedInData(data: ApifyLinkedInData) {
   };
 }
 
-// Główna funkcja do zapisu profilu LinkedIn - Z DEDUPLIKACJĄ
+// ZMIENIONA: Główna funkcja do zapisu profilu LinkedIn - Z AKTUALIZACJĄ
 export async function saveLinkedInProfile(
   apifyData: ApifyLinkedInData,
   request: NextRequest
 ): Promise<string | null> {
   try {
-    console.log('💾 Saving LinkedIn profile to database...');
+    console.log('💾 Saving/updating LinkedIn profile...');
     console.log('📊 Profile data:', {
       publicIdentifier: apifyData.publicIdentifier,
       fullName: apifyData.fullName,
       followersCount: apifyData.followers,
       connectionsCount: apifyData.connections
     });
-
-    // DEDUPLIKACJA - sprawdź czy profil już istnieje
-    const existingProfileId = await checkExistingLinkedInProfile(apifyData);
-    if (existingProfileId) {
-      console.log('🔄 LinkedIn profile already exists, returning existing ID:', existingProfileId);
-      return existingProfileId;
-    }
 
     // Walidacja danych
     if (!validateLinkedInData(apifyData)) {
@@ -377,19 +389,38 @@ export async function saveLinkedInProfile(
       location: normalizedData.location,
       topSkills: normalizedData.topSkills,
       userIp,
-      userAgent
+      userAgent,
+      checkedAt: new Date() // Używamy pola checkedAt zamiast updatedAt
     };
 
-    // Zapis do bazy danych
-    const savedProfile = await prisma.linkedInProfileCheck.create({
-      data: profileData
-    });
+    // SPRAWDŹ CZY PROFIL ISTNIEJE
+    const existingProfile = await checkExistingLinkedInProfile(apifyData);
 
-    console.log('✅ NEW LinkedIn profile saved successfully with ID:', savedProfile.id);
-    return savedProfile.id;
+    if (existingProfile.exists && existingProfile.profileId) {
+      // AKTUALIZUJ ISTNIEJĄCY PROFIL
+      console.log('🔄 Updating existing LinkedIn profile:', existingProfile.profileId);
+
+      const updatedProfile = await prisma.linkedInProfileCheck.update({
+        where: { id: existingProfile.profileId },
+        data: profileData
+      });
+
+      console.log('✅ LinkedIn profile UPDATED successfully:', updatedProfile.id);
+      return updatedProfile.id;
+    } else {
+      // UTWÓRZ NOWY PROFIL
+      console.log('✨ Creating new LinkedIn profile');
+
+      const savedProfile = await prisma.linkedInProfileCheck.create({
+        data: profileData
+      });
+
+      console.log('✅ NEW LinkedIn profile created successfully:', savedProfile.id);
+      return savedProfile.id;
+    }
 
   } catch (error) {
-    console.error('❌ Error saving LinkedIn profile:', error);
+    console.error('❌ Error saving/updating LinkedIn profile:', error);
     return null;
   }
 }
