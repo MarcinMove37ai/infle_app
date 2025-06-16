@@ -45,8 +45,14 @@ model User {
   // Relacja do analiz Instagram
   instagramAnalyses   InstagramCreatorAnalysis[]
 
+  // 🆕 NOWA RELACJA - Analizy LinkedIn
+  linkedinAnalyses    LinkedInCreatorAnalysis[]
+
   // 🆕 NOWA RELACJA - Analizy AI
   instagramAIAnalyses InstagramCreatorAIAnalysis[]
+
+  // 🆕 NOWA RELACJA - Analizy AI LinkedIn
+  linkedinAIAnalyses  LinkedInCreatorAIAnalysis[]
 
   createdAt           DateTime            @default(now())
   updatedAt           DateTime            @updatedAt
@@ -136,7 +142,35 @@ model InstagramCreatorAnalysis {
   @@map("instagram_creator_analysis")
 }
 
-// 🆕 NOWY MODEL - Wyniki AI Analysis
+// 🆕 NOWY MODEL - Analiza postów LinkedIn
+model LinkedInCreatorAnalysis {
+  id                String    @id @default(cuid())
+  userId            String
+  username          String
+  postUrn           String    // URN posta LinkedIn
+  postDate          String    // Data posta jako string
+  postText          String    @db.Text  // Oczyszczony tekst posta
+  totalReactions    Int       @default(0)
+  commentsCount     Int       @default(0)
+  commenterHeadlines String   @db.Text  // JSON string {"username": "headline"}
+
+  // Metadane
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  // Relacja do użytkownika
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Indeksy dla wydajności
+  @@index([userId])
+  @@index([username])
+  @@index([postUrn])
+  @@unique([userId, postUrn]) // Jeden post URN na user
+
+  @@map("linkedin_creator_analysis")
+}
+
+// 🆕 NOWY MODEL - Wyniki AI Analysis Instagram
 model InstagramCreatorAIAnalysis {
   id                   String   @id @default(cuid())
   userId               String
@@ -161,4 +195,31 @@ model InstagramCreatorAIAnalysis {
   @@unique([userId, username]) // One analysis per user-username combination
 
   @@map("instagram_creator_ai_analysis")
+}
+
+// 🆕 NOWY MODEL - Wyniki AI Analysis LinkedIn
+model LinkedInCreatorAIAnalysis {
+  id                   String   @id @default(cuid())
+  userId               String
+  username             String
+  profileDescription   String   @db.Text
+  businessCompetencies Json     // Array of business competency objects
+  expertiseNiche       Json     // LinkedIn-specific expertise niche object
+  metadata             Json     // AI metadata (model, version, etc.)
+  postsAnalyzed        Int
+  aiModel              String   @default("claude-3-5-sonnet-20241022")
+  version              String   @default("2.0-linkedin")
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  // Relacja do użytkownika
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Indexes for better performance
+  @@index([userId])
+  @@index([username])
+  @@index([userId, username])
+  @@unique([userId, username]) // One analysis per user-username combination
+
+  @@map("linkedin_creator_ai_analysis")
 }

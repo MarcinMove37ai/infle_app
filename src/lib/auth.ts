@@ -15,6 +15,7 @@ declare module 'next-auth' {
     instagramProfileId?: string | null;
     instagramUsername?: string | null;
     linkedinProfileId?: string | null;
+    linkedinUsername?: string | null; // 🆕 DODANE POLE (zawiera linkedinUrl)
     socialProfileType?: string | null;
   }
 
@@ -29,6 +30,7 @@ declare module 'next-auth' {
       instagramProfileId?: string | null;
       instagramUsername?: string | null;
       linkedinProfileId?: string | null;
+      linkedinUsername?: string | null; // 🆕 DODANE POLE (zawiera linkedinUrl)
       socialProfileType?: string | null;
     }
   }
@@ -43,6 +45,7 @@ declare module 'next-auth/jwt' {
     instagramProfileId?: string | null;
     instagramUsername?: string | null;
     linkedinProfileId?: string | null;
+    linkedinUsername?: string | null; // 🆕 DODANE POLE (zawiera linkedinUrl)
     socialProfileType?: string | null;
   }
 }
@@ -105,6 +108,17 @@ export const authOptions: NextAuthOptions = {
           instagramUsername = instagramProfile?.username || null;
         }
 
+        // 🆕 POBIERZ LINKEDIN URL jeśli linkedinProfileId istnieje
+        let linkedinUsername = null;
+        if (user.linkedinProfileId) {
+          const linkedinProfile = await prisma.linkedInProfileCheck.findUnique({
+            where: { id: user.linkedinProfileId },
+            select: { linkedinUrl: true }
+          });
+          // Zapisz pełny URL LinkedIn
+          linkedinUsername = linkedinProfile?.linkedinUrl || null;
+        }
+
         // Zwróć użytkownika z wszystkimi polami
         return {
           id: user.id,
@@ -116,6 +130,7 @@ export const authOptions: NextAuthOptions = {
           instagramProfileId: user.instagramProfileId,
           instagramUsername: instagramUsername,
           linkedinProfileId: user.linkedinProfileId,
+          linkedinUsername: linkedinUsername, // 🆕 DODANE POLE (linkedinUrl)
           socialProfileType: user.socialProfileType,
         };
       }
@@ -138,6 +153,7 @@ export const authOptions: NextAuthOptions = {
         token.instagramProfileId = user.instagramProfileId;
         token.instagramUsername = user.instagramUsername;
         token.linkedinProfileId = user.linkedinProfileId;
+        token.linkedinUsername = user.linkedinUsername; // 🆕 DODANE POLE (linkedinUrl)
         token.socialProfileType = user.socialProfileType;
       }
 
@@ -163,7 +179,7 @@ export const authOptions: NextAuthOptions = {
           });
 
           if (updatedUser) {
-            // Pobierz Instagram username
+            // 🆕 Pobierz Instagram username
             let instagramUsername = null;
             if (updatedUser.instagramProfileId) {
               const instagramProfile = await prisma.instagramProfileCheck.findUnique({
@@ -173,17 +189,31 @@ export const authOptions: NextAuthOptions = {
               instagramUsername = instagramProfile?.username || null;
             }
 
+            // 🆕 Pobierz LinkedIn URL
+            let linkedinUsername = null;
+            if (updatedUser.linkedinProfileId) {
+              const linkedinProfile = await prisma.linkedInProfileCheck.findUnique({
+                where: { id: updatedUser.linkedinProfileId },
+                select: { linkedinUrl: true }
+              });
+              // Zapisz pełny URL LinkedIn
+              linkedinUsername = linkedinProfile?.linkedinUrl || null;
+            }
+
             // Zaktualizuj token z najnowszymi danymi
             token.emailVerified = updatedUser.emailVerified;
             token.profilePicture = updatedUser.profilePicture;
             token.instagramProfileId = updatedUser.instagramProfileId;
             token.instagramUsername = instagramUsername;
             token.linkedinProfileId = updatedUser.linkedinProfileId;
+            token.linkedinUsername = linkedinUsername; // 🆕 DODANE POLE (linkedinUrl)
             token.socialProfileType = updatedUser.socialProfileType;
 
             console.log('✅ JWT Token updated with fresh data:', {
               instagramProfileId: updatedUser.instagramProfileId,
-              instagramUsername: instagramUsername
+              instagramUsername: instagramUsername,
+              linkedinProfileId: updatedUser.linkedinProfileId,
+              linkedinUsername: linkedinUsername // 🆕 DODANY LOG (linkedinUrl)
             });
           }
         } catch (error) {
@@ -203,6 +233,7 @@ export const authOptions: NextAuthOptions = {
         session.user.instagramProfileId = token.instagramProfileId;
         session.user.instagramUsername = token.instagramUsername;
         session.user.linkedinProfileId = token.linkedinProfileId;
+        session.user.linkedinUsername = token.linkedinUsername; // 🆕 DODANE POLE (linkedinUrl)
         session.user.socialProfileType = token.socialProfileType;
       }
       return session;

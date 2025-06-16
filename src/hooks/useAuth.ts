@@ -3,6 +3,13 @@
 import { useSession, signOut as nextAuthSignOut } from 'next-auth/react';
 import { User, UserRole } from '@/types/types';
 
+// 🔧 EXTENDED USER TYPE - Local extension for LinkedIn fields
+interface ExtendedUser extends User {
+  linkedinProfileId?: string | null;
+  linkedinUsername?: string | null;
+  socialProfileType?: string | null;
+}
+
 export const useAuth = () => {
   const { data: session, status, update } = useSession(); // 🆕 DODANO `update`
 
@@ -10,7 +17,7 @@ export const useAuth = () => {
   console.log('🔍 Full session:', session);
 
   // Mapowanie NextAuth session na nasz format User
-  const user: User | null = session?.user ? {
+  const user: ExtendedUser | null = session?.user ? {
     id: (session.user as any).id || '1',
     email: session.user.email || '',
     first_name: session.user.name?.split(' ')[0] || '',
@@ -18,10 +25,11 @@ export const useAuth = () => {
     status: 'active',
     cognito_sub: (session.user as any).id || '',
     profilePicture: (session.user as any).profilePicture || null,
-    // 🆕 DODANE pola IG
+    // 🆕 DODANE pola IG i LinkedIn
     instagramProfileId: (session.user as any).instagramProfileId || null,
     instagramUsername: (session.user as any).instagramUsername || null,
     linkedinProfileId: (session.user as any).linkedinProfileId || null,
+    linkedinUsername: (session.user as any).linkedinUsername || null, // 🆕 UPEWNIONE POLE
     socialProfileType: (session.user as any).socialProfileType || null,
   } : null;
 

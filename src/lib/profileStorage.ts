@@ -44,7 +44,7 @@ interface ApifyLinkedInData {
   addressCountryOnly?: string;
 }
 
-// dane analizy twórcy
+// dane analizy twórcy Instagram
 interface CreatorAnalysisData {
   userId: string;
   username: string;
@@ -55,6 +55,18 @@ interface CreatorAnalysisData {
   videoPlayCount: number | null;
   videoDuration: number | null;
   commenterUsernames: Record<string, number>;
+}
+
+// 🆕 NOWY INTERFEJS - dane analizy LinkedIn
+interface LinkedInCreatorAnalysisData {
+  userId: string;
+  username: string;
+  postUrn: string;
+  postDate: string;
+  postText: string;
+  totalReactions: number;
+  commentsCount: number;
+  commenterHeadlines: string; // JSON string
 }
 
 // 🆕 NOWE INTERFEJSY AI ANALYSIS
@@ -272,14 +284,14 @@ export async function getUserAIAnalyses(userId: string): Promise<Array<{
   }
 }
 
-// ===== FUNKCJE CREATOR ANALYSIS =====
+// ===== FUNKCJE CREATOR ANALYSIS INSTAGRAM =====
 
-// Funkcja do zapisu analizy twórcy
+// Funkcja do zapisu analizy twórcy Instagram
 export async function saveCreatorAnalysis(
   analysisData: CreatorAnalysisData[]
 ): Promise<{ success: boolean; saved: number; errors: number }> {
   try {
-    console.log('💾 Saving creator analysis data...');
+    console.log('💾 Saving Instagram creator analysis data...');
     console.log(`📊 Processing ${analysisData.length} posts`);
 
     let savedCount = 0;
@@ -321,16 +333,16 @@ export async function saveCreatorAnalysis(
           });
 
           savedCount++;
-          console.log(`✅ Saved post ${data.postId}`);
+          console.log(`✅ Saved Instagram post ${data.postId}`);
 
         } catch (error) {
-          console.error(`❌ Error saving post ${data.postId}:`, error);
+          console.error(`❌ Error saving Instagram post ${data.postId}:`, error);
           errorCount++;
         }
       }
     });
 
-    console.log(`✅ Creator analysis saved: ${savedCount} success, ${errorCount} errors`);
+    console.log(`✅ Instagram creator analysis saved: ${savedCount} success, ${errorCount} errors`);
     return { success: true, saved: savedCount, errors: errorCount };
 
   } catch (error) {
@@ -339,7 +351,93 @@ export async function saveCreatorAnalysis(
   }
 }
 
-// Funkcja do pobierania analiz użytkownika
+// ===== 🆕 NOWE FUNKCJE CREATOR ANALYSIS LINKEDIN =====
+
+// Funkcja do zapisu analizy twórcy LinkedIn
+export async function saveLinkedInCreatorAnalysis(
+  analysisData: LinkedInCreatorAnalysisData[]
+): Promise<{ success: boolean; saved: number; errors: number }> {
+  try {
+    console.log('💾 Saving LinkedIn creator analysis data...');
+    console.log(`📊 Processing ${analysisData.length} LinkedIn posts`);
+
+    let savedCount = 0;
+    let errorCount = 0;
+
+    // Użyj transakcji dla spójności danych
+    await prisma.$transaction(async (tx) => {
+      for (const data of analysisData) {
+        try {
+          // Upsert - zaktualizuj jeśli istnieje, utwórz jeśli nie
+          await tx.linkedInCreatorAnalysis.upsert({
+            where: {
+              userId_postUrn: {
+                userId: data.userId,
+                postUrn: data.postUrn
+              }
+            },
+            update: {
+              username: data.username,
+              postDate: data.postDate,
+              postText: data.postText,
+              totalReactions: data.totalReactions,
+              commentsCount: data.commentsCount,
+              commenterHeadlines: data.commenterHeadlines,
+              updatedAt: new Date()
+            },
+            create: {
+              userId: data.userId,
+              username: data.username,
+              postUrn: data.postUrn,
+              postDate: data.postDate,
+              postText: data.postText,
+              totalReactions: data.totalReactions,
+              commentsCount: data.commentsCount,
+              commenterHeadlines: data.commenterHeadlines
+            }
+          });
+
+          savedCount++;
+          console.log(`✅ Saved LinkedIn post ${data.postUrn}`);
+
+        } catch (error) {
+          console.error(`❌ Error saving LinkedIn post ${data.postUrn}:`, error);
+          errorCount++;
+        }
+      }
+    });
+
+    console.log(`✅ LinkedIn creator analysis saved: ${savedCount} success, ${errorCount} errors`);
+    return { success: true, saved: savedCount, errors: errorCount };
+
+  } catch (error) {
+    console.error('❌ Error in saveLinkedInCreatorAnalysis:', error);
+    return { success: false, saved: 0, errors: analysisData.length };
+  }
+}
+
+// Funkcja do pobierania analiz LinkedIn użytkownika
+export async function getUserLinkedInCreatorAnalyses(userId: string, username?: string) {
+  try {
+    const where: any = { userId };
+    if (username) {
+      where.username = username;
+    }
+
+    const analyses = await prisma.linkedInCreatorAnalysis.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      take: 100 // Limit dla wydajności
+    });
+
+    return analyses;
+  } catch (error) {
+    console.error('❌ Error fetching user LinkedIn creator analyses:', error);
+    return [];
+  }
+}
+
+// Funkcja do pobierania analiz Instagram użytkownika
 export async function getUserCreatorAnalyses(userId: string, username?: string) {
   try {
     const where: any = { userId };

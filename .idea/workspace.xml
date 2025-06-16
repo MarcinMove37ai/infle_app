@@ -5,21 +5,17 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="46749596-836e-4f8d-af4b-57221a03aed3" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/src/app/api/auth/refresh-user-data/route.ts" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/app/api/social/instagram/creator-analysis/ai/check/route.ts" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/app/api/social/instagram/creator-analysis/ai/route.ts" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/app/api/social/instagram/creator-analysis/route.ts" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/components/profile/CreatorAnalysisIG.tsx" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/hooks/useAIAnalysisCheck.ts" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/app/api/social/linkedin/creator-analysis/ai/check/route.ts" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/app/api/social/linkedin/creator-analysis/ai/route.ts" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/app/api/social/linkedin/creator-analysis/route.ts" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/components/profile/CreatorAnalysisLI.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/prisma/schema.prisma" beforeDir="false" afterPath="$PROJECT_DIR$/prisma/schema.prisma" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/components/pages/InstagramApp.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/components/pages/InstagramApp.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/components/profile/InstagramProfileBar.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/components/profile/InstagramProfileBar.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/components/pages/LinkedInApp.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/components/pages/LinkedInApp.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/components/profile/LinkedInProfileBar.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/components/profile/LinkedInProfileBar.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/hooks/useAuth.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/hooks/useAuth.ts" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/lib/auth.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/lib/auth.ts" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/lib/profileStorage.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/lib/profileStorage.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/types/types.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/types/types.ts" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -40,16 +36,17 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent">{
-  &quot;keyToString&quot;: {
-    &quot;Python.create_project_schema.executor&quot;: &quot;Run&quot;,
-    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
-    &quot;git-widget-placeholder&quot;: &quot;master&quot;,
-    &quot;last_opened_file_path&quot;: &quot;D:/inflee.app/infle_app/src/components/pages&quot;
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "Python.create_project_schema.executor": "Run",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "git-widget-placeholder": "master",
+    "last_opened_file_path": "D:/inflee.app/infle_app/src/components/profile"
   }
-}</component>
+}]]></component>
   <component name="RecentsManager">
     <key name="CopyFile.RECENT_KEYS">
+      <recent name="D:\inflee.app\infle_app\src\components\profile" />
       <recent name="D:\inflee.app\infle_app\src\components\pages" />
       <recent name="D:\inflee.app\infle_app\src\app\(dashboard)\linkedin_app" />
     </key>

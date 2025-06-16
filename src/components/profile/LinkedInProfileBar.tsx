@@ -5,6 +5,13 @@ import { useState, useEffect, useCallback, memo } from 'react';
 import { useSession } from 'next-auth/react';
 import Image from 'next/image';
 import { Users, UserCheck, MapPin, Briefcase, Award, Building2, Plus, Loader2, User } from 'lucide-react';
+import { useAuth } from '@/hooks/useAuth';
+
+// --- INTERFEJS PROPS ---
+interface LinkedInProfileBarProps {
+  onStartAnalysis?: () => void;
+  onShowAIAnalysis?: (aiData: LinkedInAIAnalysisData) => void;
+}
 
 // --- INTERFEJS DANYCH ---
 interface LinkedInProfile {
@@ -24,6 +31,24 @@ interface LinkedInProfile {
     location: string | null;
     topSkills: string | null;
     checkedAt: string;
+}
+
+// Interface - dane AI Analysis dla LinkedIn
+interface LinkedInAIAnalysisData {
+  username: string;
+  profileDescription: string;
+  businessCompetencies: Array<{
+    name: string;
+    iconType: string;
+    description: string;
+    evidence: string[];
+  }>;
+  expertiseNiche: {
+    name: string;
+    description: string;
+    marketValue: string;
+    evidence: string[];
+  };
 }
 
 // --- CUSTOM HOOK DO ZARZĄDZANIA PROFILEM LINKEDIN ---
@@ -97,6 +122,139 @@ function useLinkedInProfile() {
     };
 }
 
+// --- HOOK DO SPRAWDZANIA AI ANALYSIS (PRAWDZIWA IMPLEMENTACJA) ---
+// --- HOOK DO SPRAWDZANIA AI ANALYSIS (NAPRAWIONA WERSJA Z USERNAME EXTRACTION) ---
+function useLinkedInAIAnalysisCheck() {
+    const { data: session, status } = useSession();
+    const [state, setState] = useState({
+        hasAIAnalysis: false,
+        aiAnalysisData: null as LinkedInAIAnalysisData | null,
+        loading: true,
+        error: null as string | null,
+        initialized: false
+    });
+
+    const linkedinUsername = (session?.user as any)?.linkedinUsername || session?.user?.name;
+
+    // 🆕 HELPER FUNCTION - Extract username from LinkedIn URL
+    const extractUsernameFromLinkedInUrl = useCallback((input: string | undefined): string | null => {
+        if (!input) return null;
+
+        // Jeśli to już jest krótka forma (bez http/https)
+        if (!input.includes('linkedin.com')) {
+            return input;
+        }
+
+        // Extract username z pełnego LinkedIn URL
+        // https://www.linkedin.com/in/charlie-hills/ -> charlie-hills
+        const match = input.match(/linkedin\.com\/in\/([^\/\?]+)/);
+        if (match && match[1]) {
+            console.log(`🔄 Extracted LinkedIn username: ${input} -> ${match[1]}`);
+            return match[1];
+        }
+
+        console.log(`⚠️ Could not extract username from: ${input}`);
+        return null;
+    }, []);
+
+    const checkAIAnalysis = useCallback(async () => {
+        if (!session?.user?.id || !linkedinUsername || state.initialized) return;
+
+        // 🆕 EXTRACT SHORT USERNAME
+        const shortUsername = extractUsernameFromLinkedInUrl(linkedinUsername);
+        if (!shortUsername) {
+            console.log('❌ Could not extract LinkedIn username from:', linkedinUsername);
+            setState({
+                hasAIAnalysis: false,
+                aiAnalysisData: null,
+                loading: false,
+                error: 'Invalid LinkedIn username format',
+                initialized: true
+            });
+            return;
+        }
+
+        setState(prev => ({ ...prev, loading: true, error: null }));
+
+        try {
+            console.log('🔍 Checking existing LinkedIn AI analysis for SHORT username:', shortUsername);
+
+            // 🆕 USE SHORT USERNAME IN API CALL
+            const response = await fetch(`/api/social/linkedin/creator-analysis/ai/check?username=${encodeURIComponent(shortUsername)}`);
+
+            if (response.ok) {
+                const data = await response.json();
+
+                if (data.exists && data.analysis) {
+                    console.log('✅ Found existing LinkedIn AI analysis');
+
+                    setState({
+                        hasAIAnalysis: true,
+                        aiAnalysisData: data.analysis,
+                        loading: false,
+                        error: null,
+                        initialized: true
+                    });
+                } else {
+                    console.log('📭 No LinkedIn AI analysis found for:', shortUsername);
+
+                    setState({
+                        hasAIAnalysis: false,
+                        aiAnalysisData: null,
+                        loading: false,
+                        error: null,
+                        initialized: true
+                    });
+                }
+            } else {
+                console.log('⚠️ Error response from AI check endpoint:', response.status);
+
+                setState({
+                    hasAIAnalysis: false,
+                    aiAnalysisData: null,
+                    loading: false,
+                    error: null,
+                    initialized: true
+                });
+            }
+        } catch (err) {
+            console.error('❌ Error checking LinkedIn AI analysis:', err);
+
+            setState({
+                hasAIAnalysis: false,
+                aiAnalysisData: null,
+                loading: false,
+                error: err instanceof Error ? err.message : 'Unknown error',
+                initialized: true
+            });
+        }
+    }, [session?.user?.id, linkedinUsername, state.initialized, extractUsernameFromLinkedInUrl]);
+
+    useEffect(() => {
+        if (status === 'authenticated' && linkedinUsername && !state.initialized) {
+            checkAIAnalysis();
+        } else if (status === 'unauthenticated') {
+            setState({
+                hasAIAnalysis: false,
+                aiAnalysisData: null,
+                loading: false,
+                error: null,
+                initialized: true
+            });
+        }
+    }, [status, linkedinUsername, checkAIAnalysis]);
+
+    const refreshCheck = useCallback(() => {
+        console.log('🔄 Refreshing LinkedIn AI analysis check...');
+        setState(prev => ({ ...prev, initialized: false }));
+    }, []);
+
+    return {
+        ...state,
+        refreshCheck
+    };
+}
+
 // --- FUNKCJA POMOCNICZA DO CZYSZCZENIA DANYCH LINKEDIN ---
 const cleanLinkedInField = (field: string | null): string | null => {
     if (!field) return null;
@@ -166,6 +324,9 @@ const AddLinkedInProfile = memo(({ onProfileAdded }: { onProfileAdded: () => voi
     const [profileData, setProfileData] = useState<any>(null);
     const [showConfirmPopup, setShowConfirmPopup] = useState(false);
     const [imageError, setImageError] = useState(false);
+
+    // Użyj useAuth do refresh sesji
+    const { refreshSession } = useAuth();
 
     const isInactive = !profileData;
 
@@ -263,7 +424,7 @@ const AddLinkedInProfile = memo(({ onProfileAdded }: { onProfileAdded: () => voi
             console.log('✅ Profile check successful');
             setProfileData(result);
             setError(null);
-            setImageError(false); // Reset image error dla nowego profilu
+            setImageError(false);
         } else {
             console.log('❌ Profile check failed');
             setProfileData(null);
@@ -336,6 +497,17 @@ const AddLinkedInProfile = memo(({ onProfileAdded }: { onProfileAdded: () => voi
             console.log('✅ Link API success:', linkData);
             console.log('🎉 Profile successfully linked to account');
 
+            // Odśwież sesję natychmiast po pomyślnym przypisaniu profilu
+            console.log('🔄 Refreshing session with new LinkedIn profile data...');
+            try {
+                await refreshSession();
+                console.log('✅ Session refreshed successfully - new LinkedIn data should be available');
+            } catch (sessionError) {
+                console.error('❌ Error refreshing session:', sessionError);
+                // Kontynuuj mimo błędu refresh sesji
+            }
+
+            // Wywołaj callback do odświeżenia komponentu
             onProfileAdded();
 
         } catch (err) {
@@ -344,7 +516,7 @@ const AddLinkedInProfile = memo(({ onProfileAdded }: { onProfileAdded: () => voi
         } finally {
             setIsLoading(false);
         }
-    }, [profileData?.savedProfileId, onProfileAdded]);
+    }, [profileData?.savedProfileId, onProfileAdded, refreshSession]);
 
     const formatNumberWithFallback = useCallback((num: number | null): string => {
         if (num === null) return '---';
@@ -614,13 +786,18 @@ const AddLinkedInProfile = memo(({ onProfileAdded }: { onProfileAdded: () => voi
 });
 
 // --- GŁÓWNY KOMPONENT ---
-function LinkedInProfileBar() {
-    // WSZYSTKIE HOOKS NA POCZĄTKU - PRZED JAKIMIKOLWIEK WARUNKAMI
+function LinkedInProfileBar({ onStartAnalysis, onShowAIAnalysis }: LinkedInProfileBarProps) {
+    // WSZYSTKIE HOOKS MUSZĄ BYĆ NA POCZĄTKU - PRZED JAKIMIKOLWIEK WARUNKAMI
     const { status } = useSession();
     const { profile, loading, error, refreshProfile } = useLinkedInProfile();
     const [imageError, setImageError] = useState(false);
     const [isMinimized, setIsMinimized] = useState(false);
     const [analysisStarted, setAnalysisStarted] = useState(false);
+
+    // 🆕 NAPRAWIONY Hook - Sprawdzanie AI Analysis (prawdziwa implementacja)
+    const { hasAIAnalysis, aiAnalysisData, loading: aiLoading } = useLinkedInAIAnalysisCheck();
+
+    const { refreshSession } = useAuth();
 
     // Reset image error when profile changes
     useEffect(() => {
@@ -628,6 +805,35 @@ function LinkedInProfileBar() {
             setImageError(false);
         }
     }, [profile]);
+
+    // 🆕 NAPRAWIONY Effect - Automatyczne pokazanie AI Analysis jeśli istnieje
+    useEffect(() => {
+        if (hasAIAnalysis && aiAnalysisData && onShowAIAnalysis && !analysisStarted) {
+            console.log('🎯 Found existing LinkedIn AI analysis - showing automatically');
+            setAnalysisStarted(true);
+            setIsMinimized(true);
+            onShowAIAnalysis(aiAnalysisData);
+        }
+    }, [hasAIAnalysis, aiAnalysisData, onShowAIAnalysis, analysisStarted]);
+
+    // Enhanced profile refresh z session refresh
+    const handleProfileAddedWithSessionRefresh = useCallback(async () => {
+        console.log('🔄 Profile added - refreshing both profile and session...');
+
+        try {
+            // Najpierw odśwież sesję
+            await refreshSession();
+            console.log('✅ Session refreshed after profile addition');
+
+            // Następnie odśwież profil w komponencie
+            refreshProfile();
+            console.log('✅ Profile component refreshed');
+        } catch (error) {
+            console.error('❌ Error during refresh after profile addition:', error);
+            // Nawet jeśli session refresh się nie uda, spróbuj odświeżyć profil
+            refreshProfile();
+        }
+    }, [refreshSession, refreshProfile]);
 
     const handleStartAnalysis = () => {
         if (!profile?.fullName) {
@@ -637,7 +843,11 @@ function LinkedInProfileBar() {
         console.log('🚀 Rozpoczynam analizę biznesową dla:', profile.fullName);
         setAnalysisStarted(true);
         setIsMinimized(true);
-        // TODO: Tutaj uruchomimy proces analizy i pokażemy kolejny komponent
+
+        // Wywołaj callback z rodzica
+        if (onStartAnalysis) {
+            onStartAnalysis();
+        }
     };
 
     const toggleMinimized = () => {
@@ -654,10 +864,13 @@ function LinkedInProfileBar() {
         return <div className="md:bg-red-50 md:border md:border-red-200 text-red-700 p-2 md:p-4 md:rounded-xl bg-red-50 border-l-4 border-red-400">{error}</div>;
     }
 
-    // Brak profilu - pokaż formularz dodawania
+    // Brak profilu - pokaż formularz dodawania z enhanced refresh
     if (!profile) {
-        return <AddLinkedInProfile onProfileAdded={refreshProfile} />;
+        return <AddLinkedInProfile onProfileAdded={handleProfileAddedWithSessionRefresh} />;
     }
+
+    // 🆕 NAPRAWIONA LOGIKA - Jeśli istnieje AI analysis, ale jeszcze nie rozpoczęto pokazywania
+    const shouldShowCTA = !hasAIAnalysis && !analysisStarted && !aiLoading;
 
     // Istniejący profil
     const statsData = [
@@ -670,11 +883,67 @@ function LinkedInProfileBar() {
     ];
 
     return (
-        <div className="w-full md:bg-white md:rounded-xl md:border md:border-gray-200 md:shadow-sm p-2 md:p-4 lg:p-6 transition-all duration-500">
+        <div className={`w-full md:bg-white md:rounded-xl md:border md:border-gray-200 md:shadow-sm p-2 md:p-4 lg:p-6 transition-all duration-500 relative ${analysisStarted ? 'lg:pr-20' : ''}`}>
+
+            {/* Przycisk zwijania/rozwijania - MOBILE (wyśrodkowany kontener) */}
+            {analysisStarted && (
+                <div className="md:hidden flex justify-center mb-4">
+                    <button
+                        onClick={toggleMinimized}
+                        className="p-2 hover:bg-gray-100 rounded-lg transition-colors duration-200 group"
+                        title={isMinimized ? "Rozwiń profil" : "Zwiń profil"}
+                    >
+                        <svg
+                            width="20"
+                            height="20"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            className="text-gray-600 group-hover:text-gray-800 transition-colors duration-200"
+                        >
+                            {isMinimized ? (
+                                <path d="M6 9l6 6 6-6"/>
+                            ) : (
+                                <path d="M18 15l-6-6-6 6"/>
+                            )}
+                        </svg>
+                    </button>
+                </div>
+            )}
+
+            {/* Przycisk zwijania/rozwijania - DESKTOP (prawy górny róg) */}
+            {analysisStarted && (
+                <button
+                    onClick={toggleMinimized}
+                    className="hidden md:block absolute top-2 right-2 md:top-4 md:right-4 lg:top-9 lg:right-6 p-2 hover:bg-gray-100 rounded-lg transition-colors duration-200 group z-10"
+                    title={isMinimized ? "Rozwiń profil" : "Zwiń profil"}
+                >
+                    <svg
+                        width="20"
+                        height="20"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        className="text-gray-600 group-hover:text-gray-800 transition-colors duration-200"
+                    >
+                        {isMinimized ? (
+                            <path d="M6 9l6 6 6-6"/>
+                        ) : (
+                            <path d="M18 15l-6-6-6 6"/>
+                        )}
+                    </svg>
+                </button>
+            )}
 
             {/* === WERSJA ZMINIMALIZOWANA === */}
             {isMinimized ? (
-                <div className="flex items-center justify-between">
+                <div className="flex items-center">
                     <div className="flex items-center gap-3">
                         {/* Avatar - mniejszy w wersji zminimalizowanej */}
                         <div className="flex-shrink-0">
@@ -704,7 +973,7 @@ function LinkedInProfileBar() {
                         {/* Informacje podstawowe */}
                         <div className="flex-1 min-w-0">
                             {cleanLinkedInField(profile.jobTitle) && (
-                                <p className="text-xs text-blue-600 font-medium">{cleanLinkedInField(profile.jobTitle)}</p>
+                                <p className="text-xs text-blue-600 font-medium break-words">{cleanLinkedInField(profile.jobTitle)}</p>
                             )}
                             <div className="flex items-center gap-2">
                                 <Image
@@ -714,36 +983,15 @@ function LinkedInProfileBar() {
                                     height={16}
                                     className="flex-shrink-0"
                                 />
-                                <h2 className="text-base font-bold text-gray-800 truncate">
+                                <h2 className="text-base font-bold text-gray-800 break-words">
                                     {profile.fullName}
                                 </h2>
                             </div>
                             {profile.companyName && (
-                                <p className="text-sm text-gray-600 truncate">{profile.companyName}</p>
+                                <p className="text-sm text-gray-600 break-words">{profile.companyName}</p>
                             )}
                         </div>
                     </div>
-
-                    {/* Przycisk toggle */}
-                    <button
-                        onClick={toggleMinimized}
-                        className="ml-4 p-2 hover:bg-gray-100 rounded-lg transition-colors duration-200 group"
-                        title="Rozwiń profil"
-                    >
-                        <svg
-                            width="20"
-                            height="20"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            className="text-gray-600 group-hover:text-gray-800 transition-colors duration-200"
-                        >
-                            <path d="M6 9l6 6 6-6"/>
-                        </svg>
-                    </button>
                 </div>
             ) : (
                 /* === WERSJA PEŁNA === */
@@ -813,76 +1061,51 @@ function LinkedInProfileBar() {
                                             <p>{profile.headline}</p>
                                         </div>
                                     )}
-
-                                    {/* Przycisk zwijania - w lewej kolumnie po rozpoczęciu analizy */}
-                                    {analysisStarted && (
-                                        <div className="mt-4 flex justify-center">
-                                            <button
-                                                onClick={toggleMinimized}
-                                                className="flex items-center gap-2 px-4 py-2 text-sm text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-lg transition-all duration-200"
-                                                title="Zwiń profil"
-                                            >
-                                                <span>Zwiń profil</span>
-                                                <svg
-                                                    width="16"
-                                                    height="16"
-                                                    viewBox="0 0 24 24"
-                                                    fill="none"
-                                                    stroke="currentColor"
-                                                    strokeWidth="2"
-                                                    strokeLinecap="round"
-                                                    strokeLinejoin="round"
-                                                >
-                                                    <path d="M18 15l-6-6-6 6"/>
-                                                </svg>
-                                            </button>
-                                        </div>
-                                    )}
                                 </div>
                             </div>
                         </div>
 
                         {/* === PRAWA STRONA: STATYSTYKI === */}
-                        <div className="flex-1 lg:w-1/2 border-t md:border-t lg:border-t-0 border-gray-200 pt-4 md:pt-6 lg:pt-0">
-                            <div className="grid grid-cols-2 gap-3">
-                                {statsData.map((stat, index) => (
-                                    <StatCard key={`${stat.type}-${index}`} {...stat} />
+                        <div className="flex-1 lg:w-1/2 border-t md:border-t lg:border-t-0 border-gray-200 pt-4 md:pt-6 lg:pt-0 flex items-center">
+                            <div className="grid grid-cols-2 gap-3 w-full">
+                                {statsData.map(stat => (
+                                    <StatCard key={stat.type} {...stat} />
                                 ))}
                             </div>
                         </div>
 
                     </div>
 
-                    {/* === SEKCJA CTA - ROZPOCZNIJ ANALIZĘ BIZNESOWĄ === */}
-                    {!analysisStarted && (
+                    {/* === CTA - Pokazuje się tylko gdy nie ma AI analysis === */}
+                    {shouldShowCTA && (
                         <div className="mt-6 md:mt-8 pt-6 border-t border-gray-200">
                             <div className="text-center">
                                 <h3 className="text-lg md:text-xl font-semibold text-gray-800 mb-4">
                                     Przekształć swoją sieć kontaktów w przewagę konkurencyjną.
                                 </h3>
 
-                                <div className="text-left max-w-2xl mx-auto mb-6">
-                                    <p className="text-sm md:text-base text-gray-600 mb-3 font-medium">
-                                        Nasza analiza pomoże Ci:
+                                <div className="text-left max-w-5xl mx-auto mb-6">
+                                    <p className="text-sm md:text-base text-gray-600 mb-5 font-medium">
+                                        W trakcie tego procesu:
                                     </p>
 
-                                    <ul className="space-y-2 text-sm md:text-base text-gray-600">
+                                    <ul className="space-y-6 text-sm md:text-base text-gray-600">
                                         <li className="flex items-start gap-3">
                                             <span className="text-blue-600 font-bold mt-0.5 flex-shrink-0">•</span>
                                             <span className="flex-1">
-                                                <strong className="text-gray-800">Zdefiniować Twoją Ekspercką Niszę</strong> – obszary, w których Twoja wiedza i doświadczenie mają największą wartość rynkową.
+                                                <strong className="text-gray-800">Zdefiniujesz Twoją Ekspercką Niszę</strong> – obszary, w których Twoja wiedza i doświadczenie mają największą wartość rynkową.
                                             </span>
                                         </li>
                                         <li className="flex items-start gap-3">
                                             <span className="text-indigo-600 font-bold mt-0.5 flex-shrink-0">•</span>
                                             <span className="flex-1">
-                                                <strong className="text-gray-800">Zmapować Twój Ekosystem Biznesowy</strong> – kluczowych decydentów, influencerów i potencjalnych partnerów w Twojej sieci.
+                                                <strong className="text-gray-800">Zmapujesz Twój Ekosystem Biznesowy</strong> – kluczowych decydentów, influencerów i potencjalnych partnerów w Twojej sieci.
                                             </span>
                                         </li>
                                         <li className="flex items-start gap-3">
                                             <span className="text-cyan-600 font-bold mt-0.5 flex-shrink-0">•</span>
                                             <span className="flex-1">
-                                                <strong className="text-gray-800">Opracować Strategię Monetyzacji</strong> – konkretne pomysły na produkty knowledge-based, które skalujesz z Twoją reputacją.
+                                                <strong className="text-gray-800">Opracujesz Strategię Monetyzacji</strong> – konkretne pomysły na produkty knowledge-based, które skalujesz z Twoją reputacją.
                                             </span>
                                         </li>
                                     </ul>
@@ -890,13 +1113,25 @@ function LinkedInProfileBar() {
 
                                 <button
                                     onClick={handleStartAnalysis}
-                                    className="inline-flex items-center gap-3 bg-gradient-to-r from-blue-600 to-indigo-600
+                                    className="inline-flex items-center gap-3 bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-600
                                                text-white font-semibold px-8 py-4 rounded-2xl hover:shadow-lg hover:scale-105
                                                transition-all duration-300 cursor-pointer group"
                                 >
                                     <span className="text-2xl group-hover:animate-bounce">📊</span>
                                     <span className="text-base md:text-lg">Rozpocznij Analizę Biznesową</span>
                                 </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Loading state gdy sprawdza AI analysis */}
+                    {aiLoading && (
+                        <div className="mt-6 md:mt-8 pt-6 border-t border-gray-200">
+                            <div className="text-center">
+                                <div className="flex justify-center items-center gap-3 mb-4">
+                                    <Loader2 className="animate-spin text-blue-500" size={24} />
+                                    <p className="text-gray-600 font-medium">Sprawdzam istniejące analizy...</p>
+                                </div>
                             </div>
                         </div>
                     )}
