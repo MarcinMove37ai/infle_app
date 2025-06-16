@@ -13,6 +13,7 @@ declare module 'next-auth' {
     profilePicture?: string | null;
     // NOWE POLA
     instagramProfileId?: string | null;
+    instagramUsername?: string | null;
     linkedinProfileId?: string | null;
     socialProfileType?: string | null;
   }
@@ -26,6 +27,7 @@ declare module 'next-auth' {
       profilePicture?: string | null;
       // NOWE POLA
       instagramProfileId?: string | null;
+      instagramUsername?: string | null;
       linkedinProfileId?: string | null;
       socialProfileType?: string | null;
     }
@@ -39,6 +41,7 @@ declare module 'next-auth/jwt' {
     profilePicture?: string | null;
     // NOWE POLA
     instagramProfileId?: string | null;
+    instagramUsername?: string | null;
     linkedinProfileId?: string | null;
     socialProfileType?: string | null;
   }
@@ -92,6 +95,16 @@ export const authOptions: NextAuthOptions = {
           throw new Error('Email nie został zweryfikowany');
         }
 
+        // 🆕 POBIERZ INSTAGRAM USERNAME jeśli instagramProfileId istnieje
+        let instagramUsername = null;
+        if (user.instagramProfileId) {
+          const instagramProfile = await prisma.instagramProfileCheck.findUnique({
+            where: { id: user.instagramProfileId },
+            select: { username: true }
+          });
+          instagramUsername = instagramProfile?.username || null;
+        }
+
         // Zwróć użytkownika z wszystkimi polami
         return {
           id: user.id,
@@ -101,6 +114,7 @@ export const authOptions: NextAuthOptions = {
           profilePicture: user.profilePicture,
           // NOWE POLA
           instagramProfileId: user.instagramProfileId,
+          instagramUsername: instagramUsername,
           linkedinProfileId: user.linkedinProfileId,
           socialProfileType: user.socialProfileType,
         };
@@ -114,7 +128,7 @@ export const authOptions: NextAuthOptions = {
     signIn: '/login',
   },
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger, session }) {
       // Po pierwszym logowaniu dodaj user data do tokenu
       if (user) {
         token.id = user.id;
@@ -122,9 +136,61 @@ export const authOptions: NextAuthOptions = {
         token.profilePicture = user.profilePicture;
         // NOWE POLA
         token.instagramProfileId = user.instagramProfileId;
+        token.instagramUsername = user.instagramUsername;
         token.linkedinProfileId = user.linkedinProfileId;
         token.socialProfileType = user.socialProfileType;
       }
+
+      // 🆕 TRIGGER UPDATE - gdy wywołujemy update() z klienta
+      if (trigger === 'update') {
+        console.log('🔄 JWT Callback - Update triggered, refreshing data from database');
+
+        try {
+          // Pobierz najnowsze dane z bazy
+          const updatedUser = await prisma.user.findUnique({
+            where: { id: token.id },
+            select: {
+              id: true,
+              email: true,
+              firstName: true,
+              lastName: true,
+              emailVerified: true,
+              profilePicture: true,
+              instagramProfileId: true,
+              linkedinProfileId: true,
+              socialProfileType: true,
+            }
+          });
+
+          if (updatedUser) {
+            // Pobierz Instagram username
+            let instagramUsername = null;
+            if (updatedUser.instagramProfileId) {
+              const instagramProfile = await prisma.instagramProfileCheck.findUnique({
+                where: { id: updatedUser.instagramProfileId },
+                select: { username: true }
+              });
+              instagramUsername = instagramProfile?.username || null;
+            }
+
+            // Zaktualizuj token z najnowszymi danymi
+            token.emailVerified = updatedUser.emailVerified;
+            token.profilePicture = updatedUser.profilePicture;
+            token.instagramProfileId = updatedUser.instagramProfileId;
+            token.instagramUsername = instagramUsername;
+            token.linkedinProfileId = updatedUser.linkedinProfileId;
+            token.socialProfileType = updatedUser.socialProfileType;
+
+            console.log('✅ JWT Token updated with fresh data:', {
+              instagramProfileId: updatedUser.instagramProfileId,
+              instagramUsername: instagramUsername
+            });
+          }
+        } catch (error) {
+          console.error('❌ Error updating JWT token with fresh data:', error);
+        }
+      }
+
       return token;
     },
     async session({ session, token }) {
@@ -135,6 +201,7 @@ export const authOptions: NextAuthOptions = {
         session.user.profilePicture = token.profilePicture;
         // NOWE POLA
         session.user.instagramProfileId = token.instagramProfileId;
+        session.user.instagramUsername = token.instagramUsername;
         session.user.linkedinProfileId = token.linkedinProfileId;
         session.user.socialProfileType = token.socialProfileType;
       }

@@ -33,6 +33,7 @@ model User {
   resetTokenExpiry    DateTime?
 
   // Nowe pola dla profili społecznościowych
+  instagramUsername   String?             // 🆕 Username Instagram dla łatwego dostępu
   instagramProfileId  String?
   linkedinProfileId   String?
   socialProfileType   SocialProfileType   @default(NONE)
@@ -40,6 +41,12 @@ model User {
   // Relacje do profili społecznościowych (opcjonalne)
   instagramProfile    InstagramProfileCheck? @relation(fields: [instagramProfileId], references: [id])
   linkedinProfile     LinkedInProfileCheck?  @relation(fields: [linkedinProfileId], references: [id])
+
+  // Relacja do analiz Instagram
+  instagramAnalyses   InstagramCreatorAnalysis[]
+
+  // 🆕 NOWA RELACJA - Analizy AI
+  instagramAIAnalyses InstagramCreatorAIAnalysis[]
 
   createdAt           DateTime            @default(now())
   updatedAt           DateTime            @updatedAt
@@ -98,4 +105,60 @@ model LinkedInProfileCheck {
   users             User[]
 
   @@map("linkedin_profile_checks")
+}
+
+// MODEL - Analiza postów Instagram (istniejący)
+model InstagramCreatorAnalysis {
+  id                String    @id @default(cuid())
+  userId            String
+  username          String
+  postId            String
+  caption           String    @db.Text  // Długi tekst
+  likesCount        Int       @default(0)
+  commentsCount     Int       @default(0)
+  videoPlayCount    Int?      // Nullable dla zdjęć
+  videoDuration     Int?      // Nullable dla zdjęć
+  commenterUsernames Json     // JSONB dla Record<string, number>
+
+  // Metadane
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  // Relacja do użytkownika
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Indeksy dla wydajności
+  @@index([userId])
+  @@index([username])
+  @@index([postId])
+  @@unique([userId, postId]) // Jeden post na user
+
+  @@map("instagram_creator_analysis")
+}
+
+// 🆕 NOWY MODEL - Wyniki AI Analysis
+model InstagramCreatorAIAnalysis {
+  id                   String   @id @default(cuid())
+  userId               String
+  username             String
+  profileDescription   String   @db.Text
+  competencies         Json     // Array of AICompetency objects
+  uniqueTalent         Json     // AIUniqueTalent object
+  metadata             Json     // AI metadata (model, version, etc.)
+  postsAnalyzed        Int
+  aiModel              String   @default("claude-3-5-sonnet-20241022")
+  version              String   @default("2.0")
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  // Relacja do użytkownika
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Indexes for better performance
+  @@index([userId])
+  @@index([username])
+  @@index([userId, username])
+  @@unique([userId, username]) // One analysis per user-username combination
+
+  @@map("instagram_creator_ai_analysis")
 }

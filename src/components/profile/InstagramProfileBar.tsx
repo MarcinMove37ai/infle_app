@@ -5,6 +5,14 @@ import { useState, useEffect, useCallback, memo } from 'react';
 import { useSession } from 'next-auth/react';
 import Image from 'next/image';
 import { Verified, Lock, Building2, Grid3X3, Users, UserCheck, Plus, Loader2, ExternalLink, User } from 'lucide-react';
+import { useAIAnalysisCheck } from '@/hooks/useAIAnalysisCheck';
+import { useAuth } from '@/hooks/useAuth'; // 🆕 IMPORT useAuth dla refresh sesji
+
+// --- INTERFEJS PROPS ---
+interface InstagramProfileBarProps {
+  onStartAnalysis?: () => void;
+  onShowAIAnalysis?: (aiData: AIAnalysisData) => void;
+}
 
 // --- INTERFEJS DANYCH ---
 interface InstagramProfile {
@@ -20,6 +28,24 @@ interface InstagramProfile {
     isPrivate: boolean;
     isVerified: boolean;
     businessCategory: string | null;
+}
+
+// Interface - AI Analysis Data
+interface AIAnalysisData {
+  username: string;
+  profileDescription: string;
+  competencies: Array<{
+    name: string;
+    iconType: string;
+    description: string;
+    evidence: string[];
+  }>;
+  uniqueTalent: {
+    name: string;
+    description: string;
+    marketValue: string;
+    evidence: string[];
+  };
 }
 
 // --- CUSTOM HOOK DO ZARZĄDZANIA PROFILEM INSTAGRAM ---
@@ -93,7 +119,17 @@ function useInstagramProfile() {
     };
 }
 
-// --- FUNKCJA POMOCNICZA DO FORMATOWANIA LICZB ---
+// --- FUNKCJA POMOCNICZA DO CZYSZCZENIA KATEGORII BIZNESOWEJ ---
+const cleanBusinessCategory = (category: string | null): string | null => {
+    if (!category) return null;
+
+    // Usuń "None," z początku (case insensitive)
+    const cleaned = category.replace(/^None,?\s*/i, '').trim();
+
+    // Jeśli po wyczyszczeniu nic nie zostało, zwróć null
+    return cleaned.length > 0 ? cleaned : null;
+};
+
 const formatNumber = (num: number): string => {
     if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`.replace('.0', 'M');
     if (num >= 10000) return `${(num / 1000).toFixed(1)}K`.replace('.0', 'K');
@@ -145,6 +181,9 @@ const AddInstagramProfile = memo(({ onProfileAdded }: { onProfileAdded: () => vo
     const [profileData, setProfileData] = useState<any>(null);
     const [showConfirmPopup, setShowConfirmPopup] = useState(false);
     const [imageError, setImageError] = useState(false);
+
+    // 🆕 UŻYJ useAuth do refresh sesji
+    const { refreshSession } = useAuth();
 
     const isInactive = !profileData;
 
@@ -242,7 +281,7 @@ const AddInstagramProfile = memo(({ onProfileAdded }: { onProfileAdded: () => vo
             console.log('✅ Profile check successful');
             setProfileData(result);
             setError(null);
-            setImageError(false); // Reset image error dla nowego profilu
+            setImageError(false);
         } else {
             console.log('❌ Profile check failed');
             setProfileData(null);
@@ -315,6 +354,17 @@ const AddInstagramProfile = memo(({ onProfileAdded }: { onProfileAdded: () => vo
             console.log('✅ Link API success:', linkData);
             console.log('🎉 Profile successfully linked to account');
 
+            // 🆕 KRYTYCZNE: Odśwież sesję natychmiast po pomyślnym przypisaniu profilu
+            console.log('🔄 Refreshing session with new Instagram profile data...');
+            try {
+                await refreshSession();
+                console.log('✅ Session refreshed successfully - new Instagram data should be available');
+            } catch (sessionError) {
+                console.error('❌ Error refreshing session:', sessionError);
+                // Kontynuuj mimo błędu refresh sesji - użytkownik powinien wiedzieć o sukcesie
+            }
+
+            // Wywołaj callback do odświeżenia komponentu
             onProfileAdded();
 
         } catch (err) {
@@ -323,7 +373,7 @@ const AddInstagramProfile = memo(({ onProfileAdded }: { onProfileAdded: () => vo
         } finally {
             setIsLoading(false);
         }
-    }, [profileData?.savedProfileId, onProfileAdded]);
+    }, [profileData?.savedProfileId, onProfileAdded, refreshSession]); // 🆕 DODAJ refreshSession do dependencies
 
     const formatNumberWithFallback = useCallback((num: number | null): string => {
         if (num === null) return '---';
@@ -338,7 +388,7 @@ const AddInstagramProfile = memo(({ onProfileAdded }: { onProfileAdded: () => vo
         },
         {
             value: profileData ? (profileData.is_public === false ? "Nie" : "Tak") : '---',
-            label: "Publiczne:",
+            label: "Publiczny:",
             type: "privacy" as StatType
         },
         {
@@ -593,11 +643,19 @@ const AddInstagramProfile = memo(({ onProfileAdded }: { onProfileAdded: () => vo
 });
 
 // --- GŁÓWNY KOMPONENT ---
-function InstagramProfileBar() {
+function InstagramProfileBar({ onStartAnalysis, onShowAIAnalysis }: InstagramProfileBarProps) {
     // WSZYSTKIE HOOKS MUSZĄ BYĆ NA POCZĄTKU - PRZED JAKIMIKOLWIEK WARUNKAMI
     const { status } = useSession();
     const { profile, loading, error, refreshProfile } = useInstagramProfile();
     const [imageError, setImageError] = useState(false);
+    const [isMinimized, setIsMinimized] = useState(false);
+    const [analysisStarted, setAnalysisStarted] = useState(false);
+
+    // Hook - Sprawdzanie AI Analysis
+    const { hasAIAnalysis, aiAnalysisData, loading: aiLoading } = useAIAnalysisCheck();
+
+    // 🆕 DODAJ useAuth hook także do głównego komponentu
+    const { refreshSession } = useAuth();
 
     // Reset image error when profile changes
     useEffect(() => {
@@ -605,6 +663,50 @@ function InstagramProfileBar() {
             setImageError(false);
         }
     }, [profile]);
+
+    // Effect - Automatyczne pokazanie AI Analysis jeśli istnieje
+    useEffect(() => {
+        if (hasAIAnalysis && aiAnalysisData && onShowAIAnalysis && !analysisStarted) {
+            console.log('🎯 Found existing AI analysis - showing automatically');
+            setAnalysisStarted(true);
+            setIsMinimized(true);
+            onShowAIAnalysis(aiAnalysisData);
+        }
+    }, [hasAIAnalysis, aiAnalysisData, onShowAIAnalysis, analysisStarted]);
+
+    // 🆕 NOWA FUNKCJA - Enhanced profile refresh z session refresh
+    const handleProfileAddedWithSessionRefresh = useCallback(async () => {
+        console.log('🔄 Profile added - refreshing both profile and session...');
+
+        try {
+            // Najpierw odśwież sesję
+            await refreshSession();
+            console.log('✅ Session refreshed after profile addition');
+
+            // Następnie odśwież profil w komponencie
+            refreshProfile();
+            console.log('✅ Profile component refreshed');
+        } catch (error) {
+            console.error('❌ Error during refresh after profile addition:', error);
+            // Nawet jeśli session refresh się nie uda, spróbuj odświeżyć profil
+            refreshProfile();
+        }
+    }, [refreshSession, refreshProfile]);
+
+    const handleStartAnalysis = () => {
+        console.log('🚀 Rozpoczynam głęboką analizę dla:', profile?.username);
+        setAnalysisStarted(true);
+        setIsMinimized(true);
+
+        // Wywołaj callback z rodzica
+        if (onStartAnalysis) {
+            onStartAnalysis();
+        }
+    };
+
+    const toggleMinimized = () => {
+        setIsMinimized(!isMinimized);
+    };
 
     // Loading state z early return
     if (status === 'loading' || loading) {
@@ -616,15 +718,18 @@ function InstagramProfileBar() {
         return <div className="md:bg-red-50 md:border md:border-red-200 text-red-700 p-2 md:p-4 md:rounded-xl bg-red-50 border-l-4 border-red-400">{error}</div>;
     }
 
-    // Brak profilu - pokaż formularz dodawania
+    // Brak profilu - pokaż formularz dodawania z enhanced refresh
     if (!profile) {
-        return <AddInstagramProfile onProfileAdded={refreshProfile} />;
+        return <AddInstagramProfile onProfileAdded={handleProfileAddedWithSessionRefresh} />;
     }
+
+    // Jeśli istnieje AI analysis, ale jeszcze nie rozpoczęto pokazywania
+    const shouldShowCTA = !hasAIAnalysis && !analysisStarted && !aiLoading;
 
     // Istniejący profil
     const statsData = [
         { value: formatNumber(profile.postsCount), label: "Posty:", type: "posts" as StatType },
-        { value: profile.isPrivate ? "Nie" : "Tak", label: "Publiczne:", type: "privacy" as StatType },
+        { value: profile.isPrivate ? "Nie" : "Tak", label: "Publiczny:", type: "privacy" as StatType },
         { value: formatNumber(profile.followersCount), label: "Obserwujący:", type: "followers" as StatType },
         { value: formatNumber(profile.highlightReelCount || 0), label: "Highlights:", type: "highlights" as StatType },
         { value: formatNumber(profile.followsCount), label: "Obserwuje:", type: "following" as StatType },
@@ -632,15 +737,71 @@ function InstagramProfileBar() {
     ];
 
     return (
-        <div className="w-full md:bg-white md:rounded-xl md:border md:border-gray-200 md:shadow-sm p-2 md:p-4 lg:p-6">
-            <div className="flex flex-col lg:flex-row gap-4 md:gap-6">
+        <div className={`w-full md:bg-white md:rounded-xl md:border md:border-gray-200 md:shadow-sm p-2 md:p-4 lg:p-6 transition-all duration-500 relative ${analysisStarted ? 'lg:pr-20' : ''}`}>
 
-                {/* === LEWA STRONA: PROFIL === */}
-                <div className="flex-1 lg:w-1/2 lg:border-r lg:border-gray-200 lg:pr-6">
-                    <div className="flex flex-col items-center gap-4 md:flex-row md:items-center">
-                        {/* Avatar */}
+            {/* Przycisk zwijania/rozwijania - MOBILE (wyśrodkowany kontener) */}
+            {analysisStarted && (
+                <div className="md:hidden flex justify-center mb-4">
+                    <button
+                        onClick={toggleMinimized}
+                        className="p-2 hover:bg-gray-100 rounded-lg transition-colors duration-200 group"
+                        title={isMinimized ? "Rozwiń profil" : "Zwiń profil"}
+                    >
+                        <svg
+                            width="20"
+                            height="20"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            className="text-gray-600 group-hover:text-gray-800 transition-colors duration-200"
+                        >
+                            {isMinimized ? (
+                                <path d="M6 9l6 6 6-6"/>
+                            ) : (
+                                <path d="M18 15l-6-6-6 6"/>
+                            )}
+                        </svg>
+                    </button>
+                </div>
+            )}
+
+            {/* Przycisk zwijania/rozwijania - DESKTOP (prawy górny róg) */}
+            {analysisStarted && (
+                <button
+                    onClick={toggleMinimized}
+                    className="hidden md:block absolute top-2 right-2 md:top-4 md:right-4 lg:top-9 lg:right-6 p-2 hover:bg-gray-100 rounded-lg transition-colors duration-200 group z-10"
+                    title={isMinimized ? "Rozwiń profil" : "Zwiń profil"}
+                >
+                    <svg
+                        width="20"
+                        height="20"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        className="text-gray-600 group-hover:text-gray-800 transition-colors duration-200"
+                    >
+                        {isMinimized ? (
+                            <path d="M6 9l6 6 6-6"/>
+                        ) : (
+                            <path d="M18 15l-6-6-6 6"/>
+                        )}
+                    </svg>
+                </button>
+            )}
+
+            {/* === WERSJA ZMINIMALIZOWANA === */}
+            {isMinimized ? (
+                <div className="flex items-center">
+                    <div className="flex items-center gap-3">
+                        {/* Avatar - mniejszy w wersji zminimalizowanej */}
                         <div className="flex-shrink-0">
-                            <div className="w-20 h-20 md:w-24 md:h-24 rounded-full bg-gradient-to-tr from-purple-500 via-pink-500 to-orange-500 p-[2px]">
+                            <div className="w-12 h-12 rounded-full bg-gradient-to-tr from-purple-500 via-pink-500 to-orange-500 p-[2px]">
                                 <div className="w-full h-full bg-white rounded-full p-0.5">
                                     {profile.profilePicUrlHD && !imageError ? (
                                         <Image
@@ -649,69 +810,187 @@ function InstagramProfileBar() {
                                                 : `/api/proxy-image?url=${encodeURIComponent(profile.profilePicUrlHD || '')}`
                                             }
                                             alt={`Zdjęcie profilowe ${profile.username}`}
-                                            width={96}
-                                            height={96}
+                                            width={48}
+                                            height={48}
                                             className="rounded-full object-cover w-full h-full"
-                                            onError={() => {
-                                                console.log('❌ Error loading profile image, showing fallback');
-                                                setImageError(true);
-                                            }}
+                                            onError={() => setImageError(true)}
                                         />
                                     ) : (
                                         <div className="w-full h-full rounded-full bg-gray-50 flex items-center justify-center">
-                                            <User size={32} className="text-gray-400" />
+                                            <User size={20} className="text-gray-400" />
                                         </div>
                                     )}
                                 </div>
                             </div>
                         </div>
 
-                        {/* Informacje tekstowe */}
-                        <div className="flex-1 min-w-0 text-center md:text-left">
-                            {profile.businessCategory && (
-                                <p className="text-xs text-gray-500 font-medium mb-1">{profile.businessCategory}</p>
+                        {/* Informacje podstawowe */}
+                        <div className="flex-1 min-w-0">
+                            {cleanBusinessCategory(profile.businessCategory) && (
+                                <p className="text-xs text-gray-500 font-medium break-words">{cleanBusinessCategory(profile.businessCategory)}</p>
                             )}
-
-                            <div className="flex items-center justify-center md:justify-start gap-2 mb-1">
+                            <div className="flex items-center gap-2">
                                 <Image
                                     src="/ig.png"
                                     alt="Instagram"
-                                    width={20}
-                                    height={20}
+                                    width={16}
+                                    height={16}
                                     className="flex-shrink-0"
                                 />
-                                <h2 className="text-xl md:text-2xl font-bold text-gray-800 truncate">
+                                <h2 className="text-base font-bold text-gray-800 break-words">
                                     {profile.username}
                                 </h2>
                             </div>
-
                             {profile.fullName && (
-                                <p className="text-sm text-gray-700 font-medium mb-2">{profile.fullName}</p>
-                            )}
-
-                            {profile.biography && (
-                                <div className="hidden md:block border-t border-gray-200 my-3"></div>
-                            )}
-
-                            {profile.biography && (
-                                <div className="hidden md:block text-sm text-gray-600 leading-relaxed">
-                                    <p>{profile.biography}</p>
-                                </div>
+                                <p className="text-sm text-gray-600 break-words">{profile.fullName}</p>
                             )}
                         </div>
                     </div>
                 </div>
+            ) : (
+                /* === WERSJA PEŁNA === */
+                <>
+                    <div className="flex flex-col lg:flex-row gap-4 md:gap-6">
 
-                {/* === PRAWA STRONA: STATYSTYKI === */}
-                <div className="flex-1 lg:w-1/2 border-t md:border-t lg:border-t-0 border-gray-200 pt-4 md:pt-6 lg:pt-0">
-                    <div className="grid grid-cols-2 gap-3">
-                        {statsData.map(stat => (
-                            <StatCard key={stat.type} {...stat} />
-                        ))}
+                        {/* === LEWA STRONA: PROFIL === */}
+                        <div className="flex-1 lg:w-1/2 lg:border-r lg:border-gray-200 lg:pr-6">
+                            <div className="flex flex-col items-center gap-4 md:flex-row md:items-center">
+                                {/* Avatar */}
+                                <div className="flex-shrink-0">
+                                    <div className="w-20 h-20 md:w-24 md:h-24 rounded-full bg-gradient-to-tr from-purple-500 via-pink-500 to-orange-500 p-[2px]">
+                                        <div className="w-full h-full bg-white rounded-full p-0.5">
+                                            {profile.profilePicUrlHD && !imageError ? (
+                                                <Image
+                                                    src={profile.profilePicUrlHD?.startsWith('/api/proxy-image')
+                                                        ? profile.profilePicUrlHD
+                                                        : `/api/proxy-image?url=${encodeURIComponent(profile.profilePicUrlHD || '')}`
+                                                    }
+                                                    alt={`Zdjęcie profilowe ${profile.username}`}
+                                                    width={96}
+                                                    height={96}
+                                                    className="rounded-full object-cover w-full h-full"
+                                                    onError={() => {
+                                                        console.log('❌ Error loading profile image, showing fallback');
+                                                        setImageError(true);
+                                                    }}
+                                                />
+                                            ) : (
+                                                <div className="w-full h-full rounded-full bg-gray-50 flex items-center justify-center">
+                                                    <User size={32} className="text-gray-400" />
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Informacje tekstowe */}
+                                <div className="flex-1 min-w-0 text-center md:text-left">
+                                    {cleanBusinessCategory(profile.businessCategory) && (
+                                        <p className="text-xs text-gray-500 font-medium mb-1">{cleanBusinessCategory(profile.businessCategory)}</p>
+                                    )}
+
+                                    <div className="flex items-center justify-center md:justify-start gap-2 mb-1">
+                                        <Image
+                                            src="/ig.png"
+                                            alt="Instagram"
+                                            width={20}
+                                            height={20}
+                                            className="flex-shrink-0"
+                                        />
+                                        <h2 className="text-xl md:text-2xl font-bold text-gray-800 truncate">
+                                            {profile.username}
+                                        </h2>
+                                    </div>
+
+                                    {profile.fullName && (
+                                        <p className="text-sm text-gray-700 font-medium mb-2">{profile.fullName}</p>
+                                    )}
+
+                                    {profile.biography && (
+                                        <div className="hidden md:block border-t border-gray-200 my-3"></div>
+                                    )}
+
+                                    {profile.biography && (
+                                        <div className="hidden md:block text-sm text-gray-600 leading-relaxed">
+                                            <p>{profile.biography}</p>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* === PRAWA STRONA: STATYSTYKI === */}
+                        <div className="flex-1 lg:w-1/2 border-t md:border-t lg:border-t-0 border-gray-200 pt-4 md:pt-6 lg:pt-0 flex items-center">
+                            <div className="grid grid-cols-2 gap-3 w-full">
+                                {statsData.map(stat => (
+                                    <StatCard key={stat.type} {...stat} />
+                                ))}
+                            </div>
+                        </div>
+
                     </div>
-                </div>
 
-            </div>
+                    {/* === CTA - Pokazuje się tylko gdy nie ma AI analysis === */}
+                    {shouldShowCTA && (
+                        <div className="mt-6 md:mt-8 pt-6 border-t border-gray-200">
+                            <div className="text-center">
+                                <h3 className="text-lg md:text-xl font-semibold text-gray-800 mb-4">
+                                    Odkryj przepis na sukces ukryty w Twoich danych.
+                                </h3>
+
+                                <div className="text-left max-w-5xl mx-auto mb-6">
+                                    <p className="text-sm md:text-base text-gray-600 mb-5 font-medium">
+                                        W trakcie tego procesu:
+                                    </p>
+
+                                    <ul className="space-y-6 text-sm md:text-base text-gray-600">
+                                        <li className="flex items-start gap-3">
+                                            <span className="text-purple-600 font-bold mt-0.5 flex-shrink-0">•</span>
+                                            <span className="flex-1">
+                                                <strong className="text-gray-800">Odkryjesz swoje "Supermoce"</strong> – tematy, w których jesteś prawdziwym ekspertem i które najbardziej angażują Twoich fanów.
+                                            </span>
+                                        </li>
+                                        <li className="flex items-start gap-3">
+                                            <span className="text-blue-600 font-bold mt-0.5 flex-shrink-0">•</span>
+                                            <span className="flex-1">
+                                                <strong className="text-gray-800">Zrozumiesz, kim jest Twoje "Plemię"</strong> – poznasz kluczowe grupy odbiorców i ich najważniejsze potrzeby.
+                                            </span>
+                                        </li>
+                                        <li className="flex items-start gap-3">
+                                            <span className="text-emerald-600 font-bold mt-0.5 flex-shrink-0">•</span>
+                                            <span className="flex-1">
+                                                <strong className="text-gray-800">Otrzymasz "Mapę Skarbów"</strong> – gotowe pomysły na treści, które łączą potrzeby Twoich widzów z Twoimi kompetencjami.
+                                            </span>
+                                        </li>
+                                    </ul>
+                                </div>
+
+                                <button
+                                    onClick={handleStartAnalysis}
+                                    className="inline-flex items-center gap-3 bg-gradient-to-r from-purple-600 via-blue-600 to-emerald-600
+                                               text-white font-semibold px-8 py-4 rounded-2xl hover:shadow-lg hover:scale-105
+                                               transition-all duration-300 cursor-pointer group"
+                                >
+                                    <span className="text-2xl group-hover:animate-bounce">🚀</span>
+                                    <span className="text-base md:text-lg">Rozpocznij Głęboką Analizę</span>
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Loading state gdy sprawdza AI analysis */}
+                    {aiLoading && (
+                        <div className="mt-6 md:mt-8 pt-6 border-t border-gray-200">
+                            <div className="text-center">
+                                <div className="flex justify-center items-center gap-3 mb-4">
+                                    <Loader2 className="animate-spin text-blue-500" size={24} />
+                                    <p className="text-gray-600 font-medium">Sprawdzam istniejące analizy...</p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </>
+            )}
         </div>
     );
 }

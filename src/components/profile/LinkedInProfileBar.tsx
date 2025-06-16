@@ -97,6 +97,17 @@ function useLinkedInProfile() {
     };
 }
 
+// --- FUNKCJA POMOCNICZA DO CZYSZCZENIA DANYCH LINKEDIN ---
+const cleanLinkedInField = (field: string | null): string | null => {
+    if (!field) return null;
+
+    // Usuń typowe błędne prefiksy z LinkedIn data
+    const cleaned = field.replace(/^(None|null|undefined),?\s*/i, '').trim();
+
+    // Jeśli po wyczyszczeniu nic nie zostało, zwróć null
+    return cleaned.length > 0 ? cleaned : null;
+};
+
 // --- FUNKCJA POMOCNICZA DO FORMATOWANIA LICZB ---
 const formatNumber = (num: number): string => {
     if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`.replace('.0', 'M');
@@ -608,6 +619,8 @@ function LinkedInProfileBar() {
     const { status } = useSession();
     const { profile, loading, error, refreshProfile } = useLinkedInProfile();
     const [imageError, setImageError] = useState(false);
+    const [isMinimized, setIsMinimized] = useState(false);
+    const [analysisStarted, setAnalysisStarted] = useState(false);
 
     // Reset image error when profile changes
     useEffect(() => {
@@ -615,6 +628,21 @@ function LinkedInProfileBar() {
             setImageError(false);
         }
     }, [profile]);
+
+    const handleStartAnalysis = () => {
+        if (!profile?.fullName) {
+            console.log('❌ Cannot start analysis: profile is null or fullName is missing');
+            return;
+        }
+        console.log('🚀 Rozpoczynam analizę biznesową dla:', profile.fullName);
+        setAnalysisStarted(true);
+        setIsMinimized(true);
+        // TODO: Tutaj uruchomimy proces analizy i pokażemy kolejny komponent
+    };
+
+    const toggleMinimized = () => {
+        setIsMinimized(!isMinimized);
+    };
 
     // Loading state z early return
     if (status === 'loading' || loading) {
@@ -642,15 +670,15 @@ function LinkedInProfileBar() {
     ];
 
     return (
-        <div className="w-full md:bg-white md:rounded-xl md:border md:border-gray-200 md:shadow-sm p-2 md:p-4 lg:p-6">
-            <div className="flex flex-col lg:flex-row gap-4 md:gap-6">
+        <div className="w-full md:bg-white md:rounded-xl md:border md:border-gray-200 md:shadow-sm p-2 md:p-4 lg:p-6 transition-all duration-500">
 
-                {/* === LEWA STRONA: PROFIL === */}
-                <div className="flex-1 lg:w-1/2 lg:border-r lg:border-gray-200 lg:pr-6">
-                    <div className="flex flex-col items-center gap-4 md:flex-row md:items-center">
-                        {/* Avatar */}
+            {/* === WERSJA ZMINIMALIZOWANA === */}
+            {isMinimized ? (
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        {/* Avatar - mniejszy w wersji zminimalizowanej */}
                         <div className="flex-shrink-0">
-                            <div className="w-20 h-20 md:w-24 md:h-24 rounded-full bg-gradient-to-tr from-blue-500 to-blue-600 p-[2px]">
+                            <div className="w-12 h-12 rounded-full bg-gradient-to-tr from-blue-500 to-blue-600 p-[2px]">
                                 <div className="w-full h-full bg-white rounded-full p-0.5">
                                     {profile.profilePicUrl && !imageError ? (
                                         <Image
@@ -659,69 +687,221 @@ function LinkedInProfileBar() {
                                                 : `/api/proxy-image?url=${encodeURIComponent(profile.profilePicUrl || '')}`
                                             }
                                             alt={`Zdjęcie profilowe ${profile.fullName}`}
-                                            width={96}
-                                            height={96}
+                                            width={48}
+                                            height={48}
                                             className="rounded-full object-cover w-full h-full"
-                                            onError={() => {
-                                                console.log('❌ Error loading profile image, showing fallback');
-                                                setImageError(true);
-                                            }}
+                                            onError={() => setImageError(true)}
                                         />
                                     ) : (
                                         <div className="w-full h-full rounded-full bg-gray-50 flex items-center justify-center">
-                                            <User size={32} className="text-gray-400" />
+                                            <User size={20} className="text-gray-400" />
                                         </div>
                                     )}
                                 </div>
                             </div>
                         </div>
 
-                        {/* Informacje tekstowe */}
-                        <div className="flex-1 min-w-0 text-center md:text-left">
-                            {profile.jobTitle && (
-                                <p className="text-xs text-blue-600 font-medium mb-1">{profile.jobTitle}</p>
+                        {/* Informacje podstawowe */}
+                        <div className="flex-1 min-w-0">
+                            {cleanLinkedInField(profile.jobTitle) && (
+                                <p className="text-xs text-blue-600 font-medium">{cleanLinkedInField(profile.jobTitle)}</p>
                             )}
-
-                            <div className="flex items-center justify-center md:justify-start gap-2 mb-1">
+                            <div className="flex items-center gap-2">
                                 <Image
                                     src="/linkedin.png"
                                     alt="LinkedIn"
-                                    width={20}
-                                    height={20}
+                                    width={16}
+                                    height={16}
                                     className="flex-shrink-0"
                                 />
-                                <h2 className="text-xl md:text-2xl font-bold text-gray-800 truncate">
+                                <h2 className="text-base font-bold text-gray-800 truncate">
                                     {profile.fullName}
                                 </h2>
                             </div>
-
                             {profile.companyName && (
-                                <p className="text-sm text-gray-700 font-medium mb-2">{profile.companyName}</p>
-                            )}
-
-                            {profile.headline && (
-                                <div className="hidden md:block border-t border-gray-200 my-3"></div>
-                            )}
-
-                            {profile.headline && (
-                                <div className="hidden md:block text-sm text-gray-600 leading-relaxed">
-                                    <p>{profile.headline}</p>
-                                </div>
+                                <p className="text-sm text-gray-600 truncate">{profile.companyName}</p>
                             )}
                         </div>
                     </div>
-                </div>
 
-                {/* === PRAWA STRONA: STATYSTYKI === */}
-                <div className="flex-1 lg:w-1/2 border-t md:border-t lg:border-t-0 border-gray-200 pt-4 md:pt-6 lg:pt-0">
-                    <div className="grid grid-cols-2 gap-3">
-                        {statsData.map((stat, index) => (
-                            <StatCard key={`${stat.type}-${index}`} {...stat} />
-                        ))}
+                    {/* Przycisk toggle */}
+                    <button
+                        onClick={toggleMinimized}
+                        className="ml-4 p-2 hover:bg-gray-100 rounded-lg transition-colors duration-200 group"
+                        title="Rozwiń profil"
+                    >
+                        <svg
+                            width="20"
+                            height="20"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            className="text-gray-600 group-hover:text-gray-800 transition-colors duration-200"
+                        >
+                            <path d="M6 9l6 6 6-6"/>
+                        </svg>
+                    </button>
+                </div>
+            ) : (
+                /* === WERSJA PEŁNA === */
+                <>
+                    <div className="flex flex-col lg:flex-row gap-4 md:gap-6">
+
+                        {/* === LEWA STRONA: PROFIL === */}
+                        <div className="flex-1 lg:w-1/2 lg:border-r lg:border-gray-200 lg:pr-6">
+                            <div className="flex flex-col items-center gap-4 md:flex-row md:items-center">
+                                {/* Avatar */}
+                                <div className="flex-shrink-0">
+                                    <div className="w-20 h-20 md:w-24 md:h-24 rounded-full bg-gradient-to-tr from-blue-500 to-blue-600 p-[2px]">
+                                        <div className="w-full h-full bg-white rounded-full p-0.5">
+                                            {profile.profilePicUrl && !imageError ? (
+                                                <Image
+                                                    src={profile.profilePicUrl?.startsWith('/api/proxy-image')
+                                                        ? profile.profilePicUrl
+                                                        : `/api/proxy-image?url=${encodeURIComponent(profile.profilePicUrl || '')}`
+                                                    }
+                                                    alt={`Zdjęcie profilowe ${profile.fullName}`}
+                                                    width={96}
+                                                    height={96}
+                                                    className="rounded-full object-cover w-full h-full"
+                                                    onError={() => {
+                                                        console.log('❌ Error loading profile image, showing fallback');
+                                                        setImageError(true);
+                                                    }}
+                                                />
+                                            ) : (
+                                                <div className="w-full h-full rounded-full bg-gray-50 flex items-center justify-center">
+                                                    <User size={32} className="text-gray-400" />
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Informacje tekstowe */}
+                                <div className="flex-1 min-w-0 text-center md:text-left">
+                                    {cleanLinkedInField(profile.jobTitle) && (
+                                        <p className="text-xs text-blue-600 font-medium mb-1">{cleanLinkedInField(profile.jobTitle)}</p>
+                                    )}
+
+                                    <div className="flex items-center justify-center md:justify-start gap-2 mb-1">
+                                        <Image
+                                            src="/linkedin.png"
+                                            alt="LinkedIn"
+                                            width={20}
+                                            height={20}
+                                            className="flex-shrink-0"
+                                        />
+                                        <h2 className="text-xl md:text-2xl font-bold text-gray-800 truncate">
+                                            {profile.fullName}
+                                        </h2>
+                                    </div>
+
+                                    {profile.companyName && (
+                                        <p className="text-sm text-gray-700 font-medium mb-2">{profile.companyName}</p>
+                                    )}
+
+                                    {profile.headline && (
+                                        <div className="hidden md:block border-t border-gray-200 my-3"></div>
+                                    )}
+
+                                    {profile.headline && (
+                                        <div className="hidden md:block text-sm text-gray-600 leading-relaxed">
+                                            <p>{profile.headline}</p>
+                                        </div>
+                                    )}
+
+                                    {/* Przycisk zwijania - w lewej kolumnie po rozpoczęciu analizy */}
+                                    {analysisStarted && (
+                                        <div className="mt-4 flex justify-center">
+                                            <button
+                                                onClick={toggleMinimized}
+                                                className="flex items-center gap-2 px-4 py-2 text-sm text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-lg transition-all duration-200"
+                                                title="Zwiń profil"
+                                            >
+                                                <span>Zwiń profil</span>
+                                                <svg
+                                                    width="16"
+                                                    height="16"
+                                                    viewBox="0 0 24 24"
+                                                    fill="none"
+                                                    stroke="currentColor"
+                                                    strokeWidth="2"
+                                                    strokeLinecap="round"
+                                                    strokeLinejoin="round"
+                                                >
+                                                    <path d="M18 15l-6-6-6 6"/>
+                                                </svg>
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* === PRAWA STRONA: STATYSTYKI === */}
+                        <div className="flex-1 lg:w-1/2 border-t md:border-t lg:border-t-0 border-gray-200 pt-4 md:pt-6 lg:pt-0">
+                            <div className="grid grid-cols-2 gap-3">
+                                {statsData.map((stat, index) => (
+                                    <StatCard key={`${stat.type}-${index}`} {...stat} />
+                                ))}
+                            </div>
+                        </div>
+
                     </div>
-                </div>
 
-            </div>
+                    {/* === SEKCJA CTA - ROZPOCZNIJ ANALIZĘ BIZNESOWĄ === */}
+                    {!analysisStarted && (
+                        <div className="mt-6 md:mt-8 pt-6 border-t border-gray-200">
+                            <div className="text-center">
+                                <h3 className="text-lg md:text-xl font-semibold text-gray-800 mb-4">
+                                    Przekształć swoją sieć kontaktów w przewagę konkurencyjną.
+                                </h3>
+
+                                <div className="text-left max-w-2xl mx-auto mb-6">
+                                    <p className="text-sm md:text-base text-gray-600 mb-3 font-medium">
+                                        Nasza analiza pomoże Ci:
+                                    </p>
+
+                                    <ul className="space-y-2 text-sm md:text-base text-gray-600">
+                                        <li className="flex items-start gap-3">
+                                            <span className="text-blue-600 font-bold mt-0.5 flex-shrink-0">•</span>
+                                            <span className="flex-1">
+                                                <strong className="text-gray-800">Zdefiniować Twoją Ekspercką Niszę</strong> – obszary, w których Twoja wiedza i doświadczenie mają największą wartość rynkową.
+                                            </span>
+                                        </li>
+                                        <li className="flex items-start gap-3">
+                                            <span className="text-indigo-600 font-bold mt-0.5 flex-shrink-0">•</span>
+                                            <span className="flex-1">
+                                                <strong className="text-gray-800">Zmapować Twój Ekosystem Biznesowy</strong> – kluczowych decydentów, influencerów i potencjalnych partnerów w Twojej sieci.
+                                            </span>
+                                        </li>
+                                        <li className="flex items-start gap-3">
+                                            <span className="text-cyan-600 font-bold mt-0.5 flex-shrink-0">•</span>
+                                            <span className="flex-1">
+                                                <strong className="text-gray-800">Opracować Strategię Monetyzacji</strong> – konkretne pomysły na produkty knowledge-based, które skalujesz z Twoją reputacją.
+                                            </span>
+                                        </li>
+                                    </ul>
+                                </div>
+
+                                <button
+                                    onClick={handleStartAnalysis}
+                                    className="inline-flex items-center gap-3 bg-gradient-to-r from-blue-600 to-indigo-600
+                                               text-white font-semibold px-8 py-4 rounded-2xl hover:shadow-lg hover:scale-105
+                                               transition-all duration-300 cursor-pointer group"
+                                >
+                                    <span className="text-2xl group-hover:animate-bounce">📊</span>
+                                    <span className="text-base md:text-lg">Rozpocznij Analizę Biznesową</span>
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                </>
+            )}
         </div>
     );
 }

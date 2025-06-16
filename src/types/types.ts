@@ -8,6 +8,11 @@ export interface User {
   status?: string;
   cognito_sub?: string;
   profilePicture?: string;
+  // 🆕 DODANE pola social media
+  instagramProfileId?: string | null;
+  instagramUsername?: string | null;
+  linkedinProfileId?: string | null;
+  socialProfileType?: string | null;
 }
 
 // Interface dla profilu Instagram (używany w InstagramProfileBar)
@@ -18,9 +23,9 @@ export interface InstagramProfile {
   followersCount: number;
   followsCount: number;
   postsCount: number;
-  highlightReelCount?: number;      // NOWE POLE - liczba highlight reels
+  highlightReelCount?: number;
   profilePicUrlHD: string | null;
-  isBusinessAccount: boolean;       // TYMCZASOWO - zastąpimy przez highlightReelCount
+  isBusinessAccount: boolean;
   isPrivate: boolean;
   isVerified: boolean;
   businessCategory: string | null;

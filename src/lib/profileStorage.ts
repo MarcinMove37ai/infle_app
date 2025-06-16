@@ -44,7 +44,57 @@ interface ApifyLinkedInData {
   addressCountryOnly?: string;
 }
 
-// NOWY TYP - wynik sprawdzenia istniejącego profilu
+// dane analizy twórcy
+interface CreatorAnalysisData {
+  userId: string;
+  username: string;
+  postId: string;
+  caption: string;
+  likesCount: number;
+  commentsCount: number;
+  videoPlayCount: number | null;
+  videoDuration: number | null;
+  commenterUsernames: Record<string, number>;
+}
+
+// 🆕 NOWE INTERFEJSY AI ANALYSIS
+interface AIAnalysisData {
+  username: string;
+  profileDescription: string;
+  competencies: AICompetency[];
+  uniqueTalent: AIUniqueTalent;
+}
+
+interface AICompetency {
+  name: string;
+  iconType: string;
+  description: string;
+  evidence: string[];
+}
+
+interface AIUniqueTalent {
+  name: string;
+  description: string;
+  marketValue: string;
+  evidence: string[];
+}
+
+interface AIAnalysisMetadata {
+  generatedAt: string;
+  aiModel: string;
+  postsCount: number;
+  version?: string;
+}
+
+interface SaveAIAnalysisData {
+  userId: string;
+  username: string;
+  analysisData: AIAnalysisData;
+  metadata: AIAnalysisMetadata;
+  postsAnalyzed: number;
+}
+
+// wynik sprawdzenia istniejącego profilu
 interface ExistingProfileResult {
   exists: boolean;
   profileId: string | null;
@@ -60,9 +110,259 @@ export function extractRequestMetadata(request: NextRequest) {
   return { userIp, userAgent };
 }
 
-// ===== ZAKTUALIZOWANE FUNKCJE DEDUPLIKACJI =====
+// ===== 🆕 NOWE FUNKCJE AI ANALYSIS =====
 
-// ZMIENIONA: Funkcja sprawdzająca czy profil Instagram już istnieje
+// Funkcja do zapisywania AI analysis do bazy danych
+export async function saveAIAnalysis(data: SaveAIAnalysisData): Promise<{ success: boolean; analysisId?: string; error?: string }> {
+  try {
+    console.log('💾 Saving AI analysis to database...');
+    console.log('🧠 Analysis data:', {
+      userId: data.userId,
+      username: data.username,
+      competenciesCount: data.analysisData.competencies.length,
+      uniqueTalent: data.analysisData.uniqueTalent.name,
+      postsAnalyzed: data.postsAnalyzed
+    });
+
+    // Przygotuj dane do zapisu
+    const saveData = {
+      userId: data.userId,
+      username: data.username,
+      profileDescription: data.analysisData.profileDescription,
+      competencies: data.analysisData.competencies,
+      uniqueTalent: data.analysisData.uniqueTalent,
+      metadata: data.metadata,
+      postsAnalyzed: data.postsAnalyzed,
+      aiModel: data.metadata.aiModel,
+      version: data.metadata.version || '2.0'
+    };
+
+    // Upsert - zaktualizuj jeśli istnieje, utwórz jeśli nie
+    const savedAnalysis = await prisma.instagramCreatorAIAnalysis.upsert({
+      where: {
+        userId_username: {
+          userId: data.userId,
+          username: data.username
+        }
+      },
+      update: {
+        profileDescription: saveData.profileDescription,
+        competencies: saveData.competencies as any,
+        uniqueTalent: saveData.uniqueTalent as any,
+        metadata: saveData.metadata as any,
+        postsAnalyzed: saveData.postsAnalyzed,
+        aiModel: saveData.aiModel,
+        version: saveData.version,
+        updatedAt: new Date()
+      },
+      create: {
+        userId: saveData.userId,
+        username: saveData.username,
+        profileDescription: saveData.profileDescription,
+        competencies: saveData.competencies as any,
+        uniqueTalent: saveData.uniqueTalent as any,
+        metadata: saveData.metadata as any,
+        postsAnalyzed: saveData.postsAnalyzed,
+        aiModel: saveData.aiModel,
+        version: saveData.version
+      }
+    });
+
+    console.log('✅ AI analysis saved successfully:', savedAnalysis.id);
+    return { success: true, analysisId: savedAnalysis.id };
+
+  } catch (error) {
+    console.error('❌ Error saving AI analysis:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error'
+    };
+  }
+}
+
+// Funkcja do pobierania AI analysis z bazy danych
+export async function getAIAnalysis(userId: string, username: string): Promise<AIAnalysisData | null> {
+  try {
+    console.log(`🔍 Fetching AI analysis for userId: ${userId}, username: ${username}`);
+
+    const analysis = await prisma.instagramCreatorAIAnalysis.findUnique({
+      where: {
+        userId_username: {
+          userId: userId,
+          username: username
+        }
+      }
+    });
+
+    if (!analysis) {
+      console.log('📭 No AI analysis found');
+      return null;
+    }
+
+    console.log('✅ AI analysis found:', {
+      id: analysis.id,
+      createdAt: analysis.createdAt,
+      updatedAt: analysis.updatedAt,
+      competenciesCount: Array.isArray(analysis.competencies) ? analysis.competencies.length : 0,
+      uniqueTalent: typeof analysis.uniqueTalent === 'object' && analysis.uniqueTalent !== null
+        ? (analysis.uniqueTalent as any).name
+        : 'Unknown'
+    });
+
+    return {
+      username: analysis.username,
+      profileDescription: analysis.profileDescription,
+      competencies: analysis.competencies as unknown as AICompetency[],
+      uniqueTalent: analysis.uniqueTalent as unknown as AIUniqueTalent
+    };
+
+  } catch (error) {
+    console.error('❌ Error fetching AI analysis:', error);
+    return null;
+  }
+}
+
+// Funkcja do sprawdzenia czy AI analysis istnieje
+export async function checkAIAnalysisExists(userId: string, username: string): Promise<boolean> {
+  try {
+    const count = await prisma.instagramCreatorAIAnalysis.count({
+      where: {
+        userId: userId,
+        username: username
+      }
+    });
+
+    return count > 0;
+  } catch (error) {
+    console.error('❌ Error checking AI analysis existence:', error);
+    return false;
+  }
+}
+
+// Funkcja do pobierania wszystkich AI analiz użytkownika
+export async function getUserAIAnalyses(userId: string): Promise<Array<{
+  id: string;
+  username: string;
+  profileDescription: string;
+  competencies: AICompetency[];
+  uniqueTalent: AIUniqueTalent;
+  createdAt: Date;
+  updatedAt: Date;
+}>> {
+  try {
+    const analyses = await prisma.instagramCreatorAIAnalysis.findMany({
+      where: { userId },
+      orderBy: { updatedAt: 'desc' },
+      take: 10 // Limit dla wydajności
+    });
+
+    return analyses.map(analysis => ({
+      id: analysis.id,
+      username: analysis.username,
+      profileDescription: analysis.profileDescription,
+      competencies: analysis.competencies as unknown as AICompetency[],
+      uniqueTalent: analysis.uniqueTalent as unknown as AIUniqueTalent,
+      createdAt: analysis.createdAt,
+      updatedAt: analysis.updatedAt
+    }));
+
+  } catch (error) {
+    console.error('❌ Error fetching user AI analyses:', error);
+    return [];
+  }
+}
+
+// ===== FUNKCJE CREATOR ANALYSIS =====
+
+// Funkcja do zapisu analizy twórcy
+export async function saveCreatorAnalysis(
+  analysisData: CreatorAnalysisData[]
+): Promise<{ success: boolean; saved: number; errors: number }> {
+  try {
+    console.log('💾 Saving creator analysis data...');
+    console.log(`📊 Processing ${analysisData.length} posts`);
+
+    let savedCount = 0;
+    let errorCount = 0;
+
+    // Użyj transakcji dla spójności danych
+    await prisma.$transaction(async (tx) => {
+      for (const data of analysisData) {
+        try {
+          // Upsert - zaktualizuj jeśli istnieje, utwórz jeśli nie
+          await tx.instagramCreatorAnalysis.upsert({
+            where: {
+              userId_postId: {
+                userId: data.userId,
+                postId: data.postId
+              }
+            },
+            update: {
+              username: data.username,
+              caption: data.caption,
+              likesCount: data.likesCount,
+              commentsCount: data.commentsCount,
+              videoPlayCount: data.videoPlayCount,
+              videoDuration: data.videoDuration,
+              commenterUsernames: data.commenterUsernames as any,
+              updatedAt: new Date()
+            },
+            create: {
+              userId: data.userId,
+              username: data.username,
+              postId: data.postId,
+              caption: data.caption,
+              likesCount: data.likesCount,
+              commentsCount: data.commentsCount,
+              videoPlayCount: data.videoPlayCount,
+              videoDuration: data.videoDuration,
+              commenterUsernames: data.commenterUsernames as any
+            }
+          });
+
+          savedCount++;
+          console.log(`✅ Saved post ${data.postId}`);
+
+        } catch (error) {
+          console.error(`❌ Error saving post ${data.postId}:`, error);
+          errorCount++;
+        }
+      }
+    });
+
+    console.log(`✅ Creator analysis saved: ${savedCount} success, ${errorCount} errors`);
+    return { success: true, saved: savedCount, errors: errorCount };
+
+  } catch (error) {
+    console.error('❌ Error in saveCreatorAnalysis:', error);
+    return { success: false, saved: 0, errors: analysisData.length };
+  }
+}
+
+// Funkcja do pobierania analiz użytkownika
+export async function getUserCreatorAnalyses(userId: string, username?: string) {
+  try {
+    const where: any = { userId };
+    if (username) {
+      where.username = username;
+    }
+
+    const analyses = await prisma.instagramCreatorAnalysis.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      take: 100 // Limit dla wydajności
+    });
+
+    return analyses;
+  } catch (error) {
+    console.error('❌ Error fetching user creator analyses:', error);
+    return [];
+  }
+}
+
+// ===== FUNKCJE DEDUPLIKACJI =====
+
+// Funkcja sprawdzająca czy profil Instagram już istnieje
 async function checkExistingInstagramProfile(apifyData: ApifyInstagramData): Promise<ExistingProfileResult> {
   try {
     console.log('🔍 Checking for existing Instagram profile...');
@@ -102,7 +402,7 @@ async function checkExistingInstagramProfile(apifyData: ApifyInstagramData): Pro
   }
 }
 
-// ZMIENIONA: Funkcja sprawdzająca czy profil LinkedIn już istnieje
+// Funkcja sprawdzająca czy profil LinkedIn już istnieje
 async function checkExistingLinkedInProfile(apifyData: ApifyLinkedInData): Promise<ExistingProfileResult> {
   try {
     console.log('🔍 Checking for existing LinkedIn profile...');
@@ -165,7 +465,7 @@ export function validateInstagramData(data: ApifyInstagramData): boolean {
   return true;
 }
 
-// ZMIENIONA: Główna funkcja do zapisu profilu Instagram - Z AKTUALIZACJĄ
+// Główna funkcja do zapisu profilu Instagram - Z AKTUALIZACJĄ
 export async function saveInstagramProfile(
   apifyData: ApifyInstagramData,
   request: NextRequest
@@ -207,7 +507,7 @@ export async function saveInstagramProfile(
       businessCategory: apifyData.businessCategoryName || null,
       userIp,
       userAgent,
-      checkedAt: new Date() // Używamy pola checkedAt zamiast updatedAt
+      checkedAt: new Date()
     };
 
     // SPRAWDŹ CZY PROFIL ISTNIEJE
@@ -347,7 +647,7 @@ export function normalizeLinkedInData(data: ApifyLinkedInData) {
   };
 }
 
-// ZMIENIONA: Główna funkcja do zapisu profilu LinkedIn - Z AKTUALIZACJĄ
+// Główna funkcja do zapisu profilu LinkedIn - Z AKTUALIZACJĄ
 export async function saveLinkedInProfile(
   apifyData: ApifyLinkedInData,
   request: NextRequest
@@ -390,7 +690,7 @@ export async function saveLinkedInProfile(
       topSkills: normalizedData.topSkills,
       userIp,
       userAgent,
-      checkedAt: new Date() // Używamy pola checkedAt zamiast updatedAt
+      checkedAt: new Date()
     };
 
     // SPRAWDŹ CZY PROFIL ISTNIEJE
