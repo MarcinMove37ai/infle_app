@@ -5,17 +5,166 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="46749596-836e-4f8d-af4b-57221a03aed3" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/src/app/api/social/linkedin/creator-analysis/ai/check/route.ts" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/app/api/social/linkedin/creator-analysis/ai/route.ts" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/app/api/social/linkedin/creator-analysis/route.ts" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/components/profile/CreatorAnalysisLI.tsx" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/Konrad/gif/2025-07-12 19-13-57.mp4" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/Konrad/gif/final_video_man_hybrid_v5.mp4" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/Konrad/gif/video_to_gif.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/Konrad/gif/video_to_gif_hd.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/Konrad/script.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/extract/comments.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/extract/copetence_extraction.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/extract/posts.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/1_movie_database_setup.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/2_enrich_with_api_data.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/amazon.csv" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/apple.csv" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/hbo.csv" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/hulu.csv" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/kdb_ai_load/check_voyageai_version.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/kdb_ai_load/kdbai.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/kdb_ai_load/movie_search.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/kdb_ai_load/movie_search2.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/kdb_ai_load/movie_search3.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/kdb_ai_load/movie_search4.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/kdb_ai_load/random_movies_export.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/kdb_ai_load/step1_test_postgres.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/kdb_ai_load/step2_test_kdbai.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/kdb_ai_load/step3_test_voyage.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/kdb_ai_load/step4_create_table.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/kdb_ai_load/step5_batch_loading.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/kdb_ai_load/view_first_record.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/netflix.csv" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/compare.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/delete_index.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/diagnoza_sparse.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/analize.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/crawl.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/hybrid.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/hybrid_pro.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk100_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk101_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk102_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk103_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk104_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk105_693records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk10_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk11_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk12_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk13_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk14_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk15_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk16_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk17_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk18_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk19_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk1_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk20_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk21_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk22_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk23_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk24_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk25_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk26_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk27_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk28_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk29_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk2_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk30_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk31_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk32_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk33_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk34_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk35_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk36_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk37_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk38_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk39_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk3_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk40_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk41_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk42_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk43_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk44_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk45_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk46_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk47_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk48_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk49_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk4_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk50_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk51_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk52_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk53_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk54_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk55_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk56_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk57_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk58_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk59_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk5_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk60_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk61_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk62_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk63_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk64_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk65_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk66_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk67_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk68_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk69_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk6_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk70_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk71_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk72_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk73_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk74_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk75_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk76_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk77_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk78_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk79_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk7_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk80_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk81_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk82_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk83_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk84_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk85_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk86_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk87_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk88_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk89_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk8_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk90_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk91_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk92_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk93_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk94_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk95_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk96_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk97_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk98_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk99_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/movies_database_movies_db_chunk9_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/script.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/final/search.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/new_embed/pinecone_data.parquet" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/new_embed/pinecone_test_100.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/new_embed/sparse_index_data.parquet" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/new_embed/verify_parquet.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/pinecone_full_upsert.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/process_all_files_to_gemini_parquet.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/process_all_files_to_parquet.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/process_all_files_to_sonnet_parquet.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/process_all_files_to_sparse_parquet.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/convert/stp.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/json_to_parquet_converter.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/movies_database_movies_db_chunk1_1000records_1750763525.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/ready/prepare_test_data.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/ready/upload_to_pinecone.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/pinecone/ready/verify_parquet.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/simple_omdb_fetcher.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ignore_py_files/hakaton/ultra_fast_omdb.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/prisma/schema.prisma" beforeDir="false" afterPath="$PROJECT_DIR$/prisma/schema.prisma" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/components/pages/LinkedInApp.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/components/pages/LinkedInApp.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/components/profile/LinkedInProfileBar.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/components/profile/LinkedInProfileBar.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/hooks/useAuth.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/hooks/useAuth.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/lib/auth.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/lib/auth.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/lib/profileStorage.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/lib/profileStorage.ts" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -36,19 +185,53 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent"><![CDATA[{
-  "keyToString": {
-    "Python.create_project_schema.executor": "Run",
-    "RunOnceActivity.ShowReadmeOnStart": "true",
-    "git-widget-placeholder": "master",
-    "last_opened_file_path": "D:/inflee.app/infle_app/src/components/profile"
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;Python tests.Python tests in 2_enrich_with_api_data.py.executor&quot;: &quot;Run&quot;,
+    &quot;Python tests.Python tests in advanece.py.executor&quot;: &quot;Run&quot;,
+    &quot;Python tests.Python tests in movie_finder.py.executor&quot;: &quot;Run&quot;,
+    &quot;Python tests.Python tests in step4_create_table.py.executor&quot;: &quot;Run&quot;,
+    &quot;Python.1_movie_database_setup.executor&quot;: &quot;Run&quot;,
+    &quot;Python.2_enrich_with_api_data.executor&quot;: &quot;Run&quot;,
+    &quot;Python.analize.executor&quot;: &quot;Run&quot;,
+    &quot;Python.check_voyageai_version.executor&quot;: &quot;Run&quot;,
+    &quot;Python.copetence_extraction.executor&quot;: &quot;Run&quot;,
+    &quot;Python.create_project_schema.executor&quot;: &quot;Run&quot;,
+    &quot;Python.create_sanity_check.executor&quot;: &quot;Run&quot;,
+    &quot;Python.hybrid_pro.executor&quot;: &quot;Run&quot;,
+    &quot;Python.movie_finder.executor&quot;: &quot;Run&quot;,
+    &quot;Python.movie_search.executor&quot;: &quot;Run&quot;,
+    &quot;Python.movie_search4.executor&quot;: &quot;Run&quot;,
+    &quot;Python.pinecone_full_upsert.executor&quot;: &quot;Run&quot;,
+    &quot;Python.pinecone_model_upsert_test.executor&quot;: &quot;Run&quot;,
+    &quot;Python.pinecone_test_100.executor&quot;: &quot;Run&quot;,
+    &quot;Python.process_all_files_to_parquet.executor&quot;: &quot;Run&quot;,
+    &quot;Python.random_movies_export.executor&quot;: &quot;Run&quot;,
+    &quot;Python.script.executor&quot;: &quot;Run&quot;,
+    &quot;Python.step2_test_kdbai.executor&quot;: &quot;Run&quot;,
+    &quot;Python.step3_test_voyage.executor&quot;: &quot;Run&quot;,
+    &quot;Python.step4_create_table.executor&quot;: &quot;Run&quot;,
+    &quot;Python.step5_batch_loading.executor&quot;: &quot;Run&quot;,
+    &quot;Python.verify_parquet.executor&quot;: &quot;Run&quot;,
+    &quot;Python.view_first_record.executor&quot;: &quot;Run&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;master&quot;,
+    &quot;last_opened_file_path&quot;: &quot;D:/inflee.app/infle_app/ignore_py_files/Konrad/gif&quot;
   }
-}]]></component>
+}</component>
   <component name="RecentsManager">
     <key name="CopyFile.RECENT_KEYS">
+      <recent name="D:\inflee.app\infle_app\ignore_py_files\Konrad\gif" />
+      <recent name="D:\inflee.app\infle_app\ignore_py_files\hakaton\pinecone\convert\final" />
+      <recent name="D:\inflee.app\infle_app\ignore_py_files\hakaton\pinecone\convert\new_embed" />
       <recent name="D:\inflee.app\infle_app\src\components\profile" />
       <recent name="D:\inflee.app\infle_app\src\components\pages" />
-      <recent name="D:\inflee.app\infle_app\src\app\(dashboard)\linkedin_app" />
+    </key>
+    <key name="MoveFile.RECENT_KEYS">
+      <recent name="D:\inflee.app\infle_app\ignore_py_files\Konrad\gif" />
+      <recent name="D:\inflee.app\infle_app\ignore_py_files\hakaton\pinecone\convert\new_embed" />
+      <recent name="D:\inflee.app\infle_app\ignore_py_files\hakaton" />
+      <recent name="D:\inflee.app\infle_app\ignore_py_files\extract" />
     </key>
   </component>
   <component name="SharedIndexes">

@@ -1,13 +1,7 @@
 // src/lib/prisma.ts
 import { PrismaClient } from '@prisma/client';
 
-// Global variable dla Prisma Client (dla development hot reloading)
-const globalForPrisma = globalThis as unknown as {
-  prisma: PrismaClient | undefined;
-};
-
-// Funkcja do tworzenia Prisma Client z sprawdzeniem env vars
-function createPrismaClient() {
+const prismaClientSingleton = () => {
   const databaseUrl = process.env.DATABASE_URL;
 
   if (!databaseUrl) {
@@ -27,11 +21,14 @@ function createPrismaClient() {
     },
     log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error']
   });
+};
+
+declare global {
+  var prisma: undefined | ReturnType<typeof prismaClientSingleton>;
 }
 
-// Lazy initialization - Prisma Client jest tworzony dopiero gdy jest potrzebny
-export const prisma =
-  globalForPrisma.prisma ?? createPrismaClient();
+export const prisma = globalThis.prisma ?? prismaClientSingleton();
 
-// W development mode zachowaj instancję globalnie dla hot reloading
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
+if (process.env.NODE_ENV !== 'production') {
+  globalThis.prisma = prisma;
+}

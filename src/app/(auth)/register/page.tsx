@@ -266,17 +266,14 @@ export default function RegisterPage() {
       return;
     }
 
-    if (!formData.phone.trim()) {
-      setError('Numer telefonu jest wymagany');
-      setLoading(false);
-      return;
-    }
+    // USUNIĘTO - walidacja pola phone nie jest już wymagana
 
-    if (!formData.socialLink.trim()) {
-      setError('Link do profilu Instagram/LinkedIn jest wymagany');
-      setLoading(false);
-      return;
-    }
+    // USUNIĘTO - walidacja pola socialLink nie jest już wymagana
+    // if (!formData.socialLink.trim()) {
+    //   setError('Link do profilu Instagram/LinkedIn jest wymagany');
+    //   setLoading(false);
+    //   return;
+    // }
 
     if (formData.password !== formData.confirmPassword) {
       setError('Hasła nie są identyczne');
@@ -300,8 +297,8 @@ export default function RegisterPage() {
           firstName: formData.firstName,
           lastName: formData.lastName,
           email: formData.email,
-          phone: formData.phone,
-          socialLink: formData.socialLink,
+          phone: formData.phone || null, // Może być puste
+          socialLink: formData.socialLink || null, // Może być puste
           profilePicture: socialProfile?.profilepic_url || null,
           password: formData.password,
           checkedProfileId: checkedProfileId, // NOWE POLE - przekaż ID profilu
@@ -487,68 +484,32 @@ export default function RegisterPage() {
               </label>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="relative">
-                <input
-                  id="phone"
-                  name="phone"
-                  type="tel"
-                  required
-                  value={formData.phone}
-                  onChange={handleChange}
-                  className="w-full px-4 pt-6 pb-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-200 text-gray-900 hover:border-gray-300 peer"
-                  placeholder=" "
-                />
-                <label htmlFor="phone" className="absolute left-4 top-4 text-gray-500 text-sm transition-all duration-200 peer-placeholder-shown:top-4 peer-placeholder-shown:text-base peer-placeholder-shown:text-gray-500 peer-focus:top-2 peer-focus:text-xs peer-focus:text-blue-600 peer-[:not(:placeholder-shown)]:top-2 peer-[:not(:placeholder-shown)]:text-xs peer-[:not(:placeholder-shown)]:text-gray-600">
-                  Telefon *
-                </label>
-              </div>
-              <div className="relative">
-                <input
-                  id="socialLink"
-                  name="socialLink"
-                  type="url"
-                  required
-                  value={formData.socialLink}
-                  onChange={handleChange}
-                  className={`w-full px-4 pt-6 pb-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-200 ${
-                    checkingProfile ? 'text-gray-400' : 'text-gray-900'
-                  } hover:border-gray-300 relative z-0 bg-white peer`}
-                  placeholder=" "
-                />
-                <label htmlFor="socialLink" className="absolute left-4 top-4 text-gray-500 text-sm transition-all duration-200 peer-placeholder-shown:top-4 peer-placeholder-shown:text-base peer-placeholder-shown:text-gray-500 peer-focus:top-2 peer-focus:text-xs peer-focus:text-blue-600 peer-[:not(:placeholder-shown)]:top-2 peer-[:not(:placeholder-shown)]:text-xs peer-[:not(:placeholder-shown)]:text-gray-600 z-20">
-                  Instagram/LinkedIn *
-                </label>
-                {checkingProfile && (
-                  <>
-                    <div
-                      className={`absolute inset-0 ${
-                        platformType === 'instagram'
-                          ? 'border-green-300'
-                          : 'border-blue-300'
-                      } border rounded-xl transition-all duration-300 ease-out z-30 pointer-events-none`}
-                      style={{
-                        clipPath: `inset(0 ${100 - loadingProgress}% 0 0)`,
-                        background: platformType === 'instagram'
-                          ? 'rgba(34, 197, 94, 0.15)'
-                          : 'rgba(59, 130, 246, 0.15)'
-                      }}
-                    ></div>
-                    <div className="absolute inset-0 flex items-center justify-center z-40 pointer-events-none top-1">
-                      <div className={`px-2 py-0.5 rounded-md text-xs font-medium backdrop-blur-sm border ${
-                        platformType === 'instagram'
-                          ? 'bg-green-50/90 text-green-700 border-green-200/50'
-                          : 'bg-blue-50/90 text-blue-700 border-blue-200/50'
-                      } shadow-sm`}>
-                        {loadingProgress}%
-                      </div>
-                    </div>
-                  </>
-                )}
-              </div>
+            <div className="relative">
+              <input
+                id="phone"
+                name="phone"
+                type="tel"
+                value={formData.phone}
+                onChange={handleChange}
+                className="w-full px-4 pt-6 pb-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-200 text-gray-900 hover:border-gray-300 peer"
+                placeholder=" "
+              />
+              <label htmlFor="phone" className="absolute left-4 top-4 text-gray-500 text-sm transition-all duration-200 peer-placeholder-shown:top-4 peer-placeholder-shown:text-base peer-placeholder-shown:text-gray-500 peer-focus:top-2 peer-focus:text-xs peer-focus:text-blue-600 peer-[:not(:placeholder-shown)]:top-2 peer-[:not(:placeholder-shown)]:text-xs peer-[:not(:placeholder-shown)]:text-gray-600">
+                Telefon
+              </label>
             </div>
 
-            {/* Social Profile Block */}
+            {/* UKRYTE POLE - pole socialLink jest teraz ukryte */}
+            <input
+              id="socialLink"
+              name="socialLink"
+              type="url"
+              value={formData.socialLink}
+              onChange={handleChange}
+              style={{ display: 'none' }}
+            />
+
+            {/* Social Profile Block - pozostaje ale będzie ukryty gdy nie ma danych */}
             {socialProfile && (
               <div
                 className={`

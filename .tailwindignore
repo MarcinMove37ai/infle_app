@@ -1,0 +1,4 @@
+ignore_py_files/
+ignore_py_files/**/*
+node_modules/
+.next/

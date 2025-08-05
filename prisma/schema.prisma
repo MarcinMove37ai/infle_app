@@ -1,6 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -10,216 +7,219 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// Enum dla typów profili społecznościowych
-enum SocialProfileType {
-  INSTAGRAM_ONLY
-  LINKEDIN_ONLY
-  BOTH
-  NONE
-}
-
 model User {
-  id                  String              @id @default(cuid())
-  email               String              @unique
+  id                  String                       @id @default(cuid())
+  email               String                       @unique
   firstName           String
   lastName            String
   phone               String?
   socialLink          String?
-  profilePicture      String?
   password            String
   emailVerified       DateTime?
+  createdAt           DateTime                     @default(now())
+  updatedAt           DateTime                     @updatedAt
   verificationToken   String?
   resetToken          String?
   resetTokenExpiry    DateTime?
-
-  // Nowe pola dla profili społecznościowych
-  instagramUsername   String?             // 🆕 Username Instagram dla łatwego dostępu
+  profilePicture      String?
   instagramProfileId  String?
   linkedinProfileId   String?
-  socialProfileType   SocialProfileType   @default(NONE)
-
-  // Relacje do profili społecznościowych (opcjonalne)
-  instagramProfile    InstagramProfileCheck? @relation(fields: [instagramProfileId], references: [id])
-  linkedinProfile     LinkedInProfileCheck?  @relation(fields: [linkedinProfileId], references: [id])
-
-  // Relacja do analiz Instagram
-  instagramAnalyses   InstagramCreatorAnalysis[]
-
-  // 🆕 NOWA RELACJA - Analizy LinkedIn
-  linkedinAnalyses    LinkedInCreatorAnalysis[]
-
-  // 🆕 NOWA RELACJA - Analizy AI
+  socialProfileType   SocialProfileType            @default(NONE)
+  instagramUsername   String?
   instagramAIAnalyses InstagramCreatorAIAnalysis[]
-
-  // 🆕 NOWA RELACJA - Analizy AI LinkedIn
+  instagramAnalyses   InstagramCreatorAnalysis[]
   linkedinAIAnalyses  LinkedInCreatorAIAnalysis[]
-
-  createdAt           DateTime            @default(now())
-  updatedAt           DateTime            @updatedAt
+  linkedinAnalyses    LinkedInCreatorAnalysis[]
+  instagramProfile    InstagramProfileCheck?       @relation(fields: [instagramProfileId], references: [id])
+  linkedinProfile     LinkedInProfileCheck?        @relation(fields: [linkedinProfileId], references: [id])
 
   @@map("users")
 }
 
 model InstagramProfileCheck {
-  id                String    @id @default(cuid())
-  instagramUrl      String
-  instagramId       String?
-  username          String
-  fullName          String?
-  biography         String?
-  followersCount    Int?
-  followsCount      Int?
-  postsCount        Int?
-  highlightReelCount Int?     // NOWE POLE - liczba highlight reels
-  profilePicUrl     String?
-  profilePicUrlHD   String?
-  isBusinessAccount Boolean   @default(false) // TYMCZASOWO - usuniemy po migracji
-  isPrivate         Boolean   @default(false)
-  isVerified        Boolean   @default(false)
-  businessCategory  String?
-  checkedAt         DateTime  @default(now())
-  userIp            String?
-  userAgent         String?
-
-  // Relacja zwrotna do User (jeden profil może być powiązany z wieloma userami)
-  users             User[]
+  id                 String   @id @default(cuid())
+  instagramUrl       String
+  instagramId        String?
+  username           String
+  fullName           String?
+  biography          String?
+  followersCount     Int?
+  followsCount       Int?
+  postsCount         Int?
+  profilePicUrl      String?
+  profilePicUrlHD    String?
+  isBusinessAccount  Boolean  @default(false)
+  isPrivate          Boolean  @default(false)
+  isVerified         Boolean  @default(false)
+  businessCategory   String?
+  checkedAt          DateTime @default(now())
+  userIp             String?
+  userAgent          String?
+  highlightReelCount Int?
+  users              User[]
 
   @@map("instagram_profile_checks")
 }
 
 model LinkedInProfileCheck {
-  id                String    @id @default(cuid())
-  linkedinUrl       String
-  firstName         String?
-  lastName          String?
-  fullName          String?
-  headline          String?
-  aboutExcerpt      String?   // Biografia skrócona do 500 znaków
-  connectionsCount  Int?
-  followersCount    Int?
-  profilePicUrl     String?
-  jobTitle          String?
-  companyName       String?
-  companyIndustry   String?
-  location          String?
-  topSkills         String?   // Top 5 umiejętności jako string
-  checkedAt         DateTime  @default(now())
-  userIp            String?
-  userAgent         String?
-
-  // Relacja zwrotna do User (jeden profil może być powiązany z wieloma userami)
-  users             User[]
+  id               String   @id @default(cuid())
+  linkedinUrl      String
+  firstName        String?
+  lastName         String?
+  fullName         String?
+  headline         String?
+  aboutExcerpt     String?
+  connectionsCount Int?
+  followersCount   Int?
+  profilePicUrl    String?
+  jobTitle         String?
+  companyName      String?
+  companyIndustry  String?
+  location         String?
+  topSkills        String?
+  checkedAt        DateTime @default(now())
+  userIp           String?
+  userAgent        String?
+  users            User[]
 
   @@map("linkedin_profile_checks")
 }
 
-// MODEL - Analiza postów Instagram (istniejący)
 model InstagramCreatorAnalysis {
-  id                String    @id @default(cuid())
-  userId            String
-  username          String
-  postId            String
-  caption           String    @db.Text  // Długi tekst
-  likesCount        Int       @default(0)
-  commentsCount     Int       @default(0)
-  videoPlayCount    Int?      // Nullable dla zdjęć
-  videoDuration     Int?      // Nullable dla zdjęć
-  commenterUsernames Json     // JSONB dla Record<string, number>
+  id                 String   @id @default(cuid())
+  userId             String
+  username           String
+  postId             String
+  caption            String
+  likesCount         Int      @default(0)
+  commentsCount      Int      @default(0)
+  videoPlayCount     Int?
+  videoDuration      Int?
+  commenterUsernames Json
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  // Metadane
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
-
-  // Relacja do użytkownika
-  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  // Indeksy dla wydajności
+  @@unique([userId, postId])
   @@index([userId])
   @@index([username])
   @@index([postId])
-  @@unique([userId, postId]) // Jeden post na user
-
   @@map("instagram_creator_analysis")
 }
 
-// 🆕 NOWY MODEL - Analiza postów LinkedIn
 model LinkedInCreatorAnalysis {
-  id                String    @id @default(cuid())
-  userId            String
-  username          String
-  postUrn           String    // URN posta LinkedIn
-  postDate          String    // Data posta jako string
-  postText          String    @db.Text  // Oczyszczony tekst posta
-  totalReactions    Int       @default(0)
-  commentsCount     Int       @default(0)
-  commenterHeadlines String   @db.Text  // JSON string {"username": "headline"}
+  id                 String   @id @default(cuid())
+  userId             String
+  username           String
+  postUrn            String
+  postDate           String
+  postText           String
+  totalReactions     Int      @default(0)
+  commentsCount      Int      @default(0)
+  commenterHeadlines String
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  // Metadane
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
-
-  // Relacja do użytkownika
-  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  // Indeksy dla wydajności
+  @@unique([userId, postUrn])
   @@index([userId])
   @@index([username])
   @@index([postUrn])
-  @@unique([userId, postUrn]) // Jeden post URN na user
-
   @@map("linkedin_creator_analysis")
 }
 
-// 🆕 NOWY MODEL - Wyniki AI Analysis Instagram
 model InstagramCreatorAIAnalysis {
-  id                   String   @id @default(cuid())
-  userId               String
-  username             String
-  profileDescription   String   @db.Text
-  competencies         Json     // Array of AICompetency objects
-  uniqueTalent         Json     // AIUniqueTalent object
-  metadata             Json     // AI metadata (model, version, etc.)
-  postsAnalyzed        Int
-  aiModel              String   @default("claude-3-5-sonnet-20241022")
-  version              String   @default("2.0")
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
+  id                 String   @id @default(cuid())
+  userId             String
+  username           String
+  profileDescription String
+  competencies       Json
+  uniqueTalent       Json
+  metadata           Json
+  postsAnalyzed      Int
+  aiModel            String   @default("claude-3-5-sonnet-20241022")
+  version            String   @default("2.0")
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  // Relacja do użytkownika
-  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  // Indexes for better performance
+  @@unique([userId, username])
   @@index([userId])
   @@index([username])
   @@index([userId, username])
-  @@unique([userId, username]) // One analysis per user-username combination
-
   @@map("instagram_creator_ai_analysis")
 }
 
-// 🆕 NOWY MODEL - Wyniki AI Analysis LinkedIn
 model LinkedInCreatorAIAnalysis {
   id                   String   @id @default(cuid())
   userId               String
   username             String
-  profileDescription   String   @db.Text
-  businessCompetencies Json     // Array of business competency objects
-  expertiseNiche       Json     // LinkedIn-specific expertise niche object
-  metadata             Json     // AI metadata (model, version, etc.)
+  profileDescription   String
+  businessCompetencies Json
+  expertiseNiche       Json
+  metadata             Json
   postsAnalyzed        Int
   aiModel              String   @default("claude-3-5-sonnet-20241022")
   version              String   @default("2.0-linkedin")
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
-
-  // Relacja do użytkownika
   user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  // Indexes for better performance
+  @@unique([userId, username])
   @@index([userId])
   @@index([username])
   @@index([userId, username])
-  @@unique([userId, username]) // One analysis per user-username combination
-
   @@map("linkedin_creator_ai_analysis")
+}
+
+model ebook_chapters {
+  id           Int       @id @default(autoincrement())
+  ebook_id     Int
+  title        String    @db.VarChar(255)
+  content      String?
+  position     Int
+  image_url    String?   @db.VarChar(1024)
+  image_prompt String?
+  created_at   DateTime? @default(now()) @db.Timestamp(6)
+  updated_at   DateTime? @default(now()) @db.Timestamp(6)
+  ebooks       ebooks    @relation(fields: [ebook_id], references: [id], onDelete: Cascade)
+
+  @@index([ebook_id], map: "idx_ebook_chapters_ebook_id")
+  @@index([ebook_id, position], map: "idx_ebook_chapters_position")
+}
+
+model ebooks {
+  id                              Int              @id @default(autoincrement())
+  title                           String           @db.VarChar(255)
+  draft_url                       String?          @unique @db.VarChar(255)
+  status                          String?          @default("draft") @db.VarChar(50)
+  visitors                        Int?             @default(0)
+  created_at                      DateTime?        @default(now()) @db.Timestamp(6)
+  updated_at                      DateTime?        @default(now()) @db.Timestamp(6)
+  x_amz_meta_user_id              Int?
+  x_amz_meta_user_cognito_sub     String?          @db.VarChar(255)
+  x_amz_meta_user_first_name      String?          @db.VarChar(100)
+  x_amz_meta_user_last_name       String?          @db.VarChar(100)
+  x_amz_meta_user_email           String?          @db.VarChar(255)
+  x_amz_meta_user_role            String?          @db.VarChar(50)
+  x_amz_meta_user_status          String?          @db.VarChar(50)
+  x_amz_meta_user_supervisor_code String?          @db.VarChar(100)
+  x_amz_meta_user_created_at      DateTime?        @db.Timestamp(6)
+  x_amz_meta_user_updated_at      DateTime?        @db.Timestamp(6)
+  category                        String?          @db.VarChar(100)
+  short_desc                      String?
+  subtitle                        String?
+  description                     String?
+  cover_image_url                 String?
+  cover_image_prompt              String?
+  ebook_chapters                  ebook_chapters[]
+
+  @@index([x_amz_meta_user_id], map: "idx_ebooks_user_id")
+}
+
+enum SocialProfileType {
+  INSTAGRAM_ONLY
+  LINKEDIN_ONLY
+  BOTH
+  NONE
 }
