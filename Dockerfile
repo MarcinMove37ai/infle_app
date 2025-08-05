@@ -1,7 +1,7 @@
 # Etap 1: Budowanie aplikacji (builder)
 FROM node:18-alpine AS builder
 
-# Przywrócone ARG, aby wstrzyknąć zmienne podczas budowania
+# Argumenty build-time do przekazania zmiennych środowiskowych z Railway
 ARG DATABASE_URL
 ARG RESEND_API_KEY
 ARG NEXTAUTH_SECRET
@@ -24,6 +24,12 @@ RUN npm run build
 
 # Etap 2: Uruchomienie produkcyjne (runner)
 FROM node:18-alpine
+
+# --- NOWA LINIA ---
+# Instalacja `su-exec` - narzędzia do zmiany użytkownika, którego brakowało
+RUN apk add --no-cache su-exec
+# --- KONIEC ZMIANY ---
+
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
