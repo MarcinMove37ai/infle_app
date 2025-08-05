@@ -58,6 +58,8 @@ RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 RUN chown -R nextjs:nodejs /app
 
+RUN mkdir -p /data/uploads && chown -R nextjs:nodejs /data
+
 # Ustawienie użytkownika na 'nextjs' dla zwiększenia bezpieczeństwa
 USER nextjs
 
