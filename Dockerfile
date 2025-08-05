@@ -1,78 +1,42 @@
 # Etap 1: Budowanie aplikacji (builder)
-FROM node:18 AS builder
-
-# Argumenty build-time do przekazania zmiennych środowiskowych z Railway
-ARG DATABASE_URL
-ARG RESEND_API_KEY
-ARG NEXTAUTH_SECRET
-ARG NEXTAUTH_URL
-
+FROM node:18-alpine AS builder
 WORKDIR /app
-
-# Kopiowanie plików manifestu zależności
 COPY package.json package-lock.json ./
-
-# Instalacja WSZYSTKICH zależności (w tym devDependencies), ale pomijamy postinstall
-RUN npm ci --ignore-scripts
-
-# Kopiowanie schematu Prisma PRZED kopiowaniem reszty kodu
+RUN npm ci
 COPY prisma ./prisma/
-
-# Wygenerowanie Prisma Client
 RUN npx prisma generate
-
-# Kopiowanie reszty kodu źródłowego aplikacji
 COPY . .
-
-# Wyłączenie telemetrii Next.js
 ENV NEXT_TELEMETRY_DISABLED=1
-
-# Uruchomienie procesu budowania aplikacji
 RUN npm run build
 
-# Etap 2: Production image
-FROM node:18
-
+# Etap 2: Uruchomienie produkcyjne
+FROM node:18-alpine
 WORKDIR /app
-
-# Ustawienie środowiska na produkcyjne
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
-# Kopiowanie plików package.json
+# Instalacja tylko zależności produkcyjnych
 COPY --from=builder /app/package*.json ./
-
-# Instalacja tylko production dependencies
 RUN npm ci --omit=dev
 
-# Kopiowanie built aplikacji (bez standalone)
+# Kopiowanie zbudowanej aplikacji i potrzebnych plików
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/prisma ./prisma
 
-# Regeneracja Prisma Client dla production environment
-RUN npx prisma generate
-
-# Utworzenie dedykowanego użytkownika i grupy dla bezpieczeństwa
+# Utworzenie dedykowanego użytkownika i grupy
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
-RUN chown -R nextjs:nodejs /app
 
-RUN mkdir -p /data/uploads && chown -R nextjs:nodejs /data
+# Kopiujemy i ustawiamy nasz skrypt startowy
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
-# Ustawienie użytkownika na 'nextjs' dla zwiększenia bezpieczeństwa
-USER nextjs
+# WAŻNE: Kontener uruchomi ten skrypt jako domyślny użytkownik `root`
+ENTRYPOINT ["/entrypoint.sh"]
 
 EXPOSE 3000
-
 ENV PORT=3000
-ENV HOSTNAME="0.0.0.0"
 
-# Standardowe uruchomienie Next.js z debug logging
-# Używamy npx zamiast npm start aby ominąć problemy z npm cache
-CMD echo "🔍 Checking environment variables..." && \
-    echo "DATABASE_URL exists: $([ -n "$DATABASE_URL" ] && echo 'YES' || echo 'NO')" && \
-    echo "NEXTAUTH_SECRET exists: $([ -n "$NEXTAUTH_SECRET" ] && echo 'YES' || echo 'NO')" && \
-    echo "RESEND_API_KEY exists: $([ -n "$RESEND_API_KEY" ] && echo 'YES' || echo 'NO')" && \
-    echo "🚀 Starting Next.js..." && \
-    npx next start
+# Ta komenda zostanie przekazana jako argument do skryptu entrypoint.sh
+CMD ["npm", "run", "start"]
