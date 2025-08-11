@@ -314,7 +314,7 @@ KRYTYCZNE INSTRUKCJE:
 NAPISZ TERAZ ULTRA-DŁUGI PROMPT OKŁADKI Z ZAKAZAMI SUPLEMENTÓW, PRZEZROCZYSTYM TŁEM, SEAMLESS COMPOSITION I WŁAŚCIWYMI MARGINESAMI (cel: 3500+ znaków):`;
 
     const requestBody: AnthropicRequest = {
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-3-haiku-20240307',
       max_tokens: 1800,  // 🔥 Maksymalnie dla ultra-długich promptów okładek
       temperature: 0.2,  // 🔥 Bardzo niska dla maksymalnej precyzji marketingowej
       messages: [{ role: 'user', content: prompt }]

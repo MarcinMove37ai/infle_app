@@ -332,7 +332,7 @@ NAPISZ TERAZ ULTRA-DŁUGI ${maximumQuality ? 'MAKSYMALNEJ JAKOŚCI' : ''} ${enab
     const temperature = forceRegenerate ? 0.4 : 0.3; // Wysoka dla regeneracji, niska dla standardu
 
     const requestBody: AnthropicRequest = {
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-3-haiku-20240307',
       max_tokens: 1800,  // 🔥 ZWIĘKSZONE dla maksymalnych promptów (było 1500)
       temperature: temperature, // ✅ ZMIENNA TEMPERATURA
       messages: [{ role: 'user', content: prompt }]

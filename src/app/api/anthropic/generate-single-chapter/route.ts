@@ -201,7 +201,7 @@ export async function POST(request: Request) {
 
     // Przygotuj żądanie do Anthropic API
     const requestBody: AnthropicRequest = {
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-3-haiku-20240307',
       max_tokens: 3000, // Zwiększone dla dłuższej treści
       temperature: 0.7,
       messages: [

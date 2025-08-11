@@ -1,8 +1,11 @@
 // src/app/api/ebooks/[ebookId]/cover-image/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { Client } from 'pg';
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { getServerSession } from 'next-auth/next';
+import { authOptions } from '@/lib/auth';
+import { prisma } from '@/lib/prisma';
 import sharp from 'sharp';
+import fs from 'fs/promises';
+import path from 'path';
 
 /**
  * Obsługa przesyłania okładki dla ebooka (POST)
@@ -11,15 +14,18 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ ebookId: string }> }
 ) {
-  let client;
-  let s3Client;
-
   try {
+    // Autoryzacja przez session
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Brak autoryzacji' }, { status: 401 });
+    }
+
     // Rozwiązanie parametrów z URL
     const resolvedParams = await params;
     const ebookId = parseInt(resolvedParams.ebookId);
 
-    console.log(`Przetwarzanie żądania przesłania okładki dla ebookId=${ebookId}`);
+    console.log(`🖼️ Przesyłanie okładki dla ebookId=${ebookId}`);
 
     if (isNaN(ebookId)) {
       return NextResponse.json({ error: 'Nieprawidłowy parametr ebookId' }, { status: 400 });
@@ -27,7 +33,7 @@ export async function POST(
 
     // Sprawdzenie typu zawartości
     const contentType = request.headers.get('content-type') || '';
-    console.log('Content-Type:', contentType);
+    console.log('Content-Type okładki:', contentType);
 
     let imageFile;
 
@@ -78,6 +84,26 @@ export async function POST(
       }, { status: 400 });
     }
 
+    // Weryfikacja uprawnień - sprawdź czy ebook należy do użytkownika
+    const ebook = await prisma.ebooks.findFirst({
+      where: {
+        id: ebookId,
+        userId: session.user.id
+      },
+      select: {
+        id: true,
+        title: true,
+        subtitle: true,
+        cover_image_url: true
+      }
+    });
+
+    if (!ebook) {
+      return NextResponse.json({
+        error: 'Ebook nie został znaleziony lub nie masz uprawnień'
+      }, { status: 404 });
+    }
+
     // Konwersja pliku do ArrayBuffer
     const buffer = await imageFile.arrayBuffer();
 
@@ -92,7 +118,8 @@ export async function POST(
       processedImageBuffer = await sharp(Buffer.from(buffer))
         .png({
           quality: 95,           // Wyższa jakość dla okładek
-          compressionLevel: 6    // Mniejsza kompresja dla lepszej jakości
+          compressionLevel: 6,   // Mniejsza kompresja dla lepszej jakości
+          effort: 10
         })
         .resize(1024, 1024, {    // Kwadratowy format dla okładek
           fit: 'cover',
@@ -105,7 +132,10 @@ export async function POST(
     } else {
       // Przetwarzanie jako JPEG
       processedImageBuffer = await sharp(Buffer.from(buffer))
-        .jpeg({ quality: 90 })   // Wyższa jakość dla okładek
+        .jpeg({
+          quality: 90,           // Wyższa jakość dla okładek
+          progressive: true
+        })
         .resize(1024, 1024, {    // Kwadratowy format dla okładek
           fit: 'cover',
           position: 'center',
@@ -116,83 +146,56 @@ export async function POST(
       fileExtension = 'jpg';
     }
 
-    // Konfiguracja klienta S3
-    s3Client = new S3Client({
-      region: process.env.AWS_REGION || 'eu-central-1',
-      credentials: {
-        accessKeyId: process.env.AWS_ACCESS_KEY_ID as string,
-        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY as string,
-      },
-    });
+    // Przygotowanie ścieżki zapisu w Railway storage
+    const storageBasePath = process.env.FILE_STORAGE_PATH || '/data';
+    const uploadsDir = path.join(storageBasePath, 'uploads');
 
-    // Folder docelowy w S3
-    const EBOOK_AI_FOLDER = 'ebookAI';
+    // Upewnij się, że folder istnieje
+    await fs.mkdir(uploadsDir, { recursive: true });
 
-    // Generowanie unikalnej nazwy pliku dla okładki
+    // Generowanie nazwy pliku dla okładki
     const fileName = `EB${ebookId}_COVER.${fileExtension}`;
-    const s3Key = `${EBOOK_AI_FOLDER}/${fileName}`;
+    const filePath = path.join(uploadsDir, fileName);
 
-    console.log(`Zapisywanie okładki jako ${s3Key} w S3`);
+    console.log(`💾 Zapisywanie okładki jako ${fileName} w Railway storage`);
 
-    // Przesłanie okładki do S3
-    const uploadCommand = new PutObjectCommand({
-      Bucket: process.env.S3_BUCKET_NAME,
-      Key: s3Key,
-      Body: processedImageBuffer,
-      ContentType: outputContentType
-    });
-
-    await s3Client.send(uploadCommand);
+    // Zapisanie pliku w Railway storage
+    await fs.writeFile(filePath, processedImageBuffer);
 
     // Generowanie publicznego URL dla okładki
-    const imageUrl = `https://${process.env.S3_BUCKET_NAME}.s3.${process.env.AWS_REGION || 'eu-central-1'}.amazonaws.com/${s3Key}`;
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+    const imageUrl = `${baseUrl}/api/assets/uploads/${fileName}`;
 
-    // Aktualizacja URL okładki w bazie danych
-    client = new Client({
-      user: process.env.POSTGRES_USER,
-      host: process.env.POSTGRES_HOST,
-      database: process.env.POSTGRES_DB,
-      password: process.env.POSTGRES_PASSWORD,
-      port: parseInt(process.env.POSTGRES_PORT || '5432'),
-      ssl: {
-        rejectUnauthorized: false
+    // Aktualizacja URL okładki w bazie danych przez Prisma
+    const updatedEbook = await prisma.ebooks.update({
+      where: {
+        id: ebookId
+      },
+      data: {
+        cover_image_url: imageUrl,
+        updated_at: new Date()
+      },
+      select: {
+        id: true,
+        title: true,
+        subtitle: true,
+        cover_image_url: true
       }
     });
 
-    await client.connect();
-    console.log('Connected to PostgreSQL database');
-
-    // Aktualizacja URL okładki w tabeli ebooks
-    const query = `
-      UPDATE ebooks
-      SET cover_image_url = $1, updated_at = CURRENT_TIMESTAMP
-      WHERE id = $2
-      RETURNING id, title, subtitle, cover_image_url
-    `;
-
-    const result = await client.query(query, [imageUrl, ebookId]);
-
-    if (result.rows.length === 0) {
-      return NextResponse.json({ error: 'Nie znaleziono ebooka' }, { status: 404 });
-    }
-
-    console.log(`Pomyślnie zaktualizowano URL okładki dla ebooka ID=${ebookId}`);
+    console.log(`✅ Pomyślnie zaktualizowano URL okładki dla ebooka ID=${ebookId}`);
 
     return NextResponse.json({
       success: true,
       image_url: imageUrl,
-      ebook: result.rows[0]
+      ebook: updatedEbook
     });
+
   } catch (error) {
-    console.error('Błąd podczas przesyłania okładki:', error);
+    console.error('❌ Błąd podczas przesyłania okładki:', error);
     return NextResponse.json({
       error: 'Wystąpił błąd podczas przesyłania okładki',
       details: error instanceof Error ? error.message : 'Nieznany błąd'
     }, { status: 500 });
-  } finally {
-    if (client) {
-      await client.end();
-      console.log('Database connection closed');
-    }
   }
 }

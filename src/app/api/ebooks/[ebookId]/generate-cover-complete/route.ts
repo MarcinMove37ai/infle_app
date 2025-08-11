@@ -1,15 +1,21 @@
 // src/app/api/ebooks/[ebookId]/generate-cover-complete/route.ts
 
 import { NextResponse } from 'next/server';
-import { Client } from 'pg';
+import { getServerSession } from 'next-auth/next';
+import { authOptions } from '@/lib/auth';
+import { prisma } from '@/lib/prisma';
 
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ ebookId: string }> }
 ) {
-  let client;
-
   try {
+    // Autoryzacja przez session
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Brak autoryzacji' }, { status: 401 });
+    }
+
     const resolvedParams = await params;
     const ebookId = resolvedParams.ebookId;
     const ebookIdNum = parseInt(ebookId);
@@ -33,30 +39,25 @@ export async function POST(
     console.log(`   - Quality: high (premium rendering)`);
     console.log(`   - Timestamp: ${new Date().toISOString()}`);
 
-    // Database connection
-    client = new Client({
-      user: process.env.POSTGRES_USER,
-      host: process.env.POSTGRES_HOST,
-      database: process.env.POSTGRES_DB,
-      password: process.env.POSTGRES_PASSWORD,
-      port: parseInt(process.env.POSTGRES_PORT || '5432'),
-      ssl: { rejectUnauthorized: false }
+    // KROK 1: Verify ebook exists and get details through Prisma
+    const ebook = await prisma.ebooks.findFirst({
+      where: {
+        id: ebookIdNum,
+        userId: session.user.id  // Sprawdź uprawnienia użytkownika
+      },
+      select: {
+        id: true,
+        title: true,
+        subtitle: true,
+        cover_image_url: true,
+        cover_image_prompt: true
+      }
     });
 
-    await client.connect();
-
-    // KROK 1: Verify ebook exists and get details
-    const ebookQuery = `
-      SELECT id, title, subtitle, cover_image_url, cover_image_prompt
-      FROM ebooks WHERE id = $1
-    `;
-    const ebookResult = await client.query(ebookQuery, [ebookIdNum]);
-
-    if (ebookResult.rows.length === 0) {
+    if (!ebook) {
       return NextResponse.json({ error: 'Ebook nie został znaleziony' }, { status: 404 });
     }
 
-    const ebook = ebookResult.rows[0];
     let stepResults = {
       ebook_id: ebookIdNum,
       ebook_title: ebook.title,
@@ -91,7 +92,11 @@ export async function POST(
 
       const coverResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/ebooks/${ebookId}/generate-cover`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          // Przekaż session cookies dla autoryzacji w wywołanym endpoint
+          'Cookie': request.headers.get('Cookie') || ''
+        },
         body: JSON.stringify({
           forceRegenerate,
           size: coverSize  // 🔥 Pass square format with margins
@@ -142,7 +147,11 @@ export async function POST(
 
         const pdfResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/ebooks/${ebookId}/export-pdf`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            // Przekaż session cookies dla autoryzacji
+            'Cookie': request.headers.get('Cookie') || ''
+          },
           body: JSON.stringify({
             includeCover: true,
             coverFormat: stepResults.cover_format,
@@ -239,12 +248,6 @@ export async function POST(
       timestamp: new Date().toISOString(),
       format_attempted: '1024x1024-transparent-seamless-margins'
     }, { status: 500 });
-
-  } finally {
-    if (client) {
-      await client.end();
-      console.log('🔐 Database connection closed');
-    }
   }
 }
 
@@ -252,10 +255,13 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ ebookId: string }> }
 ) {
-  // Enhanced endpoint for checking book cover status with margin specifications
-  let client;
-
   try {
+    // Autoryzacja przez session
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Brak autoryzacji' }, { status: 401 });
+    }
+
     const resolvedParams = await params;
     const ebookId = resolvedParams.ebookId;
     const ebookIdNum = parseInt(ebookId);
@@ -266,37 +272,33 @@ export async function GET(
 
     console.log(`📊 Checking margin-optimized cover status for ebook ${ebookIdNum}`);
 
-    client = new Client({
-      user: process.env.POSTGRES_USER,
-      host: process.env.POSTGRES_HOST,
-      database: process.env.POSTGRES_DB,
-      password: process.env.POSTGRES_PASSWORD,
-      port: parseInt(process.env.POSTGRES_PORT || '5432'),
-      ssl: { rejectUnauthorized: false }
+    // Enhanced status query with chapter count using Prisma
+    const ebook = await prisma.ebooks.findFirst({
+      where: {
+        id: ebookIdNum,
+        userId: session.user.id  // Sprawdź uprawnienia użytkownika
+      },
+      select: {
+        id: true,
+        title: true,
+        subtitle: true,
+        cover_image_url: true,
+        cover_image_prompt: true,
+        created_at: true,
+        updated_at: true,
+        ebook_chapters: {
+          select: {
+            id: true
+          }
+        }
+      }
     });
 
-    await client.connect();
-
-    // Enhanced status query with chapter count
-    const statusQuery = `
-      SELECT
-        e.id, e.title, e.subtitle,
-        e.cover_image_url, e.cover_image_prompt,
-        e.created_at, e.updated_at,
-        COUNT(c.id) as chapter_count
-      FROM ebooks e
-      LEFT JOIN ebook_chapters c ON e.id = c.ebook_id
-      WHERE e.id = $1
-      GROUP BY e.id, e.title, e.subtitle, e.cover_image_url, e.cover_image_prompt, e.created_at, e.updated_at
-    `;
-
-    const result = await client.query(statusQuery, [ebookIdNum]);
-
-    if (result.rows.length === 0) {
+    if (!ebook) {
       return NextResponse.json({ error: 'Ebook not found' }, { status: 404 });
     }
 
-    const ebook = result.rows[0];
+    const chapterCount = ebook.ebook_chapters.length;
 
     // Analyze cover readiness with margin specifications
     const coverAnalysis = {
@@ -304,8 +306,8 @@ export async function GET(
       image_ready: !!ebook.cover_image_url,
       complete: !!(ebook.cover_image_prompt && ebook.cover_image_url),
       prompt_length: ebook.cover_image_prompt?.length || 0,
-      chapters_available: ebook.chapter_count > 0,
-      ready_for_generation: ebook.chapter_count > 0,
+      chapters_available: chapterCount > 0,
+      ready_for_generation: chapterCount > 0,
       estimated_quality: ebook.cover_image_prompt?.length > 3000 ? 'premium' :
                         ebook.cover_image_prompt?.length > 2000 ? 'high' :
                         ebook.cover_image_prompt?.length > 1000 ? 'medium' : 'basic',
@@ -320,7 +322,7 @@ export async function GET(
     console.log(`   - Prompt ready: ${coverAnalysis.prompt_ready}`);
     console.log(`   - Image ready: ${coverAnalysis.image_ready}`);
     console.log(`   - Complete: ${coverAnalysis.complete}`);
-    console.log(`   - Chapters: ${ebook.chapter_count}`);
+    console.log(`   - Chapters: ${chapterCount}`);
     console.log(`   - Quality estimate: ${coverAnalysis.estimated_quality}`);
     console.log(`   - Margin optimization: ${coverAnalysis.has_margin_optimization}`);
     console.log(`   - Supplement restrictions: ${coverAnalysis.has_supplement_restrictions}`);
@@ -330,7 +332,7 @@ export async function GET(
       ebook_id: ebook.id,
       title: ebook.title,
       subtitle: ebook.subtitle,
-      chapter_count: parseInt(ebook.chapter_count),
+      chapter_count: chapterCount,
       cover_status: coverAnalysis,
       cover_details: {
         url: ebook.cover_image_url,
@@ -374,10 +376,5 @@ export async function GET(
       error: 'Failed to check cover status',
       details: error.message
     }, { status: 500 });
-
-  } finally {
-    if (client) {
-      await client.end();
-    }
   }
 }

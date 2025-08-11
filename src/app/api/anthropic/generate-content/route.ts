@@ -72,7 +72,7 @@ export async function POST(request: Request) {
       Nie używaj podtytułów, numeracji ani oznaczeń formatowania.`;
 
       const requestBody: AnthropicRequest = {
-        model: 'claude-sonnet-4-20250514', // Używamy szybszego modelu dla tego zadania
+        model: 'claude-3-haiku-20240307', // Używamy szybszego modelu dla tego zadania
         max_tokens: 2500,
         temperature: 0.7,
         messages: [
