@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import axios from 'axios';  // 🔧 DODANE
 
 export async function POST(
   request: Request,
@@ -90,46 +91,46 @@ export async function POST(
       console.log(`   - Content safety: full supplement restrictions`);
       console.log(`   - Composition: edge-free with internal spacing`);
 
-      const coverResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/ebooks/${ebookId}/generate-cover`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          // Przekaż session cookies dla autoryzacji w wywołanym endpoint
-          'Cookie': request.headers.get('Cookie') || ''
-        },
-        body: JSON.stringify({
-          forceRegenerate,
-          size: coverSize  // 🔥 Pass square format with margins
-        })
-      });
+      let coverData;
+        try {
+          const coverResponse = await axios.post(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/ebooks/${ebookId}/generate-cover`, {
+            forceRegenerate,
+            size: coverSize  // 🔥 Pass square format with margins
+          }, {
+            headers: {
+              'Content-Type': 'application/json',
+              // Przekaż session cookies dla autoryzacji w wywołanym endpoint
+              'Cookie': request.headers.get('Cookie') || ''
+            },
+            timeout: 30000
+          });
 
-      if (!coverResponse.ok) {
-        const errorData = await coverResponse.json();
-        throw new Error(`Cover generation failed: ${errorData.error}`);
-      }
+          coverData = coverResponse.data; // axios automatycznie parsuje JSON
+        } catch (axiosError: any) {
+          throw new Error(`Cover generation failed: ${axiosError.response?.data?.error || axiosError.message}`);
+        }
 
-      const coverData = await coverResponse.json();
-      stepResults.steps_completed.push('professional_cover_with_margins_generated');
-      stepResults.cover_prompt_generated = coverData.prompt_was_generated;
-      stepResults.cover_image_generated = true;
-      stepResults.final_cover_url = coverData.cover_image_url;
-      stepResults.final_prompt = coverData.prompt_used;
-      stepResults.model_used = coverData.generation_metrics?.model_used || 'unknown';
-      stepResults.generation_metrics = coverData.generation_metrics;
-      stepResults.supplement_compliant = coverData.content_compliance?.supplement_safe || false;
+        stepResults.steps_completed.push('professional_cover_with_margins_generated');
+        stepResults.cover_prompt_generated = coverData.prompt_was_generated;
+        stepResults.cover_image_generated = true;
+        stepResults.final_cover_url = coverData.cover_image_url;
+        stepResults.final_prompt = coverData.prompt_used;
+        stepResults.model_used = coverData.generation_metrics?.model_used || 'unknown';
+        stepResults.generation_metrics = coverData.generation_metrics;
+        stepResults.supplement_compliant = coverData.content_compliance?.supplement_safe || false;
 
-      console.log(`✅ Professional book cover with margins generated successfully:`);
-      console.log(`   - URL: ${coverData.cover_image_url}`);
-      console.log(`   - Model: ${coverData.generation_metrics?.model_used || 'unknown'}`);
-      console.log(`   - Format: ${coverData.generation_metrics?.cover_format || coverSize}`);
-      console.log(`   - Background: ${coverData.generation_metrics?.background_type || 'transparent'}`);
-      console.log(`   - Composition: ${coverData.generation_metrics?.composition_type || 'seamless'}`);
-      console.log(`   - Margins: ${coverData.generation_metrics?.margin_control || 'proper-spacing'}`);
-      console.log(`   - Cost: $${coverData.generation_metrics?.cost_estimate || '0'}`);
-      console.log(`   - Prompt length: ${coverData.generation_metrics?.prompt_length || 0} chars`);
-      console.log(`   - Quality: ${coverData.generation_metrics?.quality_setting || 'high'}`);
-      console.log(`   - Supplement compliant: ${stepResults.supplement_compliant ? '✅' : '❌'}`);
-      console.log(`   - Cache bust URL: ${coverData.cache_bust_url || 'N/A'}`);
+        console.log(`✅ Professional book cover with margins generated successfully:`);
+        console.log(`   - URL: ${coverData.cover_image_url}`);
+        console.log(`   - Model: ${coverData.generation_metrics?.model_used || 'unknown'}`);
+        console.log(`   - Format: ${coverData.generation_metrics?.cover_format || coverSize}`);
+        console.log(`   - Background: ${coverData.generation_metrics?.background_type || 'transparent'}`);
+        console.log(`   - Composition: ${coverData.generation_metrics?.composition_type || 'seamless'}`);
+        console.log(`   - Margins: ${coverData.generation_metrics?.margin_control || 'proper-spacing'}`);
+        console.log(`   - Cost: $${coverData.generation_metrics?.cost_estimate || '0'}`);
+        console.log(`   - Prompt length: ${coverData.generation_metrics?.prompt_length || 0} chars`);
+        console.log(`   - Quality: ${coverData.generation_metrics?.quality_setting || 'high'}`);
+        console.log(`   - Supplement compliant: ${stepResults.supplement_compliant ? '✅' : '❌'}`);
+        console.log(`   - Cache bust URL: ${coverData.cache_bust_url || 'N/A'}`);
 
     } catch (error: any) {
       stepResults.errors.push(`Book cover generation error: ${error.message}`);
