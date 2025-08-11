@@ -6,6 +6,7 @@ import { prisma } from '@/lib/prisma';
 import sharp from 'sharp';
 import fs from 'fs/promises';
 import path from 'path';
+import axios from 'axios';  // 🔧 DODANE
 
 // ===== MAKSYMALNA KONFIGURACJA JAKOŚCI ZOPTYMALIZOWANA POD GPT-IMAGE-1 Z TRANSPARENTNYM TŁEM =====
 const MODEL_CONFIGS = {
@@ -428,35 +429,34 @@ export async function POST(
         orderBy: { position: 'asc' }
       });
 
-      const promptResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/anthropic/generate-image-prompt`, {
-          method: 'POST',
+      let promptData;
+      try {
+        const promptResponse = await axios.post(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/anthropic/generate-image-prompt`, {
+          title: ebookTitle,
+          subtitle: ebookSubtitle,
+          chapterTitle: chapterTitle,
+          chapterContent: chapterContent,
+          allChapters: allChapters,
+          targetModel: "gpt-image-1",
+          forceRegenerate: forceRegenerate,
+          enableTransparency: true,
+          maximumQuality: true
+        }, {
           headers: {
             'Content-Type': 'application/json',
             'x-internal-request': 'true'  // ✅ DODANY HEADER WEWNĘTRZNY
           },
-          body: JSON.stringify({
-            title: ebookTitle,
-            subtitle: ebookSubtitle,
-            chapterTitle: chapterTitle,
-            chapterContent: chapterContent,
-            allChapters: allChapters,
-            targetModel: "gpt-image-1",
-            forceRegenerate: forceRegenerate,
-            enableTransparency: true,
-            maximumQuality: true
-          }),
-      });
+          timeout: 90000 // 90 sekund timeout
+        });
 
-      if (!promptResponse.ok) {
-        const errorData = await promptResponse.json();
-        console.error('❌ Claude maximum quality transparent prompt generation failed:', errorData);
+        promptData = promptResponse.data; // axios automatycznie parsuje JSON
+      } catch (error: any) {
+        console.error('❌ Claude maximum quality transparent prompt generation failed:', error.response?.data || error.message);
         return NextResponse.json({
           error: 'Failed to generate maximum quality transparent image prompt',
-          details: errorData.error
+          details: error.response?.data?.error || error.message
         }, { status: 500 });
       }
-
-      const promptData = await promptResponse.json();
       const newImagePrompt = promptData.imagePrompt;
 
       console.log(`✅ NEW MAXIMUM QUALITY TRANSPARENT PROMPT GENERATED:`);
