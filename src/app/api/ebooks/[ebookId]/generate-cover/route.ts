@@ -448,7 +448,7 @@ export async function POST(
       });
 
       promptData = promptResponse.data; // axios automatycznie parsuje JSON
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Claude cover prompt generation failed:', error.response?.data || error.message);
       return NextResponse.json({
         error: 'Failed to generate cover prompt',
