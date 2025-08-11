@@ -444,7 +444,7 @@ export async function POST(
           'Content-Type': 'application/json',
           'x-internal-request': 'true'  // ✅ DODANY HEADER WEWNĘTRZNY
         },
-        timeout: 30000 // 30 sekund timeout
+        timeout: 90000 // 30 sekund timeout
       });
 
       promptData = promptResponse.data; // axios automatycznie parsuje JSON

@@ -102,7 +102,7 @@ export async function POST(
               // Przekaż session cookies dla autoryzacji w wywołanym endpoint
               'Cookie': request.headers.get('Cookie') || ''
             },
-            timeout: 30000
+            timeout: 90000
           });
 
           coverData = coverResponse.data; // axios automatycznie parsuje JSON
