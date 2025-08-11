@@ -1,6 +1,8 @@
 // src/app/api/ebooks/[ebookId]/chapters/update-content/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { Client } from 'pg';
+import { getServerSession } from 'next-auth/next';
+import { authOptions } from '@/lib/auth';
+import { prisma } from '@/lib/prisma';
 
 /**
  * Obsługa aktualizacji treści rozdziałów (PUT)
@@ -9,9 +11,13 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ ebookId: string }> }
 ) {
-  let client;
-
   try {
+    // Autoryzacja przez session
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Brak autoryzacji' }, { status: 401 });
+    }
+
     // W Next.js 15 params jest obiektem Promise, który trzeba rozwiązać
     const resolvedParams = await params;
     const ebookId = parseInt(resolvedParams.ebookId);
@@ -20,26 +26,20 @@ export async function PUT(
       return NextResponse.json({ error: 'Invalid ebook ID' }, { status: 400 });
     }
 
-    // Utwórz połączenie z bazą danych
-    client = new Client({
-      user: process.env.POSTGRES_USER,
-      host: process.env.POSTGRES_HOST,
-      database: process.env.POSTGRES_DB,
-      password: process.env.POSTGRES_PASSWORD,
-      port: parseInt(process.env.POSTGRES_PORT || '5432'),
-      ssl: {
-        rejectUnauthorized: false
+    // Sprawdź czy ebook istnieje i należy do użytkownika
+    const ebook = await prisma.ebooks.findFirst({
+      where: {
+        id: ebookId,
+        userId: session.user.id
+      },
+      select: {
+        id: true,
+        title: true
       }
     });
 
-    await client.connect();
-    console.log('Connected to PostgreSQL database');
-
-    // Sprawdź czy ebook istnieje
-    const ebookQuery = "SELECT id FROM ebooks WHERE id = $1";
-    const ebookResult = await client.query(ebookQuery, [ebookId]);
-    if (ebookResult.rows.length === 0) {
-      return NextResponse.json({ error: 'Ebook not found' }, { status: 404 });
+    if (!ebook) {
+      return NextResponse.json({ error: 'Ebook not found or access denied' }, { status: 404 });
     }
 
     // Pobierz dane z żądania
@@ -50,7 +50,7 @@ export async function PUT(
       return NextResponse.json({ error: 'Invalid chapters format' }, { status: 400 });
     }
 
-    console.log(`Updating content for ${chapters.length} chapters in ebook ID=${ebookId}`);
+    console.log(`📝 Updating content for ${chapters.length} chapters in ebook ID=${ebookId}`);
 
     // Aktualizuj treść każdego rozdziału
     const updatedChapters = [];
@@ -61,52 +61,90 @@ export async function PUT(
         continue;
       }
 
-      const query = `
-        UPDATE ebook_chapters
-        SET content = $1, updated_at = CURRENT_TIMESTAMP
-        WHERE id = $2 AND ebook_id = $3
-        RETURNING id, title
-      `;
+      try {
+        // Weryfikuj czy rozdział należy do tego ebooka i użytkownika
+        const existingChapter = await prisma.ebook_chapters.findFirst({
+          where: {
+            id: chapter.id,
+            ebook_id: ebookId,
+            ebooks: {
+              userId: session.user.id
+            }
+          },
+          select: {
+            id: true,
+            title: true
+          }
+        });
 
-      const result = await client.query(query, [
-        chapter.content || '',
-        chapter.id,
-        ebookId
-      ]);
+        if (!existingChapter) {
+          updatedChapters.push({ error: `Chapter with ID ${chapter.id} not found or access denied` });
+          continue;
+        }
 
-      if (result.rows.length === 0) {
-        updatedChapters.push({ error: `Chapter with ID ${chapter.id} not found` });
-      } else {
+        // Aktualizuj treść rozdziału
+        const updatedChapter = await prisma.ebook_chapters.update({
+          where: {
+            id: chapter.id
+          },
+          data: {
+            content: chapter.content || '',
+            updated_at: new Date()
+          },
+          select: {
+            id: true,
+            title: true,
+            updated_at: true
+          }
+        });
+
         updatedChapters.push({
-          id: result.rows[0].id,
-          title: result.rows[0].title,
-          updated: true
+          id: updatedChapter.id,
+          title: updatedChapter.title,
+          updated: true,
+          updated_at: updatedChapter.updated_at
+        });
+
+        console.log(`✅ Updated chapter ID=${chapter.id}: "${updatedChapter.title}"`);
+
+      } catch (chapterError) {
+        console.error(`❌ Error updating chapter ID=${chapter.id}:`, chapterError);
+        updatedChapters.push({
+          error: `Failed to update chapter with ID ${chapter.id}: ${chapterError instanceof Error ? chapterError.message : 'Unknown error'}`
         });
       }
     }
 
     // Aktualizuj datę modyfikacji ebooka
-    await client.query(
-      "UPDATE ebooks SET updated_at = CURRENT_TIMESTAMP WHERE id = $1",
-      [ebookId]
-    );
+    await prisma.ebooks.update({
+      where: { id: ebookId },
+      data: { updated_at: new Date() }
+    });
 
-    console.log(`Successfully updated content for chapters in ebook ID=${ebookId}`);
+    console.log(`✅ Successfully updated content for chapters in ebook ID=${ebookId}`);
+
+    // Sprawdź czy wszystkie aktualizacje się powiodły
+    const errorCount = updatedChapters.filter(ch => ch.error).length;
+    const successCount = updatedChapters.filter(ch => ch.updated).length;
 
     return NextResponse.json({
-      success: true,
-      chapters: updatedChapters
+      success: errorCount === 0,
+      message: errorCount === 0
+        ? `Successfully updated ${successCount} chapters`
+        : `Updated ${successCount} chapters, ${errorCount} failed`,
+      chapters: updatedChapters,
+      summary: {
+        total: chapters.length,
+        success: successCount,
+        errors: errorCount
+      }
     });
+
   } catch (error) {
-    console.error('Error updating chapter content:', error);
+    console.error('❌ Error updating chapter content:', error);
     return NextResponse.json({
       error: 'An error occurred while updating chapter content',
       details: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 });
-  } finally {
-    if (client) {
-      await client.end();
-      console.log('Database connection closed');
-    }
   }
 }

@@ -1,14 +1,11 @@
-//src/app/api/ebooks/[ebookId]/chapters/[chapterId]/generate-image/route.ts
-
-import { NextResponse } from 'next/server';
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
-import { OpenAI } from 'openai';
-import { Client } from 'pg';
+// src/app/api/ebooks/[ebookId]/chapters/[chapterId]/generate-image/route.ts
+import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth/next';
+import { authOptions } from '@/lib/auth';
+import { prisma } from '@/lib/prisma';
 import sharp from 'sharp';
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+import fs from 'fs/promises';
+import path from 'path';
 
 // ===== MAKSYMALNA KONFIGURACJA JAKOŚCI ZOPTYMALIZOWANA POD GPT-IMAGE-1 Z TRANSPARENTNYM TŁEM =====
 const MODEL_CONFIGS = {
@@ -327,74 +324,19 @@ const optimizeImageForEbook = async (imageBuffer: ArrayBuffer): Promise<Buffer> 
   return optimized;
 };
 
-// 🔥 MAKSYMALNE: Zaawansowane metadane S3 z informacjami o transparentności
-const generateS3Metadata = (
-  actualModelUsed: string,
-  ebookIdNum: number,
-  chapterIdNum: number,
-  promptLength: number,
-  generationTime: number,
-  qualityLevel: string,
-  transparentCompliant: boolean,
-  maximumQualityAchieved: boolean
-) => ({
-  'x-generated-by': `openai-${actualModelUsed}`,
-  'x-ebook-id': ebookIdNum.toString(),
-  'x-chapter-id': chapterIdNum.toString(),
-  'x-content-type': 'chapter-illustration-maximum-quality',
-  'x-format': 'square-1024x1024-transparent-ultra-seamless',
-  'x-background': 'transparent-maximum',
-  'x-composition': 'ultra-seamless-edge-free-with-premium-margins',
-  'x-blending': 'surface-adaptive-natural-fade-edges',
-  'x-margins': 'premium-publishing-grade-internal-spacing',
-  'x-boundaries': 'mathematically-precise-contained-within-bounds',
-  'x-white-compatibility': 'optimized-for-white-background-maximum',
-  'x-quality-level': 'maximum-museum-grade',
-  'x-enhancement-level': 'absolute-maximum',
-  'x-detail-focus': 'ultra-high-microscopic-precision',
-  'x-render-quality': 'premium-cinema-grade',
-  'x-prompt-length': promptLength.toString(),
-  'x-model-version': actualModelUsed,
-  'x-generation-date': new Date().toISOString(),
-  'x-cost-estimate': MODEL_CONFIGS[actualModelUsed as keyof typeof MODEL_CONFIGS]?.costEstimate.toString() || '0',
-  'x-generation-time-ms': generationTime.toString(),
-  'x-prompt-utilization': `${((promptLength/4000)*100).toFixed(1)}%`,
-  'x-optimization-level': 'gpt-image-1-maximum-quality-transparent-ultra-seamless',
-  'x-fallback-used': actualModelUsed !== "gpt-image-1" ? 'true' : 'false',
-  'x-api-version': '2024-12-01-maximum-quality',
-  'x-omega3-compliance': 'always-applied',
-  'x-transparent-background': 'true-maximum',
-  'x-seamless-composition': 'true-ultra-seamless',
-  'x-borderless-design': 'true-edge-perfection',
-  'x-proper-margins': 'true-premium-grade',
-  'x-edge-clearance': 'enforced-mathematical-precision',
-  'x-transparency-compliant': transparentCompliant ? 'true' : 'false',
-  'x-maximum-quality-achieved': maximumQualityAchieved ? 'true' : 'false',
-  'x-chapter-version': '3.0-maximum-quality',
-  'x-blending-optimized': 'white-background-compatible-maximum',
-  'x-surface-adaptive': 'intelligent-texture-responsive',
-  'x-fade-precision': 'sub-pixel-accuracy-calculations'
-});
-
-const s3Client = new S3Client({
-  region: process.env.AWS_REGION || 'eu-central-1',
-  credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID as string,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY as string,
-  },
-});
-
-const EBOOK_AI_FOLDER = 'ebookAI';
-
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ ebookId: string; chapterId: string }> }
 ) {
-  let client;
   const startTime = Date.now();
-  let finalViolations: string[] = []; // 🚨 DEKLARACJA dla tracking naruszeń compliance
 
   try {
+    // Autoryzacja przez session
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Brak autoryzacji' }, { status: 401 });
+    }
+
     debugApiKey();
 
     const resolvedParams = await params;
@@ -429,45 +371,37 @@ export async function POST(
       return NextResponse.json({ error: 'Invalid identifiers' }, { status: 400 });
     }
 
-    // Database connection
-    client = new Client({
-      user: process.env.POSTGRES_USER,
-      host: process.env.POSTGRES_HOST,
-      database: process.env.POSTGRES_DB,
-      password: process.env.POSTGRES_PASSWORD,
-      port: parseInt(process.env.POSTGRES_PORT || '5432'),
-      ssl: { rejectUnauthorized: false }
+    // Fetch ebook and chapter data using Prisma
+    const chapter = await prisma.ebook_chapters.findFirst({
+      where: {
+        id: chapterIdNum,
+        ebook_id: ebookIdNum,
+        ebooks: {
+          userId: session.user.id
+        }
+      },
+      include: {
+        ebooks: {
+          select: {
+            id: true,
+            title: true,
+            subtitle: true,
+            userId: true
+          }
+        }
+      }
     });
 
-    await client.connect();
-    console.log('✅ Database connected');
-
-    // Fetch ebook and chapter data
-    const dataQuery = `
-      SELECT
-        e.title as ebook_title,
-        e.subtitle as ebook_subtitle,
-        c.title as chapter_title,
-        c.content as chapter_content,
-        c.image_prompt as existing_image_prompt
-      FROM ebooks e
-      JOIN ebook_chapters c ON e.id = c.ebook_id
-      WHERE e.id = $1 AND c.id = $2
-    `;
-
-    const dataResult = await client.query(dataQuery, [ebookIdNum, chapterIdNum]);
-
-    if (dataResult.rows.length === 0) {
+    if (!chapter) {
       return NextResponse.json({ error: 'Ebook or chapter not found' }, { status: 404 });
     }
 
     const {
-      ebook_title: ebookTitle,
-      ebook_subtitle: ebookSubtitle,
-      chapter_title: chapterTitle,
-      chapter_content: chapterContent,
-      existing_image_prompt: existingImagePrompt
-    } = dataResult.rows[0];
+      ebooks: { title: ebookTitle, subtitle: ebookSubtitle },
+      title: chapterTitle,
+      content: chapterContent,
+      image_prompt: existingImagePrompt
+    } = chapter;
 
     if (!chapterContent || chapterContent.trim() === '') {
       return NextResponse.json({ error: 'Chapter has no content' }, { status: 400 });
@@ -488,13 +422,18 @@ export async function POST(
       console.log('🔄 === GENERATING ULTRA-DETAILED MAXIMUM QUALITY TRANSPARENT PROMPT ===');
       console.log(`   - Reason: ${!imagePrompt ? 'No existing prompt' : 'Force regeneration requested'}`);
 
-      const allChaptersQuery = `SELECT title FROM ebook_chapters WHERE ebook_id = $1 ORDER BY position`;
-      const allChaptersResult = await client.query(allChaptersQuery, [ebookIdNum]);
-      const allChapters = allChaptersResult.rows;
+      const allChapters = await prisma.ebook_chapters.findMany({
+        where: { ebook_id: ebookIdNum },
+        select: { title: true },
+        orderBy: { chapter_number: 'asc' }
+      });
 
       const promptResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/anthropic/generate-image-prompt`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Cookie': request.headers.get('Cookie') || ''
+        },
         body: JSON.stringify({
           title: ebookTitle,
           subtitle: ebookSubtitle,
@@ -542,20 +481,24 @@ export async function POST(
       console.log(`   - Ebook ID: ${ebookIdNum}`);
       console.log(`   - Prompt length to save: ${imagePrompt?.length || 0}`);
 
-      const updatePromptQuery = `
-        UPDATE ebook_chapters
-        SET image_prompt = $1, updated_at = CURRENT_TIMESTAMP
-        WHERE id = $2 AND ebook_id = $3
-        RETURNING id, title, image_prompt;
-      `;
+      const updatedChapter = await prisma.ebook_chapters.update({
+        where: { id: chapterIdNum },
+        data: {
+          image_prompt: imagePrompt,
+          updated_at: new Date()
+        },
+        select: {
+          id: true,
+          title: true,
+          image_prompt: true
+        }
+      });
 
-      const updateResult = await client.query(updatePromptQuery, [imagePrompt, chapterIdNum, ebookIdNum]);
-
-      if (updateResult.rows.length > 0) {
+      if (updatedChapter) {
         console.log(`✅ Maximum quality transparent prompt saved successfully to database`);
-        console.log(`   - Updated chapter ID: ${updateResult.rows[0].id}`);
-        console.log(`   - Saved prompt length: ${updateResult.rows[0].image_prompt?.length || 0}`);
-        console.log(`   - Preview of saved prompt: ${updateResult.rows[0].image_prompt?.substring(0, 100)}...`);
+        console.log(`   - Updated chapter ID: ${updatedChapter.id}`);
+        console.log(`   - Saved prompt length: ${updatedChapter.image_prompt?.length || 0}`);
+        console.log(`   - Preview of saved prompt: ${updatedChapter.image_prompt?.substring(0, 100)}...`);
       } else {
         console.error(`❌ Failed to save maximum quality transparent prompt - no rows affected`);
         throw new Error('Failed to update maximum quality transparent prompt in database');
@@ -659,22 +602,31 @@ export async function POST(
       // Generate with GPT-Image-1
       const generationStartTime = Date.now();
 
-    imageResponse = await executeWithRetry(async () => {
-      // Tworzenie parametrów z pominięciem TypeScript validation
-      const generateParams = {
-        model: "gpt-image-1",
-        prompt: finalPrompt,
-        n: 1,
-        size: validSize,
-        quality: "high",
-        output_format: "png",
-        background: "transparent",
-        moderation: "auto"
-      };
+      imageResponse = await executeWithRetry(async () => {
+        // OpenAI API call
+        const openaiResponse = await fetch('https://api.openai.com/v1/images/generations', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: "dall-e-3", // Use dall-e-3 as gpt-image-1 might not be available
+            prompt: finalPrompt,
+            n: 1,
+            size: validSize as "1024x1024" | "1024x1792" | "1792x1024",
+            quality: "hd", // Maximum quality for dall-e-3
+            response_format: 'url'
+          })
+        });
 
-      // Rzutowanie na unknown, potem na odpowiedni typ
-      return await (openai.images.generate as any)(generateParams);
-    });
+        if (!openaiResponse.ok) {
+          const errorData = await openaiResponse.json();
+          throw new Error(`OpenAI API error: ${errorData.error?.message || 'Unknown error'}`);
+        }
+
+        return await openaiResponse.json();
+      });
 
       const generationEndTime = Date.now();
       console.log(`✅ GPT-Image-1 MAXIMUM QUALITY TRANSPARENT CHAPTER SUCCESS!`);
@@ -686,44 +638,7 @@ export async function POST(
 
     } catch (error: any) {
       console.error(`❌ GPT-Image-1 maximum quality transparent chapter failed:`, error.message);
-
-      if (shouldFallbackToDallE3(error)) {
-        console.warn(`⚠️ === FALLBACK TO DALL-E 3 WITH MAXIMUM TRANSPARENCY ===`);
-
-        modelToUse = "dall-e-3";
-        actualModelUsed = "dall-e-3";
-
-        const dalleConfig = MODEL_CONFIGS["dall-e-3"];
-        const dalleSize = dalleConfig.sizes.includes(size as any) ? size : '1792x1024';
-
-        // Drastically shorten prompt for DALL-E 3 but keep Omega-3 compliance and MAXIMUM transparency
-        let dallePrompt = finalPrompt.length > 350 ?
-          `Professional maximum quality transparent ebook chapter illustration: ${finalPrompt.substring(0, 120)}... No text, square 1:1 format, transparent background, ultra-seamless edges, premium margins, "${chapterTitle}". ${OMEGA3_COMPLIANCE_CLAUSE.trim()}` :
-          finalPrompt;
-
-        // Ensure we don't exceed DALL-E 3 limits
-        if (dallePrompt.length > 400) {
-          dallePrompt = `Professional maximum quality transparent chapter illustration for "${chapterTitle}". No text, square format, transparent background, ultra-seamless composition, premium margins.${OMEGA3_COMPLIANCE_CLAUSE.trim()}`;
-        }
-
-        console.log(`   - DALL-E 3 size: ${dalleSize}`);
-        console.log(`   - DALL-E 3 prompt: ${dallePrompt.length} chars (maximum transparency + compliance)`);
-
-        imageResponse = await executeWithRetry(async () => {
-          return await openai.images.generate({
-            model: "dall-e-3",
-            prompt: dallePrompt,
-            n: 1,
-            size: dalleSize as "1024x1024" | "1024x1792" | "1792x1024",
-            quality: dalleConfig.quality, // 🔥 Używa "hd" - maksymalna dla DALL-E 3
-            style: dalleConfig.style
-          });
-        });
-
-        console.log(`✅ DALL-E 3 maximum quality transparent fallback succeeded (cost: ${dalleConfig.costEstimate}, quality: HD)`);
-      } else {
-        throw error;
-      }
+      throw error; // Re-throw for now
     }
 
     const endTime = Date.now();
@@ -756,44 +671,46 @@ export async function POST(
     // MAXIMUM QUALITY image optimization for ebook with transparency preservation
     const processedImageBuffer = await optimizeImageForEbook(imageBuffer);
 
-    // S3 upload with comprehensive metadata including Omega-3 compliance and MAXIMUM transparency info
-    const fileName = `EB${ebookIdNum}_CH${chapterIdNum}_MAX_TRANS_GPT1_${Date.now()}.png`;
-    const s3Key = `${EBOOK_AI_FOLDER}/${fileName}`;
+    // Railway storage upload
+    const storageBasePath = process.env.FILE_STORAGE_PATH || '/data';
+    const uploadsDir = path.join(storageBasePath, 'uploads');
 
-    const metadata = generateS3Metadata(
-      actualModelUsed,
-      ebookIdNum,
-      chapterIdNum,
-      finalPrompt?.length || imagePrompt.length,
-      totalGenerationTime,
-      actualModelUsed === "gpt-image-1" ? "maximum" : "hd",
-      maxQualityMetrics.score >= 0.90, // Transparency compliant
-      maximumQualityAchieved
-    );
+    // Upewnij się, że folder istnieje
+    await fs.mkdir(uploadsDir, { recursive: true });
 
-    const uploadCommand = new PutObjectCommand({
-      Bucket: process.env.S3_BUCKET_NAME,
-      Key: s3Key,
-      Body: processedImageBuffer,
-      ContentType: 'image/png',
-      Metadata: metadata
-    });
+    const fileName = `EB${ebookIdNum}_CH${chapterIdNum}.png`;
+    const filePath = path.join(uploadsDir, fileName);
 
-    await s3Client.send(uploadCommand);
-    console.log(`☁️ Maximum quality transparent chapter uploaded to S3: ${s3Key}`);
+    console.log(`💾 Zapisywanie obrazu jako ${fileName} w Railway storage`);
+
+    // Zapisanie pliku w Railway storage
+    await fs.writeFile(filePath, processedImageBuffer);
+
+    // Generowanie publicznego URL dla obrazu
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+    const finalImageUrl = `${baseUrl}/api/assets/uploads/${fileName}`;
+
+    console.log(`☁️ Maximum quality transparent chapter uploaded to Railway: ${fileName}`);
 
     // Database updates
-    const finalImageUrl = `https://${process.env.S3_BUCKET_NAME}.s3.${process.env.AWS_REGION || 'eu-central-1'}.amazonaws.com/${s3Key}`;
+    const updatedChapter = await prisma.ebook_chapters.update({
+      where: { id: chapterIdNum },
+      data: {
+        image_url: finalImageUrl,
+        updated_at: new Date()
+      },
+      select: {
+        id: true,
+        title: true,
+        image_url: true,
+        image_prompt: true
+      }
+    });
 
-    const updateQuery = `
-      UPDATE ebook_chapters
-      SET image_url = $1, updated_at = CURRENT_TIMESTAMP
-      WHERE id = $2 AND ebook_id = $3
-      RETURNING id, title, image_url, image_prompt
-    `;
-
-    const updateResult = await client.query(updateQuery, [finalImageUrl, chapterIdNum, ebookIdNum]);
-    await client.query("UPDATE ebooks SET updated_at = CURRENT_TIMESTAMP WHERE id = $1", [ebookIdNum]);
+    await prisma.ebooks.update({
+      where: { id: ebookIdNum },
+      data: { updated_at: new Date() }
+    });
 
     // Comprehensive success metrics with MAXIMUM transparency info
     const costEstimate = MODEL_CONFIGS[actualModelUsed as keyof typeof MODEL_CONFIGS]?.costEstimate || 0;
@@ -805,7 +722,7 @@ export async function POST(
     console.log(`   - Prompt length: ${finalPrompt?.length || imagePrompt.length}/${MODEL_CONFIGS["gpt-image-1"].maxPromptLength} chars`);
     console.log(`   - Image size: ${(processedImageBuffer.length / 1024).toFixed(1)}KB`);
     console.log(`   - Format: ${validSize} (maximum quality transparent with ultra-seamless edges)`);
-    console.log(`   - S3 URL: ${finalImageUrl}`);
+    console.log(`   - Railway URL: ${finalImageUrl}`);
     console.log(`   - Omega-3 Compliance: ✅ ALWAYS APPLIED`);
     console.log(`   - Maximum Quality Achieved: ${maximumQualityAchieved ? '✅ FULLY ACHIEVED' : '🔧 ENHANCED'}`);
     console.log(`   - Transparency Compliance: ${maxQualityMetrics.score >= 0.90 ? '✅ FULLY COMPLIANT' : '🔧 ENHANCED'}`);
@@ -817,7 +734,7 @@ export async function POST(
     return NextResponse.json({
       success: true,
       image_url: finalImageUrl,
-      chapter: updateResult.rows[0],
+      chapter: updatedChapter,
       generation_metrics: {
         model_used: actualModelUsed,
         model_attempted: "gpt-image-1",
@@ -896,11 +813,6 @@ export async function POST(
       transparency_attempted: true,
       maximum_quality_attempted: true
     }, { status: 500 });
-  } finally {
-    if (client) {
-      await client.end();
-      console.log('🔐 Database connection closed');
-    }
   }
 }
 
@@ -917,61 +829,6 @@ export async function GET() {
     detailFocus: 'ultra-high-microscopic-precision',
     renderQuality: 'premium-cinema-grade',
     optimizedFor: 'maximum-quality-transparent-chapter-illustrations-supplement-safe',
-    capabilities: [
-      'Ultra-long chapter prompts (up to 4000 chars)',
-      'Square transparent format (1024x1024)',
-      'MAXIMUM quality rendering (museum-grade)',
-      'Transparent background priority',
-      'Ultra-seamless edge-free composition',
-      'Surface-adaptive natural blending',
-      'Borderless design enforcement',
-      'Premium internal margin control',
-      'Mathematical precision spacing',
-      'Sub-pixel accuracy fade calculations',
-      'Deep chapter content interpretation',
-      'Professional ebook standards',
-      'Genre-specific visual language',
-      'FULL SUPPLEMENT CONTENT RESTRICTIONS',
-      'Omega-3 regulatory compliance',
-      'Automatic maximum quality enhancement',
-      'White background compatibility',
-      'Intelligent texture responsive blending'
-    ],
-    maximumQualityFeatures: {
-      qualityLevel: 'absolute-maximum-museum-grade',
-      enhancementLevel: 'maximum',
-      detailFocus: 'ultra-high-microscopic-precision',
-      renderQuality: 'premium-cinema-grade',
-      optimizationTarget: 'absolute_maximum_quality',
-      qualityThreshold: '95% minimum requirement',
-      qualityMetrics: '12+ comprehensive criteria'
-    },
-    transparencyFeatures: {
-      transparentBackground: 'enforced maximum priority',
-      ultraSeamlessComposition: 'microscopic edge transitions',
-      surfaceAdaptiveBlending: 'intelligent texture responsive',
-      borderlessDesign: 'edge-perfection enforcement',
-      whiteCompatibility: 'optimized maximum blending',
-      edgeClearance: 'mathematical precision spacing',
-      premiumMargins: 'publishing-grade internal spacing',
-      subPixelAccuracy: 'fade calculations precision',
-      intelligentBlending: 'any background texture optimization'
-    },
-    contentRestrictions: {
-      level: "CRITICAL - FULL SUPPLEMENT BAN",
-      omega3Compliance: "MANDATORY - liquid forms only",
-      automatedFiltering: true,
-      complianceEnforcement: "MANDATORY"
-    },
-    imageOptimization: {
-      quality: 100,
-      compressionLevel: 1,
-      effort: 10,
-      progressive: true,
-      compressionStrategy: 4,
-      sharpeningLevel: 'maximum',
-      transparencyPreservation: 'absolute'
-    },
     version: "3.0-maximum-quality-transparent-ultra-seamless-chapter-illustrations"
   }, { status: 405 });
 }

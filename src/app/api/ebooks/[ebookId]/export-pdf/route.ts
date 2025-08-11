@@ -1,40 +1,65 @@
 // src/app/api/ebooks/[ebookId]/export-pdf/route.ts
 import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth/next';
+import { authOptions } from '@/lib/auth';
+import { prisma } from '@/lib/prisma';
 import puppeteer from 'puppeteer-core';
 import chromium from '@sparticuz/chromium';
 import fs from 'fs';
 
-export async function POST(req: NextRequest) {
+export async function POST(
+  req: NextRequest,
+  { params }: { params: Promise<{ ebookId: string }> }
+) {
   try {
-    // --- Pobierz ebookId z URL ---
-    const url = new URL(req.url);
-    const match = url.pathname.match(/\/api\/ebooks\/([^\/]+)\/export-pdf/);
-    const ebookId = match ? match[1] : null;
+    // Autoryzacja przez session
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Brak autoryzacji' }, { status: 401 });
+    }
+
+    // --- Pobierz ebookId z params ---
+    const resolvedParams = await params;
+    const ebookId = resolvedParams.ebookId;
 
     if (!ebookId) {
       return NextResponse.json({ error: 'Brak ebookId w ścieżce URL.' }, { status: 400 });
     }
 
-    console.log(`📄 Rozpoczęcie eksportu PDF dla ebooka ${ebookId}`);
-
-    // --- Pobierz dane ebooka z okładką ---
-    const ebookResponse = await fetch(
-      `${process.env.API_URL || 'http://localhost:3000'}/api/ebooks/${ebookId}/chapters`,
-      {
-        method: 'GET',
-        headers: {
-          ...Object.fromEntries(req.headers),
-          'Content-Type': 'application/json',
-        },
-      }
-    );
-
-    if (!ebookResponse.ok) {
-      throw new Error('Nie udało się pobrać danych ebooka');
+    const ebookIdNum = parseInt(ebookId);
+    if (isNaN(ebookIdNum)) {
+      return NextResponse.json({ error: 'Nieprawidłowy ebookId.' }, { status: 400 });
     }
 
-    const ebookData = await ebookResponse.json();
-    const { title, subtitle, chapters, cover_image_url } = ebookData.ebook;
+    console.log(`📄 Rozpoczęcie eksportu PDF dla ebooka ${ebookId}`);
+
+    // --- Pobierz dane ebooka z okładką przez Prisma ---
+    const ebook = await prisma.ebooks.findFirst({
+      where: {
+        id: ebookIdNum,
+        userId: session.user.id
+      },
+      include: {
+        ebook_chapters: {
+          select: {
+            id: true,
+            title: true,
+            content: true,
+            image_url: true,
+            chapter_number: true
+          },
+          orderBy: {
+            chapter_number: 'asc'
+          }
+        }
+      }
+    });
+
+    if (!ebook) {
+      return NextResponse.json({ error: 'Ebook nie został znaleziony lub nie masz uprawnień' }, { status: 404 });
+    }
+
+    const { title, subtitle, cover_image_url, ebook_chapters: chapters } = ebook;
 
     console.log(`📚 Ebook: "${title}"${subtitle ? ` - ${subtitle}` : ''}`);
     console.log(`🖼️  Okładka: ${cover_image_url ? 'dostępna' : 'brak'}`);
