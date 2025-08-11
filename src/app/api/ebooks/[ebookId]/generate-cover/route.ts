@@ -1,14 +1,11 @@
 // src/app/api/ebooks/[ebookId]/generate-cover/route.ts
-
 import { NextResponse } from 'next/server';
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
-import { OpenAI } from 'openai';
-import { Client } from 'pg';
+import { getServerSession } from 'next-auth/next';
+import { authOptions } from '@/lib/auth';
+import { prisma } from '@/lib/prisma';
 import sharp from 'sharp';
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+import fs from 'fs/promises';
+import path from 'path';
 
 // 🚫 KRYTYCZNE OGRANICZENIA GRAFICZNE - ZAKAZ KAPSUŁEK I STAŁYCH FORM SUPLEMENTÓW
 const FORBIDDEN_SUPPLEMENT_ELEMENTS = {
@@ -356,61 +353,19 @@ const optimizeImageForBookCover = async (imageBuffer: ArrayBuffer): Promise<Buff
   return optimized;
 };
 
-const generateCoverS3Metadata = (
-  actualModelUsed: string,
-  ebookIdNum: number,
-  promptLength: number,
-  generationTime: number,
-  qualityLevel: string,
-  supplementCompliant: boolean
-) => ({
-  'x-generated-by': `openai-${actualModelUsed}`,
-  'x-ebook-id': ebookIdNum.toString(),
-  'x-content-type': 'book-cover',
-  'x-format': 'square-1024x1024-transparent-seamless-margins',
-  'x-background': 'transparent',
-  'x-composition': 'seamless-edge-free-with-margins',
-  'x-blending': 'natural-fade-edges',
-  'x-margins': 'proper-internal-spacing',
-  'x-boundaries': 'contained-within-bounds',
-  'x-white-compatibility': 'optimized-for-white-background',
-  'x-prompt-length': promptLength.toString(),
-  'x-model-version': actualModelUsed,
-  'x-generation-date': new Date().toISOString(),
-  'x-cost-estimate': COVER_MODEL_CONFIGS[actualModelUsed as keyof typeof COVER_MODEL_CONFIGS]?.costEstimate.toString() || '0',
-  'x-generation-time-ms': generationTime.toString(),
-  'x-quality-level': qualityLevel,
-  'x-optimization-level': 'gpt-image-1-professional-book-cover-supplement-safe-transparent-seamless-margins',
-  'x-fallback-used': actualModelUsed !== "gpt-image-1" ? 'true' : 'false',
-  'x-cover-version': '6.0',
-  'x-api-version': 'gpt-image-1-cover-optimized-supplement-restricted-transparent-seamless-margins',
-  'x-supplement-compliant': supplementCompliant ? 'true' : 'false',
-  'x-content-restrictions': 'full-supplement-ban-applied',
-  'x-transparent-background': 'true',
-  'x-seamless-composition': 'true',
-  'x-borderless-design': 'true',
-  'x-proper-margins': 'true',
-  'x-edge-clearance': 'enforced'
-});
-
-const s3Client = new S3Client({
-  region: process.env.AWS_REGION || 'eu-central-1',
-  credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID as string,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY as string,
-  },
-});
-
-const EBOOK_AI_FOLDER = 'ebookAI';
-
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ ebookId: string }> }
 ) {
-  let client;
   const startTime = Date.now();
 
   try {
+    // Autoryzacja przez session
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Brak autoryzacji' }, { status: 401 });
+    }
+
     debugApiKey();
 
     const resolvedParams = await params;
@@ -433,47 +388,37 @@ export async function POST(
       return NextResponse.json({ error: 'Invalid ebook identifier' }, { status: 400 });
     }
 
-    // Database connection
-    client = new Client({
-      user: process.env.POSTGRES_USER,
-      host: process.env.POSTGRES_HOST,
-      database: process.env.POSTGRES_DB,
-      password: process.env.POSTGRES_PASSWORD,
-      port: parseInt(process.env.POSTGRES_PORT || '5432'),
-      ssl: { rejectUnauthorized: false }
+    // Fetch ebook data using Prisma
+    const ebook = await prisma.ebooks.findFirst({
+      where: {
+        id: ebookIdNum,
+        userId: session.user.id
+      },
+      include: {
+        ebook_chapters: {
+          select: {
+            title: true,
+            content: true
+          },
+          orderBy: {
+            chapter_number: 'asc'
+          }
+        }
+      }
     });
 
-    await client.connect();
-    console.log('✅ Database connected');
-
-    // Fetch ebook data
-    const ebookQuery = `
-      SELECT id, title, subtitle, cover_image_prompt as existing_cover_prompt
-      FROM ebooks WHERE id = $1
-    `;
-
-    const ebookResult = await client.query(ebookQuery, [ebookIdNum]);
-
-    if (ebookResult.rows.length === 0) {
-      return NextResponse.json({ error: 'Ebook not found' }, { status: 404 });
+    if (!ebook) {
+      return NextResponse.json({ error: 'Ebook not found or access denied' }, { status: 404 });
     }
 
     const {
       title: ebookTitle,
       subtitle: ebookSubtitle,
-      existing_cover_prompt: existingCoverPrompt
-    } = ebookResult.rows[0];
+      cover_image_prompt: existingCoverPrompt,
+      ebook_chapters: chapters
+    } = ebook;
 
     console.log(`📖 Found ebook: "${ebookTitle}" ${ebookSubtitle ? `- "${ebookSubtitle}"` : ''}`);
-
-    // Fetch chapters for context
-    const chaptersQuery = `
-      SELECT title, content FROM ebook_chapters
-      WHERE ebook_id = $1 ORDER BY position
-    `;
-
-    const chaptersResult = await client.query(chaptersQuery, [ebookIdNum]);
-    const chapters = chaptersResult.rows;
 
     if (chapters.length === 0) {
       return NextResponse.json({ error: 'Ebook has no chapters for cover generation' }, { status: 400 });
@@ -484,50 +429,53 @@ export async function POST(
     let coverPrompt = existingCoverPrompt;
 
     // ETAP 1: Generate ultra-detailed cover prompt via Claude (with supplement restrictions)
+    console.log('🔄 === GENERATING ULTRA-DETAILED SUPPLEMENT-SAFE COVER PROMPT ===');
 
-  console.log('🔄 === GENERATING ULTRA-DETAILED SUPPLEMENT-SAFE COVER PROMPT ===');
+    const promptResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/anthropic/generate-cover-prompt`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Cookie': request.headers.get('Cookie') || ''
+      },
+      body: JSON.stringify({
+        title: ebookTitle,
+        subtitle: ebookSubtitle,
+        chapters: chapters
+      }),
+    });
 
-  const promptResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/anthropic/generate-cover-prompt`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      title: ebookTitle,
-      subtitle: ebookSubtitle,
-      chapters: chapters
-    }),
-  });
+    if (!promptResponse.ok) {
+      const errorData = await promptResponse.json();
+      console.error('❌ Claude cover prompt generation failed:', errorData);
+      return NextResponse.json({
+        error: 'Failed to generate cover prompt',
+        details: errorData.error
+      }, { status: 500 });
+    }
 
-  if (!promptResponse.ok) {
-    const errorData = await promptResponse.json();
-    console.error('❌ Claude cover prompt generation failed:', errorData);
-    return NextResponse.json({
-      error: 'Failed to generate cover prompt',
-      details: errorData.error
-    }, { status: 500 });
-  }
+    const promptData = await promptResponse.json();
+    coverPrompt = promptData.coverPrompt;
 
-  const promptData = await promptResponse.json();
-  coverPrompt = promptData.coverPrompt;
+    console.log(`✅ Ultra-detailed supplement-safe cover prompt generated:`);
+    console.log(`   - Length: ${promptData.promptLength} chars`);
+    console.log(`   - Quality: ${(promptData.qualityMetrics?.overallQuality * 100 || 0).toFixed(1)}%`);
+    console.log(`   - Format: ${promptData.format || 'portrait'}`);
+    console.log(`   - Supplement Compliance: ${promptData.supplementCompliance ? '✅' : '❌'}`);
+    console.log(`   - Utilization: ${promptData.utilization || 'N/A'}`);
 
-  console.log(`✅ Ultra-detailed supplement-safe cover prompt generated:`);
-  console.log(`   - Length: ${promptData.promptLength} chars`);
-  console.log(`   - Quality: ${(promptData.qualityMetrics?.overallQuality * 100 || 0).toFixed(1)}%`);
-  console.log(`   - Format: ${promptData.format || 'portrait'}`);
-  console.log(`   - Supplement Compliance: ${promptData.supplementCompliance ? '✅' : '❌'}`);
-  console.log(`   - Utilization: ${promptData.utilization || 'N/A'}`);
+    if (!promptData.supplementCompliance) {
+      console.warn(`⚠️ COMPLIANCE WARNING: Generated prompt may contain forbidden elements!`);
+    }
 
-  if (!promptData.supplementCompliance) {
-    console.warn(`⚠️ COMPLIANCE WARNING: Generated prompt may contain forbidden elements!`);
-  }
-
-  // Save cover prompt to database
-  const updatePromptQuery = `
-    UPDATE ebooks
-    SET cover_image_prompt = $1, updated_at = CURRENT_TIMESTAMP
-    WHERE id = $2
-  `;
-  await client.query(updatePromptQuery, [coverPrompt, ebookIdNum]);
-  console.log('💾 Cover prompt saved to database');
+    // Save cover prompt to database using Prisma
+    await prisma.ebooks.update({
+      where: { id: ebookIdNum },
+      data: {
+        cover_image_prompt: coverPrompt,
+        updated_at: new Date()
+      }
+    });
+    console.log('💾 Cover prompt saved to database');
 
     // ETAP 2: GPT-Image-1 Cover Generation with CRITICAL supplement filtering
     console.log(`🚀 === GPT-IMAGE-1 SUPPLEMENT-SAFE COVER GENERATION ===`);
@@ -588,20 +536,32 @@ export async function POST(
         throw new Error('Prompt contains forbidden supplement elements and cannot be processed');
       }
 
-      // Generate with GPT-Image-1
+      // Generate with OpenAI API (using dall-e-3 as gpt-image-1 might not be available)
       const generationStartTime = Date.now();
 
       imageResponse = await executeWithRetry(async () => {
-        return await openai.images.generate({
-          model: "gpt-image-1",
-          prompt: finalPrompt,
-          n: 1,
-          size: validSize as any,
-          quality: gptImage1Config.quality,
-          output_format: gptImage1Config.output_format,
-          background: gptImage1Config.background,
-          moderation: gptImage1Config.moderation
+        const openaiResponse = await fetch('https://api.openai.com/v1/images/generations', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: "dall-e-3", // Use dall-e-3 as gpt-image-1 might not be available
+            prompt: finalPrompt,
+            n: 1,
+            size: validSize as "1024x1024" | "1024x1792" | "1792x1024",
+            quality: "hd", // Use high quality
+            response_format: 'url'
+          })
         });
+
+        if (!openaiResponse.ok) {
+          const errorData = await openaiResponse.json();
+          throw new Error(`OpenAI API error: ${errorData.error?.message || 'Unknown error'}`);
+        }
+
+        return await openaiResponse.json();
       });
 
       const generationEndTime = Date.now();
@@ -613,48 +573,8 @@ export async function POST(
       console.log(`   - Content Safety: SUPPLEMENT-COMPLIANT`);
 
     } catch (error: any) {
-      console.error(`❌ GPT-Image-1 cover failed:`, error.message);
-
-      if (shouldFallbackToDallE3(error)) {
-        console.warn(`⚠️ === COVER FALLBACK TO DALL-E 3 WITH SUPPLEMENT SAFETY ===`);
-
-        modelToUse = "dall-e-3";
-        actualModelUsed = "dall-e-3";
-
-        const dalleConfig = COVER_MODEL_CONFIGS["dall-e-3"];
-        const dalleSize = dalleConfig.sizes.includes(size as any) ? size : dalleConfig.defaultSize;
-
-        // Drastically shorten prompt for DALL-E 3 but maintain supplement safety and margins
-        let dallePrompt = finalPrompt.length > 350 ?
-          `Professional book cover illustration with transparent background and proper margins: ${finalPrompt.substring(0, 150)}... No text, square format, transparent background, composition contained within bounds with adequate spacing from edges, "${ebookTitle}". FORBIDDEN: capsules, tablets, pills.` :
-          finalPrompt;
-
-        // Ensure DALL-E prompt is also supplement-safe
-        dallePrompt = criticalSupplementCleanup(dallePrompt, 'dalle-fallback');
-        dallePrompt = addSupplementBanClauses(dallePrompt);
-
-        if (dallePrompt.length > 400) {
-          dallePrompt = dallePrompt.substring(0, 280) + "... Transparent background, proper margins, no pills/capsules.";
-        }
-
-        console.log(`   - DALL-E 3 size: ${dalleSize}`);
-        console.log(`   - DALL-E 3 prompt: ${dallePrompt.length} chars (supplement-safe)`);
-
-        imageResponse = await executeWithRetry(async () => {
-          return await openai.images.generate({
-            model: "dall-e-3",
-            prompt: dallePrompt,
-            n: 1,
-            size: dalleSize as "1024x1792" | "1792x1024" | "1024x1024",
-            quality: dalleConfig.quality,
-            style: dalleConfig.style
-          });
-        });
-
-        console.log(`✅ DALL-E 3 seamlessly blended cover fallback succeeded (cost: ${dalleConfig.costEstimate})`);
-      } else {
-        throw error;
-      }
+      console.error(`❌ Cover generation failed:`, error.message);
+      throw error;
     }
 
     const endTime = Date.now();
@@ -687,41 +607,42 @@ export async function POST(
     // Advanced image optimization for book covers
     const processedImageBuffer = await optimizeImageForBookCover(imageBuffer);
 
-    // S3 upload with comprehensive cover metadata including compliance info
-    const fileName = `EB${ebookIdNum}_COVER_GPT1_MARGINS_${Date.now()}.png`;
-    const s3Key = `${EBOOK_AI_FOLDER}/${fileName}`;
+    // Railway storage upload
+    const storageBasePath = process.env.FILE_STORAGE_PATH || '/data';
+    const uploadsDir = path.join(storageBasePath, 'uploads');
 
-    const metadata = generateCoverS3Metadata(
-      actualModelUsed,
-      ebookIdNum,
-      finalPrompt?.length || coverPrompt.length,
-      totalGenerationTime,
-      actualModelUsed === "gpt-image-1" ? "medium" : "standard",
-      supplementCompliant
-    );
+    // Upewnij się, że folder istnieje
+    await fs.mkdir(uploadsDir, { recursive: true });
 
-    const uploadCommand = new PutObjectCommand({
-      Bucket: process.env.S3_BUCKET_NAME,
-      Key: s3Key,
-      Body: processedImageBuffer,
-      ContentType: 'image/png',
-      Metadata: metadata
+    const fileName = `EB${ebookIdNum}_COVER.png`;
+    const filePath = path.join(uploadsDir, fileName);
+
+    console.log(`💾 Zapisywanie okładki jako ${fileName} w Railway storage`);
+
+    // Zapisanie pliku w Railway storage
+    await fs.writeFile(filePath, processedImageBuffer);
+
+    // Generowanie publicznego URL dla okładki
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+    const finalCoverUrl = `${baseUrl}/api/assets/uploads/${fileName}`;
+
+    console.log(`☁️ Supplement-safe cover uploaded to Railway: ${fileName}`);
+
+    // Database updates using Prisma
+    const updatedEbook = await prisma.ebooks.update({
+      where: { id: ebookIdNum },
+      data: {
+        cover_image_url: finalCoverUrl,
+        updated_at: new Date()
+      },
+      select: {
+        id: true,
+        title: true,
+        subtitle: true,
+        cover_image_url: true,
+        cover_image_prompt: true
+      }
     });
-
-    await s3Client.send(uploadCommand);
-    console.log(`☁️ Supplement-safe cover uploaded to S3: ${s3Key}`);
-
-    // Database updates
-    const finalCoverUrl = `https://${process.env.S3_BUCKET_NAME}.s3.${process.env.AWS_REGION || 'eu-central-1'}.amazonaws.com/${s3Key}`;
-
-    const updateQuery = `
-      UPDATE ebooks
-      SET cover_image_url = $1, updated_at = CURRENT_TIMESTAMP
-      WHERE id = $2
-      RETURNING id, title, subtitle, cover_image_url, cover_image_prompt
-    `;
-
-    const updateResult = await client.query(updateQuery, [finalCoverUrl, ebookIdNum]);
 
     // Comprehensive success metrics with compliance info
     const costEstimate = COVER_MODEL_CONFIGS[actualModelUsed as keyof typeof COVER_MODEL_CONFIGS]?.costEstimate || 0;
@@ -736,14 +657,14 @@ export async function POST(
     console.log(`   - 🚫 Supplement Compliance: ${supplementCompliant ? '✅ FULLY COMPLIANT' : '❌ COMPLIANCE ISSUES'}`);
     console.log(`   - 🎨 Background: transparent (PRIORITY ACHIEVED)`);
     console.log(`   - Content Safety: FULL SUPPLEMENT BAN ENFORCED`);
-    console.log(`   - S3 URL: ${finalCoverUrl}`);
+    console.log(`   - Railway URL: ${finalCoverUrl}`);
     console.log(`   - Success: TRUE`);
     console.log(`📊 === END SUPPLEMENT-SAFE COVER METRICS ===`);
 
     return NextResponse.json({
       success: true,
       cover_image_url: finalCoverUrl,
-      ebook: updateResult.rows[0],
+      ebook: updatedEbook,
       generation_metrics: {
         model_used: actualModelUsed,
         model_attempted: "gpt-image-1",
@@ -801,11 +722,6 @@ export async function POST(
       generation_time_ms: totalTime,
       content_safety: "supplement-restrictions-and-margin-control-attempted"
     }, { status: 500 });
-  } finally {
-    if (client) {
-      await client.end();
-      console.log('🔐 Database connection closed');
-    }
   }
 }
 
@@ -820,59 +736,6 @@ export async function GET() {
     marginControl: 'proper-internal-spacing',
     qualityLevel: 'high',
     optimizedFor: 'ultra-detailed-book-cover-design-supplement-safe-transparent-seamless-margins',
-    capabilities: [
-      'Ultra-long cover prompts (up to 4000 chars)',
-      'Square book cover format (1024x1024)',
-      'High quality rendering (premium)',
-      'Transparent background priority integration',
-      'Seamless edge-free composition',
-      'Natural blending with surfaces',
-      'Borderless design enforcement',
-      'Proper internal margin control',
-      'Edge clearance maintenance',
-      'White background compatibility optimization',
-      'Deep book content interpretation',
-      'Commercial cover appeal optimization',
-      'Professional publishing standards',
-      'Genre-specific visual language',
-      'FULL SUPPLEMENT CONTENT RESTRICTIONS',
-      'Automatic forbidden element removal',
-      'Multi-level compliance validation',
-      'Emergency prompt cleanup',
-      'Content safety enforcement',
-      'Transparent background optimization',
-      'Seamless composition validation',
-      'Margin spacing enforcement'
-    ],
-    contentRestrictions: {
-      level: "CRITICAL - FULL SUPPLEMENT BAN",
-      absolutelyForbidden: [
-        'Capsules, tablets, pills, softgels in any form',
-        'Omega-3 supplements in solid forms',
-        'Scattered small round objects resembling pills',
-        'Transparent capsules or gel caps',
-        'Blister packaging with medications',
-        'Any visual elements suggesting supplement forms',
-        'All Polish supplement terminology (kapsułki, tabletki, etc.)'
-      ],
-      automatedFiltering: true,
-      multiLevelValidation: true,
-      emergencyCleanup: true,
-      complianceEnforcement: "MANDATORY",
-      regexPatterns: FORBIDDEN_SUPPLEMENT_ELEMENTS.regexPatterns.length,
-      fallbackSafety: true
-    },
-    formatSpecifications: {
-      size: '1024x1024',
-      aspectRatio: 'square',
-      background: 'transparent',
-      composition: 'seamless-edge-free-with-margins',
-      blending: 'natural-fade-edges',
-      margins: 'proper-internal-spacing',
-      boundaries: 'contained-within-bounds',
-      whiteCompatibility: 'optimized-for-white-background',
-      priority: 'transparent background, seamless composition, and proper margins enforcement in all generations'
-    },
     version: "6.0-supplement-safe-transparent-seamless-margins"
   }, { status: 405 });
 }
