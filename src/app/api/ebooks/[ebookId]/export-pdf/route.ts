@@ -68,14 +68,23 @@ export async function POST(
     // --- Generowanie HTML dla PDF z okładką ---
     const htmlContent = generateHTMLContent(title, subtitle, chapters, cover_image_url);
 
-    // --- Konfiguracja Puppeteer ---
+    // --- POPRAWIONA KONFIGURACJA PUPPETEER DLA RAILWAY ---
     let browser;
     let executablePath: string;
 
     const isProduction = process.env.NODE_ENV === 'production';
 
+    console.log(`🔍 Environment: ${isProduction ? 'PRODUCTION' : 'DEVELOPMENT'}`);
+    console.log(`🔍 Platform: ${process.platform}`);
+
     if (isProduction) {
-      executablePath = await chromium.executablePath();
+      try {
+        executablePath = await chromium.executablePath();
+        console.log(`✅ Chromium path (production): ${executablePath}`);
+      } catch (error) {
+        console.error(`❌ Failed to get chromium path:`, error);
+        throw new Error('Cannot find Chromium executable in production');
+      }
     } else {
       const localPaths = [
         'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
@@ -84,19 +93,48 @@ export async function POST(
         '/usr/bin/google-chrome',
       ];
       executablePath = localPaths.find((p) => fs.existsSync(p)) || '';
+      console.log(`🔍 Local Chrome path: ${executablePath}`);
     }
 
     if (!executablePath) {
-      executablePath = await chromium.executablePath();
+      console.log(`⚠️ No executable path found, trying chromium fallback...`);
+      try {
+        executablePath = await chromium.executablePath();
+        console.log(`✅ Fallback chromium path: ${executablePath}`);
+      } catch (error) {
+        console.error(`❌ Fallback chromium failed:`, error);
+        throw new Error('Cannot find any Chrome/Chromium executable');
+      }
     }
+
+    console.log(`🚀 Final executable path: ${executablePath}`);
 
     console.log(`🚀 Uruchamianie Puppeteer (${isProduction ? 'produkcja' : 'rozwój'})`);
 
+    const launchArgs = isProduction ? [
+      ...chromium.args,
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-web-security',
+      '--disable-features=VizDisplayCompositor',
+      '--disable-extensions',
+      '--disable-plugins',
+      '--disable-images',
+      '--disable-javascript',
+      '--disable-fonts',
+      '--no-first-run',
+      '--disable-default-apps'
+    ] : chromium.args;
+
+    console.log(`🚀 Launch args: ${launchArgs.join(' ')}`);
+
     browser = await puppeteer.launch({
-      args: chromium.args,
+      args: launchArgs,
       defaultViewport: chromium.defaultViewport,
       executablePath,
       headless: true,
+      ignoreDefaultArgs: false,
+      timeout: 30000
     });
 
     const page = await browser.newPage();
