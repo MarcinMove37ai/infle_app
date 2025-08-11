@@ -6,6 +6,7 @@ import { prisma } from '@/lib/prisma';
 import sharp from 'sharp';
 import fs from 'fs/promises';
 import path from 'path';
+import axios from 'axios';
 
 // 🚫 KRYTYCZNE OGRANICZENIA GRAFICZNE - ZAKAZ KAPSUŁEK I STAŁYCH FORM SUPLEMENTÓW
 const FORBIDDEN_SUPPLEMENT_ELEMENTS = {
@@ -432,29 +433,29 @@ export async function POST(
     // ETAP 1: Generate ultra-detailed cover prompt via Claude (with supplement restrictions)
     console.log('🔄 === GENERATING ULTRA-DETAILED SUPPLEMENT-SAFE COVER PROMPT ===');
 
-    const promptResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/anthropic/generate-cover-prompt`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-internal-request': 'true'  // ✅ DODANY HEADER WEWNĘTRZNY
-      },
-      body: JSON.stringify({
+    let promptData;
+    try {
+      const promptResponse = await axios.post(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/anthropic/generate-cover-prompt`, {
         title: ebookTitle,
         subtitle: ebookSubtitle,
         chapters: chapters
-      }),
-    });
+      }, {
+        headers: {
+          'Content-Type': 'application/json',
+          'x-internal-request': 'true'  // ✅ DODANY HEADER WEWNĘTRZNY
+        },
+        timeout: 30000 // 30 sekund timeout
+      });
 
-    if (!promptResponse.ok) {
-      const errorData = await promptResponse.json();
-      console.error('❌ Claude cover prompt generation failed:', errorData);
+      promptData = promptResponse.data; // axios automatycznie parsuje JSON
+    } catch (error) {
+      console.error('❌ Claude cover prompt generation failed:', error.response?.data || error.message);
       return NextResponse.json({
         error: 'Failed to generate cover prompt',
-        details: errorData.error
+        details: error.response?.data?.error || error.message
       }, { status: 500 });
     }
 
-    const promptData = await promptResponse.json();
     coverPrompt = promptData.coverPrompt;
 
     console.log(`✅ Ultra-detailed supplement-safe cover prompt generated:`);
