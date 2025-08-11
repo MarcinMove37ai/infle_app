@@ -13,7 +13,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 COPY prisma ./prisma/
 
-# Instalacja zależności (postinstall teraz znajdzie schema.prisma)
+# Instalacja zależności
 RUN npm ci
 
 # Kopiowanie reszty kodu i budowanie
@@ -31,14 +31,21 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
-# Kopiowanie zależności produkcyjnych
+# Kopiowanie package files
 COPY --from=builder /app/package*.json ./
+
+# Kopiowanie schema Prisma PRZED instalacją npm
+COPY --from=builder /app/prisma ./prisma/
+
+# Instalacja zależności produkcyjnych
 RUN npm ci --omit=dev
+
+# 🔥 TUTAJ JEST KLUCZ: Generowanie Prisma Client w runtime stage
+RUN npx prisma generate
 
 # Kopiowanie zbudowanej aplikacji i potrzebnych plików
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
-COPY --from=builder /app/prisma ./prisma
 
 # Utworzenie dedykowanego użytkownika i grupy
 RUN addgroup --system --gid 1001 nodejs
