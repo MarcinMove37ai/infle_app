@@ -9,13 +9,12 @@ ARG NEXTAUTH_URL
 
 WORKDIR /app
 
-# Kopiowanie i instalacja zależności
+# Kopiowanie package files i schema PRZED npm ci
 COPY package.json package-lock.json ./
-RUN npm ci
-
-# Kopiowanie schematu i generowanie klienta Prisma
 COPY prisma ./prisma/
-RUN npx prisma generate
+
+# Instalacja zależności (postinstall teraz znajdzie schema.prisma)
+RUN npm ci
 
 # Kopiowanie reszty kodu i budowanie
 COPY . .
@@ -25,10 +24,8 @@ RUN npm run build
 # Etap 2: Uruchomienie produkcyjne (runner)
 FROM node:18-alpine
 
-# --- NOWA LINIA ---
-# Instalacja `su-exec` - narzędzia do zmiany użytkownika, którego brakowało
+# Instalacja `su-exec` - narzędzia do zmiany użytkownika
 RUN apk add --no-cache su-exec
-# --- KONIEC ZMIANY ---
 
 WORKDIR /app
 ENV NODE_ENV=production
