@@ -112,11 +112,18 @@ const COVER_PROMPT_CONFIG = {
 };
 
 export async function POST(request: Request) {
-  const session = await getServerSession(authOptions);
+  // ✅ SPRAWDŹ CZY TO WEWNĘTRZNE WYWOŁANIE
+  const isInternalRequest = request.headers.get('x-internal-request') === 'true';
 
-  if (!session || !session.user) {
-    return NextResponse.json({ error: 'Brak autoryzacji' }, { status: 401 });
+  if (!isInternalRequest) {
+    const session = await getServerSession(authOptions);
+    if (!session || !session.user) {
+      return NextResponse.json({ error: 'Brak autoryzacji' }, { status: 401 });
+    }
+  } else {
+    console.log('🔗 Internal request detected - skipping session auth');
   }
+
   console.log('🎨 === GPT-IMAGE-1 COVER PROMPT GENERATOR ===');
 
   try {

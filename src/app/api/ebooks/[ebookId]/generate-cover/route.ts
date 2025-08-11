@@ -436,7 +436,7 @@ export async function POST(
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Cookie': request.headers.get('Cookie') || ''
+        'x-internal-request': 'true'  // ✅ DODANY HEADER WEWNĘTRZNY
       },
       body: JSON.stringify({
         title: ebookTitle,

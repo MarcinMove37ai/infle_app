@@ -429,22 +429,22 @@ export async function POST(
       });
 
       const promptResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/anthropic/generate-image-prompt`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Cookie': request.headers.get('Cookie') || ''
-        },
-        body: JSON.stringify({
-          title: ebookTitle,
-          subtitle: ebookSubtitle,
-          chapterTitle: chapterTitle,
-          chapterContent: chapterContent,
-          allChapters: allChapters,
-          targetModel: "gpt-image-1",
-          forceRegenerate: forceRegenerate, // ✅ PRZEKAZANIE PARAMETRU REGENERACJI
-          enableTransparency: true, // 🔥 Wymuszenie transparentności
-          maximumQuality: true // 🔥 NOWY: Wymuszenie maksymalnej jakości
-        }),
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-internal-request': 'true'  // ✅ DODANY HEADER WEWNĘTRZNY
+          },
+          body: JSON.stringify({
+            title: ebookTitle,
+            subtitle: ebookSubtitle,
+            chapterTitle: chapterTitle,
+            chapterContent: chapterContent,
+            allChapters: allChapters,
+            targetModel: "gpt-image-1",
+            forceRegenerate: forceRegenerate,
+            enableTransparency: true,
+            maximumQuality: true
+          }),
       });
 
       if (!promptResponse.ok) {
