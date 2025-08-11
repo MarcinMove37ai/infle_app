@@ -425,7 +425,7 @@ export async function POST(
       const allChapters = await prisma.ebook_chapters.findMany({
         where: { ebook_id: ebookIdNum },
         select: { title: true },
-        orderBy: { chapter_number: 'asc' }
+        orderBy: { position: 'asc' }
       });
 
       const promptResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/anthropic/generate-image-prompt`, {
@@ -526,7 +526,7 @@ export async function POST(
 
     let finalViolations: string[] = [];
     forbiddenTerms.forEach(term => {
-      if (imagePrompt.toLowerCase().includes(term.toLowerCase())) {
+      if (imagePrompt && imagePrompt.toLowerCase().includes(term.toLowerCase())) {
         finalViolations.push(term);
       }
     });
@@ -537,7 +537,7 @@ export async function POST(
       console.error(`   - Prompt contains regulatory violations that must be removed`);
 
       // Automatycznie czyść prompt z zabronionych terminów
-      let cleanedImagePrompt = imagePrompt;
+      let cleanedImagePrompt = imagePrompt || '';
       forbiddenTerms.forEach(term => {
         const regex = new RegExp(`\\b${term}[s]?\\b`, 'gi');
         cleanedImagePrompt = cleanedImagePrompt.replace(regex, 'glass bottles with liquid supplements and measuring cups');
@@ -550,7 +550,12 @@ export async function POST(
     }
 
     // 🔥 SPRAWDZENIE MAKSYMALNEJ COMPLIANCE TRANSPARENTNOŚCI
-    const maxQualityMetrics = calculateMaximumQualityMetrics(imagePrompt, chapterTitle, true);
+    const maxQualityMetrics = imagePrompt ? calculateMaximumQualityMetrics(imagePrompt, chapterTitle, true) : {
+      score: 0,
+      meetsMaximumStandard: false,
+      lengthUtilization: 0,
+      elements: {}
+    };
     const maximumQualityAchieved = maxQualityMetrics.meetsMaximumStandard;
 
     console.log(`🏆 === MAXIMUM QUALITY COMPLIANCE CHECK ===`);
@@ -568,6 +573,10 @@ export async function POST(
 
     // ETAP 2: GPT-Image-1 Generation with MAXIMUM transparency optimization + Omega-3 compliance
     console.log(`🚀 === GPT-IMAGE-1 MAXIMUM QUALITY TRANSPARENT GENERATION ===`);
+
+    if (!imagePrompt) {
+      return NextResponse.json({ error: 'No image prompt available for generation' }, { status: 400 });
+    }
 
     let modelToUse = "gpt-image-1";
     let actualModelUsed = modelToUse;
@@ -719,7 +728,7 @@ export async function POST(
     console.log(`   - Model: ${actualModelUsed} ${actualModelUsed !== "gpt-image-1" ? '(fallback)' : '(primary)'}`);
     console.log(`   - Total time: ${totalGenerationTime}ms`);
     console.log(`   - Cost: ${costEstimate}`);
-    console.log(`   - Prompt length: ${finalPrompt?.length || imagePrompt.length}/${MODEL_CONFIGS["gpt-image-1"].maxPromptLength} chars`);
+    console.log(`   - Prompt length: ${finalPrompt?.length || imagePrompt?.length || 0}/${MODEL_CONFIGS["gpt-image-1"].maxPromptLength} chars`);
     console.log(`   - Image size: ${(processedImageBuffer.length / 1024).toFixed(1)}KB`);
     console.log(`   - Format: ${validSize} (maximum quality transparent with ultra-seamless edges)`);
     console.log(`   - Railway URL: ${finalImageUrl}`);
@@ -740,8 +749,8 @@ export async function POST(
         model_attempted: "gpt-image-1",
         generation_time_ms: totalGenerationTime,
         cost_estimate: costEstimate,
-        prompt_length: finalPrompt?.length || imagePrompt.length,
-        prompt_utilization: `${(((finalPrompt?.length || imagePrompt.length)/4000)*100).toFixed(1)}%`,
+        prompt_length: finalPrompt?.length || (imagePrompt?.length || 0),
+        prompt_utilization: `${(((finalPrompt?.length || imagePrompt?.length || 0)/4000)*100).toFixed(1)}%`,
         image_size_kb: Math.round(processedImageBuffer.length / 1024),
         optimization_level: 'gpt-image-1-maximum-quality-transparent-ultra-seamless',
         fallback_used: actualModelUsed !== "gpt-image-1",
@@ -756,7 +765,7 @@ export async function POST(
         force_regenerate_used: forceRegenerate, // ✅ DODANE dla debugowania
         prompt_was_regenerated: !existingImagePrompt || forceRegenerate // ✅ DODANE
       },
-      prompt_used: imagePrompt,
+      prompt_used: imagePrompt || '',
       prompt_was_generated: !existingImagePrompt || forceRegenerate,
       // 🎯 DODAJ TIMESTAMP dla cache busting (jak w okładkach)
       generation_timestamp: Date.now(),

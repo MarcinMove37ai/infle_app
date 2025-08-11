@@ -401,7 +401,7 @@ export async function POST(
             content: true
           },
           orderBy: {
-            chapter_number: 'asc'
+            position: 'asc'
           }
         }
       }
@@ -426,7 +426,8 @@ export async function POST(
 
     console.log(`📚 Found ${chapters.length} chapters for cover context`);
 
-    let coverPrompt = existingCoverPrompt;
+    // 🔧 FIX: Dodaj fallback dla null coverPrompt
+    let coverPrompt = existingCoverPrompt || '';
 
     // ETAP 1: Generate ultra-detailed cover prompt via Claude (with supplement restrictions)
     console.log('🔄 === GENERATING ULTRA-DETAILED SUPPLEMENT-SAFE COVER PROMPT ===');
@@ -483,6 +484,7 @@ export async function POST(
     let modelToUse = "gpt-image-1";
     let actualModelUsed = modelToUse;
     let imageResponse;
+    // 🔧 FIX: Teraz coverPrompt już jest string (nie null)
     let finalPrompt: string = coverPrompt;
     let supplementCompliant = false;
 

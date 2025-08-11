@@ -300,7 +300,7 @@ export async function GET(
 
     const chapterCount = ebook.ebook_chapters.length;
 
-    // Analyze cover readiness with margin specifications
+    // Analyze cover readiness with margin specifications - POPRAWKA TypeScript
     const coverAnalysis = {
       prompt_ready: !!ebook.cover_image_prompt,
       image_ready: !!ebook.cover_image_url,
@@ -308,14 +308,14 @@ export async function GET(
       prompt_length: ebook.cover_image_prompt?.length || 0,
       chapters_available: chapterCount > 0,
       ready_for_generation: chapterCount > 0,
-      estimated_quality: ebook.cover_image_prompt?.length > 3000 ? 'premium' :
-                        ebook.cover_image_prompt?.length > 2000 ? 'high' :
-                        ebook.cover_image_prompt?.length > 1000 ? 'medium' : 'basic',
-      has_margin_optimization: ebook.cover_image_prompt?.toLowerCase().includes('margin') ||
-                               ebook.cover_image_prompt?.toLowerCase().includes('spacing'),
-      has_supplement_restrictions: ebook.cover_image_prompt?.toLowerCase().includes('forbidden') ||
-                                   ebook.cover_image_prompt?.toLowerCase().includes('prohibited'),
-      format_compliance: ebook.cover_image_prompt?.includes('1024x1024') ? 'square' : 'unknown'
+      estimated_quality: (ebook.cover_image_prompt?.length || 0) > 3000 ? 'premium' :
+                        (ebook.cover_image_prompt?.length || 0) > 2000 ? 'high' :
+                        (ebook.cover_image_prompt?.length || 0) > 1000 ? 'medium' : 'basic',
+      has_margin_optimization: (ebook.cover_image_prompt?.toLowerCase().includes('margin') || false) ||
+                               (ebook.cover_image_prompt?.toLowerCase().includes('spacing') || false),
+      has_supplement_restrictions: (ebook.cover_image_prompt?.toLowerCase().includes('forbidden') || false) ||
+                                   (ebook.cover_image_prompt?.toLowerCase().includes('prohibited') || false),
+      format_compliance: (ebook.cover_image_prompt?.includes('1024x1024') || false) ? 'square' : 'unknown'
     };
 
     console.log(`📊 Margin-optimized cover status analysis:`);

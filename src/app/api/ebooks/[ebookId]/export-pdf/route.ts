@@ -46,10 +46,10 @@ export async function POST(
             title: true,
             content: true,
             image_url: true,
-            chapter_number: true
+            position: true
           },
           orderBy: {
-            chapter_number: 'asc'
+            position: 'asc'
           }
         }
       }
@@ -134,7 +134,7 @@ export async function POST(
     await browser.close();
 
     let fileName = title.replace(/[^a-z0-9]/gi, '_').toLowerCase();
-    if (subtitle) {
+    if (subtitle && subtitle.trim()) {
       fileName += '_' + subtitle.replace(/[^a-z0-9]/gi, '_').toLowerCase();
     }
     fileName = fileName.substring(0, 100);
@@ -165,7 +165,7 @@ export async function POST(
 //                    FUNKCJE POMOCNICZE - INTELIGENTNA KONTROLA GRAFIK
 // ========================================================================
 
-function generateHTMLContent(title: string, subtitle: string, chapters: any[], coverImageUrl?: string): string {
+function generateHTMLContent(title: string, subtitle: string | null, chapters: any[], coverImageUrl?: string | null): string {
   return `
     <!DOCTYPE html>
     <html lang="pl">
@@ -786,10 +786,10 @@ function generateAdvancedCSS(ebookTitle: string): string {
   `;
 }
 
-function generateCoverPage(title: string, subtitle: string, coverImageUrl?: string): string {
+function generateCoverPage(title: string, subtitle: string | null, coverImageUrl?: string | null): string {
   const titleClass = title.length > 60 ? 'cover-title very-long' : 'cover-title';
 
-  if (coverImageUrl) {
+  if (coverImageUrl && coverImageUrl.trim()) {
     return `
       <div class="cover-page">
         <img src="https://ebooks-in.s3.eu-central-1.amazonaws.com/ebookAI/ebook_logo.png" alt="Logo Health Pro System" class="cover-logo" />
@@ -808,7 +808,7 @@ function generateCoverPage(title: string, subtitle: string, coverImageUrl?: stri
           />
         </div>
 
-        ${subtitle ? `
+        ${subtitle && subtitle.trim() ? `
         <div class="cover-subtitle-section">
           <h2 class="cover-subtitle">${escapeHtml(subtitle)}</h2>
         </div>
@@ -816,7 +816,7 @@ function generateCoverPage(title: string, subtitle: string, coverImageUrl?: stri
 
         <div class="cover-fallback" style="display: none;">
           <h1 class="${titleClass}">${escapeHtml(title)}</h1>
-          ${subtitle ? `<h2 class="cover-subtitle">${escapeHtml(subtitle)}</h2>` : ''}
+          ${subtitle && subtitle.trim() ? `<h2 class="cover-subtitle">${escapeHtml(subtitle)}</h2>` : ''}
         </div>
       </div>
     `;
@@ -827,7 +827,7 @@ function generateCoverPage(title: string, subtitle: string, coverImageUrl?: stri
 
         <div class="cover-fallback" style="display: flex;">
           <h1 class="${titleClass}">${escapeHtml(title)}</h1>
-          ${subtitle ? `<h2 class="cover-subtitle">${escapeHtml(subtitle)}</h2>` : ''}
+          ${subtitle && subtitle.trim() ? `<h2 class="cover-subtitle">${escapeHtml(subtitle)}</h2>` : ''}
         </div>
       </div>
     `;
