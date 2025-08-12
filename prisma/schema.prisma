@@ -32,11 +32,44 @@ model User {
   linkedinAnalyses    LinkedInCreatorAnalysis[]
   instagramProfile    InstagramProfileCheck?       @relation(fields: [instagramProfileId], references: [id])
   linkedinProfile     LinkedInProfileCheck?        @relation(fields: [linkedinProfileId], references: [id])
-    // --- DODAJ TĘ LINIĘ ---
   ebooks              ebooks[]
-  // --- KONIEC ZMIANY ---
+
+  // === NOWE POLA: PROFIL AUTORA ===
+  authorDisplayName   String?  // Nazwa wyświetlana na okładkach ebooków
+  authorLogoUrl       String?  // Link do loga/zdjęcia autora
+
+  // === NOWE POLA: USTAWIENIA AI - TEKST ===
+  textAiProvider      String?  @default("anthropic")
+  textAiModel         String?  @default("claude-3-haiku")
+
+  // === NOWE POLA: USTAWIENIA AI - OBRAZY ===
+  imageAiProvider     String?  @default("openai")
+  imageAiModel        String?  @default("dall-e-3")
+
+  // === NOWA RELACJA: KLUCZE API ===
+  apiKeys             UserApiKey[]
 
   @@map("users")
+}
+
+model UserApiKey {
+  id           String   @id @default(cuid())
+  userId       String
+  provider     String   // "anthropic", "openai", "gemini"
+  encryptedKey String   // AES-256 zaszyfrowany klucz API
+  keyHash      String   // SHA-256 hash klucza do weryfikacji integralności
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relacja z użytkownikiem
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Ograniczenia: jeden klucz na provider na użytkownika
+  @@unique([userId, provider])
+  @@index([userId])
+  @@index([provider])
+  @@map("user_api_keys")
 }
 
 model InstagramProfileCheck {
@@ -216,10 +249,8 @@ model ebooks {
   cover_image_url                 String?
   cover_image_prompt              String?
   ebook_chapters                  ebook_chapters[]
-  // --- DODAJEMY DOKŁADNIE TO, CZEGO BRAKUJE ---
   userId                          String?
   user                            User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
-  // --- KONIEC ZMIANY ---
 
   @@index([x_amz_meta_user_id], map: "idx_ebooks_user_id")
 }

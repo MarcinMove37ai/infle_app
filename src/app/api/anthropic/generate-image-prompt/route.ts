@@ -2,6 +2,7 @@
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { NextResponse } from 'next/server';
+import { getApiKeyForEndpoint, getUserAiSettings } from '@/lib/user-api-keys';
 
 export const runtime = 'nodejs';
 
@@ -111,6 +112,49 @@ export async function POST(request: Request) {
       maximumQuality = true // 🔥 NOWY: wymuszenie maksymalnej jakości
     } = body;
 
+    // ✅ NOWA LOGIKA: Pobierz klucz API użytkownika z fallback na env var (tylko jeśli nie jest internal request)
+    let anthropicApiKey: string | null = null;
+    let keySource: 'user' | 'env' | 'none' = 'none';
+    let userAiSettings: any = null;
+    let modelToUse: string = 'claude-3-5-haiku-20241022'; // fallback default
+
+    if (!isInternalRequest) {
+      const session = await getServerSession(authOptions);
+      const userId = session?.user?.id;
+
+      if (userId) {
+        const { apiKey, source } = await getApiKeyForEndpoint(
+          userId,
+          'anthropic',
+          'ANTHROPIC_API_KEY'
+        );
+        anthropicApiKey = apiKey;
+        keySource = source;
+
+        // Pobierz ustawienia AI użytkownika
+        userAiSettings = await getUserAiSettings(userId);
+        modelToUse = userAiSettings.textAiModel === 'claude-3-sonnet'
+          ? 'claude-sonnet-4-20250514'
+          : 'claude-3-5-haiku-20241022';
+
+        console.log(`🤖 Używam modelu: ${modelToUse} (provider: ${userAiSettings.textAiProvider})`);
+        console.log(`🔑 Źródło klucza API: ${keySource} ${keySource === 'user' ? '(klucz użytkownika)' : '(klucz systemowy)'}`);
+      }
+    } else {
+      // Internal request - use env var only
+      anthropicApiKey = process.env.ANTHROPIC_API_KEY ?? null;
+      keySource = anthropicApiKey ? 'env' : 'none';
+      console.log(`🔑 Internal request - using env var: ${keySource}`);
+    }
+
+    if (!anthropicApiKey) {
+      console.error('❌ Brak dostępnego klucza Anthropic API (ani użytkownika, ani env var)');
+      return NextResponse.json(
+        { error: 'Błąd konfiguracji - brak klucza API Anthropic' },
+        { status: 500 }
+      );
+    }
+
     // ✅ SZCZEGÓŁOWE LOGOWANIE PARAMETRÓW Z MAKSYMALNĄ JAKOŚCIĄ I TRANSPARENTNOŚCIĄ
     console.log(`📥 === REQUEST ANALYSIS WITH MAXIMUM QUALITY & TRANSPARENCY ===`);
     console.log(`   - Title: "${title}"`);
@@ -120,6 +164,8 @@ export async function POST(request: Request) {
     console.log(`   - Force regenerate: ${forceRegenerate}`);
     console.log(`   - Enable transparency: ${enableTransparency}`);
     console.log(`   - Maximum quality: ${maximumQuality}`);
+    console.log(`   - Model for prompting: ${modelToUse}`);
+    console.log(`   - Key source: ${keySource}`);
     console.log(`   - Target prompt length: ${PROMPT_CONFIGS[targetModel as keyof typeof PROMPT_CONFIGS]?.targetLength || 0} chars (${((PROMPT_CONFIGS[targetModel as keyof typeof PROMPT_CONFIGS]?.targetLength || 0)/4000*100).toFixed(1)}% utilization)`);
     console.log(`   - All chapters count: ${allChapters?.length || 0}`);
 
@@ -128,12 +174,6 @@ export async function POST(request: Request) {
         { error: 'Nieprawidłowe dane wejściowe. Wymagany tytuł e-booka, tytuł rozdziału i treść.' },
         { status: 400 }
       );
-    }
-
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) {
-      console.error('ANTHROPIC_API_KEY nie jest zdefiniowany');
-      return NextResponse.json({ error: 'Błąd konfiguracji serwera' }, { status: 500 });
     }
 
     const qualityMode = maximumQuality ? 'MAKSYMALNEJ JAKOŚCI' : 'STANDARDOWEJ';
@@ -339,7 +379,7 @@ NAPISZ TERAZ ULTRA-DŁUGI ${maximumQuality ? 'MAKSYMALNEJ JAKOŚCI' : ''} ${enab
     const temperature = forceRegenerate ? 0.4 : 0.3; // Wysoka dla regeneracji, niska dla standardu
 
     const requestBody: AnthropicRequest = {
-      model: 'claude-3-haiku-20240307',
+      model: modelToUse, // ✅ ZMIANA: Używaj modelu z ustawień użytkownika
       max_tokens: 1800,  // 🔥 ZWIĘKSZONE dla maksymalnych promptów (było 1500)
       temperature: temperature, // ✅ ZMIENNA TEMPERATURA
       messages: [{ role: 'user', content: prompt }]
@@ -349,6 +389,7 @@ NAPISZ TERAZ ULTRA-DŁUGI ${maximumQuality ? 'MAKSYMALNEJ JAKOŚCI' : ''} ${enab
     console.log(`   - Temperature: ${temperature} (${forceRegenerate ? 'HIGH for diversity' : 'LOW for precision'})`);
     console.log(`   - Max tokens: ${requestBody.max_tokens} (increased for maximum prompts)`);
     console.log(`   - Model: ${requestBody.model}`);
+    console.log(`   - Key source: ${keySource}`);
     console.log(`   - Prompt length: ${prompt.length} chars`);
     console.log(`   - Transparency enabled: ${enableTransparency}`);
     console.log(`   - Maximum quality enabled: ${maximumQuality}`);
@@ -361,7 +402,7 @@ NAPISZ TERAZ ULTRA-DŁUGI ${maximumQuality ? 'MAKSYMALNEJ JAKOŚCI' : ''} ${enab
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': apiKey,
+        'x-api-key': anthropicApiKey, // ✅ ZMIANA: Używaj pobranego klucza
         'anthropic-version': '2023-06-01'
       },
       body: JSON.stringify(requestBody)
@@ -370,6 +411,7 @@ NAPISZ TERAZ ULTRA-DŁUGI ${maximumQuality ? 'MAKSYMALNEJ JAKOŚCI' : ''} ${enab
     if (!response.ok) {
       const errorText = await response.text();
       console.error(`❌ Błąd API Anthropic:`, errorText);
+      console.error(`Status: ${response.status}, klucz z: ${keySource}`);
       return NextResponse.json({ error: `Błąd podczas generowania maksymalnego promptu: ${errorText}` }, { status: response.status });
     }
 
@@ -634,6 +676,8 @@ NAPISZ TERAZ ULTRA-DŁUGI ${maximumQuality ? 'MAKSYMALNEJ JAKOŚCI' : ''} ${enab
     console.log(`   🎨 Transparency Mode: ${enableTransparency ? '✅ ULTRA-SEAMLESS ENFORCED' : '❌ Standard background'}`);
     console.log(`   🏆 Maximum Quality Mode: ${maximumQuality ? '✅ MUSEUM-GRADE ENFORCED' : '❌ Standard quality'}`);
     console.log(`   🌡️ Temperature Used: ${temperature}`);
+    console.log(`   🤖 Model Used: ${modelToUse}`);
+    console.log(`   🔑 Key Source: ${keySource}`);
 
     // KRYTYCZNE - 70%
     console.log(`   === CRITICAL ELEMENTS (70% weight) ===`);
@@ -690,7 +734,7 @@ NAPISZ TERAZ ULTRA-DŁUGI ${maximumQuality ? 'MAKSYMALNEJ JAKOŚCI' : ''} ${enab
         console.warn(`⚠️ IMPORTANT: Missing chapter reference - less targeted illustration`);
       }
     } else {
-      console.log(`✅ HIGH QUALITY ${maximumQuality ? 'MAXIMUM GRADE ' : ''}${enableTransparency ? 'ULTRA-SEAMLESS TRANSPARENT ' : ''}PROMPT! Ready for GPT-Image-1`);
+      console.log(`✅ HIGH QUALITY ${maximumQuality ? 'MAXIMUM GRADE ' : ''}${enableTransparency ? 'ULTRA-SEAMLESS TRANSPARENT ' : ''}PROMPT! Ready for GPT-Image-1 (${keySource})`);
     }
 
     console.log(`📝 Preview: ${imagePrompt.substring(0, 200)}...`);
@@ -710,6 +754,10 @@ NAPISZ TERAZ ULTRA-DŁUGI ${maximumQuality ? 'MAKSYMALNEJ JAKOŚCI' : ''} ${enab
       transparencyApplied: enableTransparency,
       maximumQualityApplied: maximumQuality,
       variationElements: forceRegenerate ? variations : null,
+      // ✅ NOWE: Informacja o użytym modelu i źródle klucza
+      modelUsed: modelToUse,
+      keySource: keySource,
+      userAiSettings: !isInternalRequest ? userAiSettings : null,
       transparencyFeatures: enableTransparency ? {
         ultraSeamlessTransparentBackground: qualityMetrics.containsTransparentBackground,
         surfaceAdaptiveSeamlessComposition: qualityMetrics.containsSeamlessComposition,
@@ -760,6 +808,8 @@ export async function GET() {
       'Professional ebook optimization with ultra-seamless transparency',
       'Diversity generation for regeneration with maximum variation',
       'Variable temperature control for precision vs creativity',
+      'User API key integration with fallback to system keys',
+      'Respect for user AI model preferences (haiku vs sonnet)',
       'ULTRA-SEAMLESS TRANSPARENT BACKGROUND ENFORCEMENT',
       'Surface-adaptive seamless composition generation',
       'Mathematical precision natural blending capability',
@@ -811,6 +861,6 @@ export async function GET() {
       mathematicalPrecision: true,
       intelligentCorrection: true
     },
-    version: "3.0-maximum-quality-ultra-seamless-transparent-prompt-generation"
+    version: "4.0-user-api-keys-maximum-quality-ultra-seamless-transparent-prompt-generation"
   }, { status: 405 });
 }

@@ -2,6 +2,7 @@
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { NextResponse } from 'next/server';
+import { getApiKeyForEndpoint, getUserAiSettings } from '@/lib/user-api-keys';
 
 // Jawna definicja runtime
 export const runtime = 'nodejs';
@@ -37,6 +38,7 @@ export async function POST(request: Request) {
   if (!session || !session.user) {
     return NextResponse.json({ error: 'Brak autoryzacji' }, { status: 401 });
   }
+
   try {
     const body = await request.json();
     const { title, subtitle, description, scrapedContent } = body;
@@ -48,14 +50,30 @@ export async function POST(request: Request) {
       );
     }
 
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) {
-      console.error('ANTHROPIC_API_KEY nie jest zdefiniowany');
+    // ✅ NOWA LOGIKA: Pobierz klucz API użytkownika z fallback na env var
+    const userId = session.user.id;
+    const { apiKey: anthropicApiKey, source: keySource } = await getApiKeyForEndpoint(
+      userId,
+      'anthropic',
+      'ANTHROPIC_API_KEY'
+    );
+
+    if (!anthropicApiKey) {
+      console.error('❌ Brak dostępnego klucza Anthropic API (ani użytkownika, ani env var)');
       return NextResponse.json(
-        { error: 'Błąd konfiguracji serwera' },
+        { error: 'Błąd konfiguracji - brak klucza API Anthropic' },
         { status: 500 }
       );
     }
+
+    // ✅ NOWA LOGIKA: Pobierz ustawienia AI użytkownika
+    const userAiSettings = await getUserAiSettings(userId);
+    const modelToUse = userAiSettings.textAiModel === 'claude-3-sonnet'
+      ? 'claude-sonnet-4-20250514'
+      : 'claude-3-5-haiku-20241022'; // fallback dla haiku
+
+    console.log(`🤖 Używam modelu: ${modelToUse} (provider: ${userAiSettings.textAiProvider})`);
+    console.log(`🔑 Źródło klucza API: ${keySource} ${keySource === 'user' ? '(klucz użytkownika)' : '(klucz systemowy)'}`);
 
     // Funkcja do budowania sekcji kontekstu ze źródeł
     const buildSourcesContext = (sources: ScrapedContent[]): string => {
@@ -152,7 +170,7 @@ export async function POST(request: Request) {
     prompt += `]`;
 
     const requestBody: AnthropicRequest = {
-      model: 'claude-sonnet-4-20250514',
+      model: modelToUse, // ✅ ZMIANA: Używaj modelu z ustawień użytkownika
       max_tokens: 1500, // Zwiększone ze względu na więcej kontekstu
       temperature: 0.7,
       messages: [
@@ -169,18 +187,20 @@ export async function POST(request: Request) {
       subtitle: subtitle || 'brak',
       hasDescription: !!description,
       sourcesCount: scrapedContent?.length || 0,
-      promptLength: prompt.length
+      promptLength: prompt.length,
+      model: modelToUse,
+      keySource: keySource
     });
     console.log('=== PEŁNY PROMPT ===');
     console.log(prompt);
     console.log('=== KONIEC PROMPTU ===');
 
-    // Wykonaj zapytanie do API Anthropic
+    // Wykonaj zapytanie do API Anthropic z kluczem użytkownika lub systemowym
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': apiKey,
+        'x-api-key': anthropicApiKey, // ✅ ZMIANA: Używaj pobranego klucza
         'anthropic-version': '2023-06-01'
       },
       body: JSON.stringify(requestBody)
@@ -189,6 +209,7 @@ export async function POST(request: Request) {
     if (!response.ok) {
       const errorText = await response.text();
       console.error('Błąd API Anthropic:', errorText);
+      console.error(`Status: ${response.status}, klucz z: ${keySource}`);
       return NextResponse.json(
         { error: 'Błąd podczas generowania spisu treści' },
         { status: response.status }
@@ -254,14 +275,17 @@ export async function POST(request: Request) {
         title: item.title.trim()
       }));
 
-      console.log(`Pomyślnie wygenerowano spis treści z ${tocItemsWithIds.length} rozdziałami`);
+      console.log(`✅ Pomyślnie wygenerowano spis treści z ${tocItemsWithIds.length} rozdziałami (${keySource})`);
 
       return NextResponse.json({
         tocItems: tocItemsWithIds,
         contextUsed: {
           hasDescription: !!description,
           sourcesCount: scrapedContent?.length || 0,
-          hasSubtitle: !!subtitle
+          hasSubtitle: !!subtitle,
+          // ✅ NOWE: Informacja o użytym modelu i źródle klucza
+          modelUsed: modelToUse,
+          keySource: keySource
         }
       });
 

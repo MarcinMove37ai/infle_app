@@ -2,6 +2,7 @@
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { NextResponse } from 'next/server';
+import { getApiKeyForEndpoint, getUserAiSettings } from '@/lib/user-api-keys';
 
 export const runtime = 'nodejs';
 
@@ -37,6 +38,7 @@ export async function POST(request: Request) {
   if (!session || !session.user) {
     return NextResponse.json({ error: 'Brak autoryzacji' }, { status: 401 });
   }
+
   console.log('Otrzymano żądanie POST do /api/anthropic/generate-single-chapter');
 
   try {
@@ -51,14 +53,30 @@ export async function POST(request: Request) {
       );
     }
 
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) {
-      console.error('ANTHROPIC_API_KEY nie jest zdefiniowany');
+    // ✅ NOWA LOGIKA: Pobierz klucz API użytkownika z fallback na env var
+    const userId = session.user.id;
+    const { apiKey: anthropicApiKey, source: keySource } = await getApiKeyForEndpoint(
+      userId,
+      'anthropic',
+      'ANTHROPIC_API_KEY'
+    );
+
+    if (!anthropicApiKey) {
+      console.error('❌ Brak dostępnego klucza Anthropic API (ani użytkownika, ani env var)');
       return NextResponse.json(
-        { error: 'Błąd konfiguracji serwera' },
+        { error: 'Błąd konfiguracji - brak klucza API Anthropic' },
         { status: 500 }
       );
     }
+
+    // ✅ NOWA LOGIKA: Pobierz ustawienia AI użytkownika
+    const userAiSettings = await getUserAiSettings(userId);
+    const modelToUse = userAiSettings.textAiModel === 'claude-3-sonnet'
+      ? 'claude-sonnet-4-20250514'
+      : 'claude-3-5-haiku-20241022'; // fallback dla haiku
+
+    console.log(`🤖 Używam modelu: ${modelToUse} (provider: ${userAiSettings.textAiProvider})`);
+    console.log(`🔑 Źródło klucza API: ${keySource} ${keySource === 'user' ? '(klucz użytkownika)' : '(klucz systemowy)'}`);
 
     // Funkcja do budowania kontekstu spisu treści
     const buildTableOfContentsContext = (chapters: Chapter[]): string => {
@@ -134,7 +152,7 @@ export async function POST(request: Request) {
       };
     };
 
-    console.log(`Generowanie treści dla rozdziału: "${chapter.title}"`);
+    console.log(`📝 Generowanie treści dla rozdziału: "${chapter.title}"`);
 
     // Zbuduj rozszerzony prompt
     let prompt = `Napisz treść rozdziału "${chapter.title}" dla e-booka zatytułowanego "${title}"`;
@@ -201,7 +219,7 @@ export async function POST(request: Request) {
 
     // Przygotuj żądanie do Anthropic API
     const requestBody: AnthropicRequest = {
-      model: 'claude-3-haiku-20240307',
+      model: modelToUse, // ✅ ZMIANA: Używaj modelu z ustawień użytkownika
       max_tokens: 3000, // Zwiększone dla dłuższej treści
       temperature: 0.7,
       messages: [
@@ -220,7 +238,9 @@ export async function POST(request: Request) {
       hasDescription: !!description,
       sourcesCount: scrapedContent?.length || 0,
       totalChapters: allChapters?.length || 0,
-      promptLength: prompt.length
+      promptLength: prompt.length,
+      model: modelToUse,
+      keySource: keySource
     });
 
     // Opcjonalne: logowanie pełnego promptu do debugowania
@@ -228,12 +248,12 @@ export async function POST(request: Request) {
     // console.log(prompt);
     // console.log('=== KONIEC PROMPTU ROZDZIAŁU ===');
 
-    // Wykonaj zapytanie do API Anthropic
+    // Wykonaj zapytanie do API Anthropic z kluczem użytkownika lub systemowym
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': apiKey,
+        'x-api-key': anthropicApiKey, // ✅ ZMIANA: Używaj pobranego klucza
         'anthropic-version': '2023-06-01'
       },
       body: JSON.stringify(requestBody)
@@ -241,7 +261,8 @@ export async function POST(request: Request) {
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`Błąd API Anthropic dla rozdziału "${chapter.title}":`, errorText);
+      console.error(`❌ Błąd API Anthropic dla rozdziału "${chapter.title}":`, errorText);
+      console.error(`Status: ${response.status}, klucz z: ${keySource}`);
       return NextResponse.json(
         { error: `Błąd podczas generowania treści rozdziału: ${response.status}` },
         { status: response.status }
@@ -251,9 +272,9 @@ export async function POST(request: Request) {
     const responseData = await response.json();
     const chapterContent = responseData.content[0].text;
 
-    console.log(`Pomyślnie wygenerowano treść rozdziału "${chapter.title}" (${chapterContent.length} znaków)`);
+    console.log(`✅ Pomyślnie wygenerowano treść rozdziału "${chapter.title}" (${chapterContent.length} znaków, ${keySource})`);
 
-    // Zwróć wygenerowaną treść rozdziału
+    // Zwróć wygenerowaną treść rozdziału z dodatkowymi metadanymi
     return NextResponse.json({
       chapter: {
         id: chapter.id,
@@ -264,12 +285,15 @@ export async function POST(request: Request) {
         hasDescription: !!description,
         sourcesCount: scrapedContent?.length || 0,
         totalChapters: allChapters?.length || 0,
-        hasSubtitle: !!subtitle
+        hasSubtitle: !!subtitle,
+        // ✅ NOWE: Informacja o użytym modelu i źródle klucza
+        modelUsed: modelToUse,
+        keySource: keySource
       }
     });
 
   } catch (error) {
-    console.error('Błąd wewnętrzny serwera:', error);
+    console.error('❌ Błąd wewnętrzny serwera:', error);
     return NextResponse.json(
       {
         error: 'Błąd wewnętrzny serwera podczas generowania treści rozdziału',

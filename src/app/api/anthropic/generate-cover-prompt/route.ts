@@ -2,6 +2,7 @@
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { NextResponse } from 'next/server';
+import { getApiKeyForEndpoint, getUserAiSettings } from '@/lib/user-api-keys';
 
 export const runtime = 'nodejs';
 
@@ -137,15 +138,54 @@ export async function POST(request: Request) {
       );
     }
 
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) {
-      console.error('ANTHROPIC_API_KEY nie jest zdefiniowany');
-      return NextResponse.json({ error: 'Błąd konfiguracji serwera' }, { status: 500 });
+    // ✅ NOWA LOGIKA: Pobierz klucz API użytkownika z fallback na env var (tylko jeśli nie jest internal request)
+    let anthropicApiKey: string | null = null;
+    let keySource: 'user' | 'env' | 'none' = 'none';
+    let userAiSettings: any = null;
+    let modelToUse: string = 'claude-3-5-haiku-20241022'; // fallback default
+
+    if (!isInternalRequest) {
+      const session = await getServerSession(authOptions);
+      const userId = session?.user?.id;
+
+      if (userId) {
+        const { apiKey, source } = await getApiKeyForEndpoint(
+          userId,
+          'anthropic',
+          'ANTHROPIC_API_KEY'
+        );
+        anthropicApiKey = apiKey;
+        keySource = source;
+
+        // Pobierz ustawienia AI użytkownika
+        userAiSettings = await getUserAiSettings(userId);
+        modelToUse = userAiSettings.textAiModel === 'claude-3-sonnet'
+          ? 'claude-sonnet-4-20250514'
+          : 'claude-3-5-haiku-20241022';
+
+        console.log(`🤖 Używam modelu: ${modelToUse} (provider: ${userAiSettings.textAiProvider})`);
+        console.log(`🔑 Źródło klucza API: ${keySource} ${keySource === 'user' ? '(klucz użytkownika)' : '(klucz systemowy)'}`);
+      }
+    } else {
+      // Internal request - use env var only
+      anthropicApiKey = process.env.ANTHROPIC_API_KEY ?? null;
+      keySource = anthropicApiKey ? 'env' : 'none';
+      console.log(`🔑 Internal request - using env var: ${keySource}`);
+    }
+
+    if (!anthropicApiKey) {
+      console.error('❌ Brak dostępnego klucza Anthropic API (ani użytkownika, ani env var)');
+      return NextResponse.json(
+        { error: 'Błąd konfiguracji - brak klucza API Anthropic' },
+        { status: 500 }
+      );
     }
 
     console.log(`🎯 Generowanie ULTRA-SZCZEGÓŁOWEGO promptu okładki dla GPT-Image-1`);
     console.log(`📖 Ebook: "${title}" ${subtitle ? `- "${subtitle}"` : ''}`);
     console.log(`📚 Rozdziały: ${chapters.length} chapters`);
+    console.log(`🤖 Model: ${modelToUse}`);
+    console.log(`🔑 Key source: ${keySource}`);
 
     // Bogate przygotowanie kontekstu
     const chaptersContext = chapters
@@ -321,19 +361,22 @@ KRYTYCZNE INSTRUKCJE:
 NAPISZ TERAZ ULTRA-DŁUGI PROMPT OKŁADKI Z ZAKAZAMI SUPLEMENTÓW, PRZEZROCZYSTYM TŁEM, SEAMLESS COMPOSITION I WŁAŚCIWYMI MARGINESAMI (cel: 3500+ znaków):`;
 
     const requestBody: AnthropicRequest = {
-      model: 'claude-3-haiku-20240307',
+      model: modelToUse, // ✅ ZMIANA: Używaj modelu z ustawień użytkownika
       max_tokens: 1800,  // 🔥 Maksymalnie dla ultra-długich promptów okładek
       temperature: 0.2,  // 🔥 Bardzo niska dla maksymalnej precyzji marketingowej
       messages: [{ role: 'user', content: prompt }]
     };
 
     console.log(`🔄 Wysyłanie zaawansowanego zapytania do Claude o okładkę...`);
+    console.log(`   - Model: ${modelToUse}`);
+    console.log(`   - Key source: ${keySource}`);
+    console.log(`   - Temperature: ${requestBody.temperature}`);
 
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': apiKey,
+        'x-api-key': anthropicApiKey, // ✅ ZMIANA: Używaj pobranego klucza
         'anthropic-version': '2023-06-01'
       },
       body: JSON.stringify(requestBody)
@@ -342,6 +385,7 @@ NAPISZ TERAZ ULTRA-DŁUGI PROMPT OKŁADKI Z ZAKAZAMI SUPLEMENTÓW, PRZEZROCZYSTY
     if (!response.ok) {
       const errorText = await response.text();
       console.error(`❌ Błąd API Anthropic:`, errorText);
+      console.error(`Status: ${response.status}, klucz z: ${keySource}`);
       return NextResponse.json({ error: `Błąd podczas generowania promptu okładki: ${errorText}` }, { status: response.status });
     }
 
@@ -502,6 +546,8 @@ NAPISZ TERAZ ULTRA-DŁUGI PROMPT OKŁADKI Z ZAKAZAMI SUPLEMENTÓW, PRZEZROCZYSTY
     console.log(`📊 === COVER PROMPT QUALITY METRICS ===`);
     console.log(`   Length: ${coverPrompt.length}/${config.maxLength} chars (${((coverPrompt.length/config.maxLength)*100).toFixed(1)}%)`);
     console.log(`   Quality Score: ${(coverQualityMetrics.overallQuality * 100).toFixed(1)}%`);
+    console.log(`   🤖 Model Used: ${modelToUse}`);
+    console.log(`   🔑 Key Source: ${keySource}`);
     console.log(`   🚫 No Text Clause: ${coverQualityMetrics.containsNoTextClause ? '✅' : '❌ CRITICAL MISSING!'}`);
     console.log(`   🚫 Supplement Compliance: ${coverQualityMetrics.supplementCompliance ? '✅' : '❌ CRITICAL VIOLATION!'}`);
     console.log(`   🎨 Transparent Background: ${coverQualityMetrics.containsTransparentBackground ? '✅' : '❌ PRIORITY MISSING!'}`);
@@ -539,7 +585,7 @@ NAPISZ TERAZ ULTRA-DŁUGI PROMPT OKŁADKI Z ZAKAZAMI SUPLEMENTÓW, PRZEZROCZYSTY
         console.warn(`⚠️ BOUNDARY: Missing edge boundary control - composition may extend to edges`);
       }
     } else {
-      console.log(`✅ HIGH QUALITY SEAMLESS COVER PROMPT WITH PROPER MARGINS! Ready for GPT-Image-1`);
+      console.log(`✅ HIGH QUALITY SEAMLESS COVER PROMPT WITH PROPER MARGINS! Ready for GPT-Image-1 (${keySource})`);
     }
 
     console.log(`📝 Cover Preview: ${coverPrompt.substring(0, 200)}...`);
@@ -560,6 +606,10 @@ NAPISZ TERAZ ULTRA-DŁUGI PROMPT OKŁADKI Z ZAKAZAMI SUPLEMENTÓW, PRZEZROCZYSTY
       edgeBoundaries: coverQualityMetrics.containsEdgeBoundaries,
       optimizedFor: "gpt-image-1-ultra-detailed-book-cover-supplement-safe-transparent-seamless-margins",
       utilization: `${((coverPrompt.length/4000)*100).toFixed(1)}% of GPT-Image-1 capacity`,
+      // ✅ NOWE: Informacja o użytym modelu i źródle klucza
+      modelUsed: modelToUse,
+      keySource: keySource,
+      userAiSettings: !isInternalRequest ? userAiSettings : null,
       restrictionsApplied: {
         supplementFormsBlocked: true,
         omega3CombinationsBlocked: true,
@@ -587,7 +637,7 @@ NAPISZ TERAZ ULTRA-DŁUGI PROMPT OKŁADKI Z ZAKAZAMI SUPLEMENTÓW, PRZEZROCZYSTY
 
 export async function GET() {
   return NextResponse.json({
-    message: 'GPT-Image-1 Ultra-Detailed Book Cover Prompt Generator with Supplement Restrictions',
+    message: 'GPT-Image-1 Ultra-Detailed Book Cover Prompt Generator with Supplement Restrictions and User API Key Integration',
     supportedModels: ['gpt-image-1'],
     maxPromptLength: 4000,
     recommendedFormat: 'portrait-1024x1536',
@@ -601,7 +651,10 @@ export async function GET() {
       'Genre-specific visual language',
       'Advanced supplement content restrictions',
       'Automatic forbidden element removal',
-      'Comprehensive compliance validation'
+      'Comprehensive compliance validation',
+      'User API key integration with fallback to system keys',
+      'Respect for user AI model preferences (haiku vs sonnet)',
+      'Internal request support for system operations'
     ],
     contentRestrictions: {
       absolutelyForbidden: [
@@ -615,6 +668,14 @@ export async function GET() {
       automatedFiltering: true,
       complianceValidation: true,
       regexPatterns: FORBIDDEN_SUPPLEMENT_ELEMENTS.regexPatterns.length
-    }
+    },
+    userApiKeyFeatures: {
+      userKeyPriority: 'Uses user API keys when available',
+      systemKeyFallback: 'Graceful fallback to system keys',
+      modelRespect: 'Respects user AI model preferences',
+      internalSupport: 'Supports internal system requests',
+      diagnosticLogging: 'Detailed key source and model logging'
+    },
+    version: "5.0-user-api-keys-ultra-detailed-book-cover-supplement-safe"
   }, { status: 405 });
 }

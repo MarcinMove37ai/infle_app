@@ -17,7 +17,8 @@ import {
   TrendingUp,
   UserCheck,
   BarChart3,
-  FileSignature
+  FileSignature,
+  Settings
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { UserRole } from '@/types/types';
@@ -205,7 +206,15 @@ const menuItems: MenuItem[] = [
     path: '/statystyki',
     roles: ['ADMIN', 'USER', 'GOD'],
     requiredStatus: ['active']
+  },
+  {
+    IconComponent: Settings,
+    label: 'Ustawienia',
+    path: '/ustawienia',
+    roles: ['ADMIN', 'USER', 'GOD'],
+    requiredStatus: ['active']
   }
+
 ];
 
 // FUNKCJA POMOCNICZA DO RENDEROWANIA IKON
