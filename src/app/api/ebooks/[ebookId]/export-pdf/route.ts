@@ -59,14 +59,14 @@ export async function POST(
       return NextResponse.json({ error: 'Ebook nie został znaleziony lub nie masz uprawnień' }, { status: 404 });
     }
 
-    const { title, subtitle, cover_image_url, ebook_chapters: chapters } = ebook;
+    const { title, subtitle, cover_image_url, ebook_chapters: chapters, authorDisplayName, authorLogoUrl } = ebook;
 
     console.log(`📚 Ebook: "${title}"${subtitle ? ` - ${subtitle}` : ''}`);
     console.log(`🖼️  Okładka: ${cover_image_url ? 'dostępna' : 'brak'}`);
     console.log(`📖 Rozdziały: ${chapters?.length || 0}`);
 
     // --- Generowanie HTML dla PDF z okładką ---
-    const htmlContent = generateHTMLContent(title, subtitle, chapters, cover_image_url);
+    const htmlContent = generateHTMLContent(title, subtitle, chapters, cover_image_url, authorDisplayName, authorLogoUrl);
 
     // --- POPRAWIONA KONFIGURACJA PUPPETEER DLA RAILWAY ---
     let browser;
@@ -203,7 +203,7 @@ export async function POST(
 //                    FUNKCJE POMOCNICZE - INTELIGENTNA KONTROLA GRAFIK
 // ========================================================================
 
-function generateHTMLContent(title: string, subtitle: string | null, chapters: any[], coverImageUrl?: string | null): string {
+function generateHTMLContent(title: string, subtitle: string | null, chapters: any[], coverImageUrl?: string | null, authorDisplayName?: string | null, authorLogoUrl?: string | null): string {
   return `
     <!DOCTYPE html>
     <html lang="pl">
@@ -215,19 +215,20 @@ function generateHTMLContent(title: string, subtitle: string | null, chapters: a
       <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
       <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;700&display=swap" rel="stylesheet">
       <style>
-        ${generateAdvancedCSS(title)}
+        ${generateAdvancedCSS(title, authorDisplayName)}
       </style>
     </head>
     <body>
-      ${generateCoverPage(title, subtitle, coverImageUrl)}
+      ${generateCoverPage(title, subtitle, coverImageUrl, authorLogoUrl)}
       ${generateChaptersContent(chapters)}
     </body>
     </html>
   `;
 }
 
-function generateAdvancedCSS(ebookTitle: string): string {
+function generateAdvancedCSS(ebookTitle: string, authorDisplayName?: string | null): string {
   const displayTitle = ebookTitle.length > 80 ? ebookTitle.substring(0, 80) + '...' : ebookTitle;
+  const footerAuthorText = authorDisplayName ? authorDisplayName.replace(/"/g, '\\"') : 'Health Pro System';
 
   return `
     * {
@@ -251,7 +252,7 @@ function generateAdvancedCSS(ebookTitle: string): string {
       size: A4;
 
       @bottom-left {
-        content: "Health Pro System | Ebook: ${displayTitle.replace(/"/g, '\\"')}";
+        content: "${footerAuthorText} | ${displayTitle.replace(/"/g, '\\"')}";
         font-family: 'Poppins', sans-serif;
         font-size: 9px;
         color: rgb(136, 136, 136);
@@ -824,13 +825,16 @@ function generateAdvancedCSS(ebookTitle: string): string {
   `;
 }
 
-function generateCoverPage(title: string, subtitle: string | null, coverImageUrl?: string | null): string {
+function generateCoverPage(title: string, subtitle: string | null, coverImageUrl?: string | null, authorLogoUrl?: string | null): string {
   const titleClass = title.length > 60 ? 'cover-title very-long' : 'cover-title';
 
   if (coverImageUrl && coverImageUrl.trim()) {
     return `
       <div class="cover-page">
-        <img src="https://ebooks-in.s3.eu-central-1.amazonaws.com/ebookAI/ebook_logo.png" alt="Logo Health Pro System" class="cover-logo" />
+        ${authorLogoUrl
+            ? `<img src="${authorLogoUrl}" alt="Logo Autora" class="cover-logo" />`
+            : ''
+        }
 
         <div class="cover-title-section">
           <h1 class="${titleClass}">${escapeHtml(title)}</h1>
