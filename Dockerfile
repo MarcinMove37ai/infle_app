@@ -73,7 +73,7 @@ COPY --from=builder /app/public ./public
 
 # Utworzenie dedykowanego użytkownika i grupy
 RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
+RUN adduser --system --uid 1001 --home /app nextjs
 
 # Nadanie uprawnień użytkownikowi nextjs
 RUN chown -R nextjs:nodejs /app
