@@ -215,7 +215,7 @@ function generateHTMLContent(title: string, subtitle: string | null, chapters: a
       <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
       <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;700&display=swap" rel="stylesheet">
       <style>
-        ${generateAdvancedCSS(title, authorDisplayName)}
+        ${generateAdvancedCSS(title, subtitle, authorDisplayName)}
       </style>
     </head>
     <body>
@@ -226,9 +226,15 @@ function generateHTMLContent(title: string, subtitle: string | null, chapters: a
   `;
 }
 
-function generateAdvancedCSS(ebookTitle: string, authorDisplayName?: string | null): string {
-  const displayTitle = ebookTitle.length > 80 ? ebookTitle.substring(0, 80) + '...' : ebookTitle;
-  const footerAuthorText = authorDisplayName ? authorDisplayName.replace(/"/g, '\\"') : 'Health Pro System';
+function generateAdvancedCSS(ebookTitle: string, ebookSubtitle: string | null, authorDisplayName?: string | null): string {
+  const authorPart = authorDisplayName ? authorDisplayName.replace(/"/g, '\\"') : 'Health Pro System';
+  let fullTitle = ebookTitle;
+  if (ebookSubtitle) {
+      fullTitle += ` ${ebookSubtitle}`;
+  }
+  const displayFullTitle = fullTitle.length > 80
+    ? fullTitle.substring(0, 80) + '...'
+    : fullTitle;
 
   return `
     * {
@@ -252,7 +258,7 @@ function generateAdvancedCSS(ebookTitle: string, authorDisplayName?: string | nu
       size: A4;
 
       @bottom-left {
-        content: "${footerAuthorText} | ${displayTitle.replace(/"/g, '\\"')}";
+        content: "${authorPart} | ${displayFullTitle.replace(/"/g, '\\"')}";
         font-family: 'Poppins', sans-serif;
         font-size: 9px;
         color: rgb(136, 136, 136);
@@ -865,7 +871,10 @@ function generateCoverPage(title: string, subtitle: string | null, coverImageUrl
   } else {
     return `
       <div class="cover-page">
-        <img src="https://ebooks-in.s3.eu-central-1.amazonaws.com/ebookAI/ebook_logo.png" alt="Logo Health Pro System" class="cover-logo" />
+        ${authorLogoUrl
+            ? `<img src="${authorLogoUrl}" alt="Logo Autora" class="cover-logo" />`
+            : ''
+        }
 
         <div class="cover-fallback" style="display: flex;">
           <h1 class="${titleClass}">${escapeHtml(title)}</h1>
