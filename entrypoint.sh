@@ -5,7 +5,7 @@
 #    Ta komenda zadziała, bo jesteśmy `root`.
 chown -R nextjs:nodejs /data
 
-# 2. Użyj 'su-exec' (narzędzie w Alpine Linux), aby przełączyć się
+# 2. Użyj 'gosu' (narzędzie w Debian Linux), aby przełączyć się
 #    na użytkownika 'nextjs' i uruchomić komendę startową aplikacji.
 #    "$@" to wszystkie argumenty z linii CMD w Dockerfile.
-exec su-exec nextjs "$@"
+exec gosu nextjs "$@"

@@ -24,7 +24,7 @@ RUN npm run build
 # Etap 2: Uruchomienie produkcyjne (runner)
 FROM node:18-slim
 
-# Instalacja niezbędnych zależności dla Chromium (Debian/Ubuntu)
+# Instalacja niezbędnych zależności dla Chromium i gosu (odpowiednik su-exec dla Debian)
 RUN apt-get update && apt-get install -y \
     ca-certificates \
     fonts-liberation \
@@ -43,6 +43,7 @@ RUN apt-get update && apt-get install -y \
     libxdamage1 \
     libxrandr2 \
     wget \
+    gosu \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
