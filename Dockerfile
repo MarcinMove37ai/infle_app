@@ -86,5 +86,5 @@ ENTRYPOINT ["/entrypoint.sh"]
 EXPOSE 3000
 ENV PORT=3000
 
-# Ta komenda zostanie przekazana do naszego skryptu entrypoint.sh
-CMD ["npm", "run", "start"]
+# 🚀 NAPRAWKA: Uruchamiamy Next.js bezpośrednio, omijając npm
+CMD ["node_modules/.bin/next", "start"]
