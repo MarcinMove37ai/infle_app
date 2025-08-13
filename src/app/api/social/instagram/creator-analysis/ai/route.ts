@@ -141,7 +141,7 @@ Przykład struktury:
 - marketValue: "Tworzysz kampanie, które rzeczywiście motywują do działania, bo rozumiesz ludzką naturę."
 - evidence: ["Post o psychologii kolorów w reklamach", "Analiza dlaczego konkretna kampania zadziałała"]
 
-Zwróć TYLKO poprawny JSON bez komentarzy.`;
+CRITICAL: Return ONLY valid JSON. No explanations, no comments, no text before or after. Start directly with { and end with }.`;
 
 // Interface dla request body
 interface AnalysisRequest {
@@ -164,6 +164,97 @@ interface AIAnalysisResponse {
     marketValue: string;
     evidence: string[];
   };
+}
+
+/**
+ * Ekstraktuje i parsuje JSON z odpowiedzi Claude 4
+ * Claude 4 może zwracać JSON otoczony dodatkowym tekstem
+ */
+function extractAndParseJSON(aiResponse: string): any {
+  console.log('🔍 Raw AI response length:', aiResponse.length);
+  console.log('🔍 First 300 chars:', aiResponse.substring(0, 300));
+  console.log('🔍 Last 300 chars:', aiResponse.substring(aiResponse.length - 300));
+
+  // Metoda 1: Spróbuj bezpośrednio
+  try {
+    const trimmed = aiResponse.trim();
+    const parsed = JSON.parse(trimmed);
+    console.log('✅ Direct JSON parse successful');
+    return parsed;
+  } catch (error) {
+    console.log('📝 Direct JSON parse failed, trying extraction...');
+  }
+
+  // Metoda 2: Znajdź JSON w tekście używając różnych wzorców
+  const jsonPatterns = [
+    // Wzorzec 1: ```json ... ```
+    /```json\s*(\{[\s\S]*?\})\s*```/,
+    // Wzorzec 2: ``` ... ``` (bez 'json')
+    /```\s*(\{[\s\S]*?\})\s*```/,
+    // Wzorzec 3: Pierwszy pełny obiekt JSON { ... }
+    /(\{[\s\S]*\})/,
+    // Wzorzec 4: JSON między nowymi liniami
+    /\n(\{[\s\S]*?\})\n/
+  ];
+
+  for (let i = 0; i < jsonPatterns.length; i++) {
+    const pattern = jsonPatterns[i];
+    const match = aiResponse.match(pattern);
+
+    if (match && match[1]) {
+      console.log(`🎯 JSON found using pattern ${i + 1}`);
+      console.log('🔍 Extracted JSON preview:', match[1].substring(0, 200) + '...');
+
+      try {
+        const parsed = JSON.parse(match[1].trim());
+        console.log(`✅ Pattern ${i + 1} parse successful`);
+        return parsed;
+      } catch (error) {
+        console.log(`❌ Pattern ${i + 1} failed to parse:`, error);
+        continue;
+      }
+    }
+  }
+
+  // Metoda 3: Znajdź najbardziej prawdopodobny JSON
+  // Szukaj pierwszego { i ostatniego } z odpowiednim zagnieżdżeniem
+  let firstBrace = aiResponse.indexOf('{');
+  if (firstBrace === -1) {
+    throw new Error('No opening brace found in response');
+  }
+
+  let braceCount = 0;
+  let lastBrace = -1;
+
+  for (let i = firstBrace; i < aiResponse.length; i++) {
+    if (aiResponse[i] === '{') {
+      braceCount++;
+    } else if (aiResponse[i] === '}') {
+      braceCount--;
+      if (braceCount === 0) {
+        lastBrace = i;
+        break;
+      }
+    }
+  }
+
+  if (lastBrace === -1) {
+    throw new Error('No matching closing brace found in response');
+  }
+
+  const extractedJson = aiResponse.substring(firstBrace, lastBrace + 1);
+  console.log('🎯 JSON extracted using brace matching');
+  console.log('🔍 Extracted length:', extractedJson.length);
+
+  try {
+    const parsed = JSON.parse(extractedJson);
+    console.log('✅ Brace matching parse successful');
+    return parsed;
+  } catch (error) {
+    console.error('❌ Final parsing attempt failed');
+    console.error('🔍 Problematic JSON preview:', extractedJson.substring(0, 500));
+    throw new Error(`JSON parsing failed: ${error.message}`);
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -199,7 +290,7 @@ export async function POST(request: NextRequest) {
     // 3. Sprawdź czy już istnieje analiza w bazie danych (opcjonalne cache)
     const existingAnalysis = await getAIAnalysis(userId, username);
     if (existingAnalysis) {
-      console.log('🔄 Found existing AI analysis in database');
+      console.log('📄 Found existing AI analysis in database');
 
       // Sprawdź czy analiza nie jest za stara (np. starsze niż 7 dni)
       const analysis = await prisma.instagramCreatorAIAnalysis.findUnique({
@@ -261,7 +352,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log(`📝 Found ${posts.length} posts for analysis`);
+    console.log(`🔍 Found ${posts.length} posts for analysis`);
 
     // 5. Format context for AI
     const context = posts
@@ -298,9 +389,10 @@ export async function POST(request: NextRequest) {
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-3-5-sonnet-20241022', // Claude Sonnet 4
+        model: 'claude-sonnet-4-20250514', // Claude Sonnet 4
         max_tokens: 4000,
-        temperature: 0.3, // Niższa temperatura dla bardziej konsystentnych odpowiedzi
+        temperature: 0.1, // ✨ ZMIENIONE: Niższa temperatura dla Claude 4
+        system: 'You are a JSON API. Return only valid JSON without any explanations or formatting.', // ✨ POPRAWIONE: system jako oddzielny parametr
         messages: [
           {
             role: 'user',
@@ -324,25 +416,80 @@ export async function POST(request: NextRequest) {
     }
 
     const claudeData = await claudeResponse.json();
+
+    // ✨ NOWE: Lepszy error handling dla Claude 4
+    console.log('🔍 Claude response structure:', JSON.stringify(claudeData, null, 2));
+
+    // Sprawdź czy odpowiedź ma poprawną strukturę
+    if (!claudeData.content || !claudeData.content[0]) {
+      console.error('❌ Invalid Claude response structure:', claudeData);
+      return NextResponse.json(
+        {
+          error: 'Invalid Claude response',
+          details: 'Claude API returned malformed response structure',
+          rawResponse: JSON.stringify(claudeData)
+        },
+        { status: 500 }
+      );
+    }
+
+    // ✨ NOWE: Sprawdź Claude 4 refusal stop reason
+    if (claudeData.stop_reason === 'refusal') {
+      console.error('❌ Claude refused to generate content:', claudeData.content[0]?.text);
+      return NextResponse.json(
+        {
+          error: 'Content generation refused',
+          details: 'Claude declined to generate the requested analysis for safety reasons',
+          refusalText: claudeData.content[0]?.text || 'No refusal text provided'
+        },
+        { status: 400 }
+      );
+    }
+
+    // ✨ NOWE: Sprawdź czy content zawiera text
+    if (!claudeData.content[0].text) {
+      console.error('❌ No text content in Claude response:', claudeData.content[0]);
+      return NextResponse.json(
+        {
+          error: 'Empty Claude response',
+          details: 'Claude API returned response without text content',
+          contentType: claudeData.content[0].type || 'unknown'
+        },
+        { status: 500 }
+      );
+    }
+
     const aiResponse = claudeData.content[0].text;
-
     console.log('✅ Claude response received');
+    console.log('📝 Response length:', aiResponse.length);
+    console.log('🔍 First 200 chars:', aiResponse.substring(0, 200));
 
-    // 8. Parse and validate JSON response
+    // 8. ✨ NOWE: Parse and validate JSON response with improved parser
     let analysisResult: AIAnalysisResponse;
 
     try {
-      analysisResult = JSON.parse(aiResponse);
+      // ✨ UŻYWAMY NOWEJ FUNKCJI extractAndParseJSON
+      analysisResult = extractAndParseJSON(aiResponse);
       console.log('✅ JSON parsed successfully');
+      console.log('📊 Parsed structure:', {
+        username: analysisResult.username,
+        competenciesCount: analysisResult.competencies?.length,
+        hasUniqueTalent: !!analysisResult.uniqueTalent,
+        profileDescLength: analysisResult.profileDescription?.length
+      });
     } catch (parseError) {
       console.error('❌ Failed to parse AI response as JSON:', parseError);
-      console.error('Raw AI response:', aiResponse);
+      console.error('🔍 Raw AI response sample:', aiResponse.substring(0, 1000) + '...');
+
+      // Zapisz pełną odpowiedź do debugowania
+      console.error('📝 Full raw response for debugging:', aiResponse);
 
       return NextResponse.json(
         {
           error: 'Invalid AI response format',
-          details: 'AI returned non-JSON response',
-          rawResponse: aiResponse.substring(0, 500) + '...'
+          details: `AI returned non-JSON response: ${parseError.message}`,
+          rawResponseSample: aiResponse.substring(0, 500) + '...',
+          responseLength: aiResponse.length
         },
         { status: 500 }
       );
@@ -394,9 +541,9 @@ export async function POST(request: NextRequest) {
     const currentTime = new Date().toISOString();
     const metadata = {
       generatedAt: currentTime,
-      aiModel: 'claude-3-5-sonnet-20241022',
+      aiModel: 'claude-sonnet-4-20250514', // ✨ ZAKTUALIZOWANE
       postsCount: posts.length,
-      version: '2.0-uniqueTalent'
+      version: '2.1-uniqueTalent-claude4' // ✨ ZAKTUALIZOWANE
     };
 
     const saveResult = await saveAIAnalysis({
@@ -452,18 +599,21 @@ export async function GET(request: NextRequest) {
 
   if (!username) {
     return NextResponse.json({
-      message: 'Creator Analysis AI Endpoint v2.0 with Database Integration',
-      description: 'Enhanced with uniqueTalent discovery and automatic database storage',
+      message: 'Creator Analysis AI Endpoint v2.1 with Claude 4 Support',
+      description: 'Enhanced with uniqueTalent discovery, automatic database storage, and Claude 4 compatibility',
       usage: 'POST with {"username": "instagram_username"}',
       example: 'GET ?username=test_user for quick test',
-      newFeatures: [
+      features: [
         'uniqueTalent instead of uniqueTrait',
         'marketValue field',
         'evidence for talents',
         'improved talent discovery',
         '🆕 Automatic database storage',
         '🆕 Smart caching (7 days)',
-        '🆕 User session integration'
+        '🆕 User session integration',
+        '✨ Claude 4 compatibility',
+        '✨ Improved JSON parsing',
+        '✨ Better error handling'
       ],
       database: {
         table: 'instagram_creator_ai_analysis',
@@ -502,11 +652,16 @@ export async function GET(request: NextRequest) {
       })),
       aiAnalysisCount: aiAnalysisCount,
       message: 'Use POST method to generate AI analysis with uniqueTalent discovery and auto-save',
-      version: 'v2.0-uniqueTalent-database',
+      version: 'v2.1-uniqueTalent-claude4',
       databaseIntegration: {
         enabled: true,
         caching: '7 days',
         autoSave: true
+      },
+      claude4Support: {
+        enabled: true,
+        improvedParsing: true,
+        betterErrorHandling: true
       }
     });
 

@@ -4,7 +4,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 
-// PROMPT IDENTYCZNY jak Instagram - bez zmian
+// ULEPSZONE PROMPT dla Claude 4 - jaśniejsze instrukcje JSON
 const CREATOR_ANALYSIS_PROMPT = `Jesteś ekspertem w analizie treści i personal brandingu. Na podstawie dostarczonych postów wygeneruj JSON, który bezpośrednio zasili komponent React CreatorAnalysisLI.
 
 ## DANE WEJŚCIOWE
@@ -140,7 +140,7 @@ Przykład struktury:
 - marketValue: "Tworzysz strategie innowacji, które rzeczywiście generują wyniki biznesowe, bo rozumiesz zarówno tech jak i operations."
 - evidence: ["Post o AI implementation w manufacturing", "Analiza ROI z blockchain pilot project"]
 
-Zwróć TYLKO poprawny JSON bez komentarzy.`;
+CRITICAL: Return ONLY valid JSON. No explanations, no comments, no text before or after. Start directly with { and end with }.`;
 
 // Interface dla request body
 interface AnalysisRequest {
@@ -163,6 +163,90 @@ interface LinkedInAIAnalysisResponse {
     marketValue: string;
     evidence: string[];
   };
+}
+
+/**
+ * Ekstraktuje i parsuje JSON z odpowiedzi Claude 4
+ * Claude 4 może zwracać JSON otoczony dodatkowym tekstem
+ */
+function extractAndParseJSON(aiResponse: string): any {
+  console.log('🔍 Raw AI response length:', aiResponse.length);
+  console.log('🔍 First 300 chars:', aiResponse.substring(0, 300));
+  console.log('🔍 Last 300 chars:', aiResponse.substring(aiResponse.length - 300));
+
+  // Metoda 1: Spróbuj bezpośrednio
+  try {
+    return JSON.parse(aiResponse.trim());
+  } catch (error) {
+    console.log('📝 Direct JSON parse failed, trying extraction...');
+  }
+
+  // Metoda 2: Znajdź JSON w tekście używając różnych wzorców
+  const jsonPatterns = [
+    // Wzorzec 1: ```json ... ```
+    /```json\s*(\{[\s\S]*?\})\s*```/,
+    // Wzorzec 2: ``` ... ``` (bez 'json')
+    /```\s*(\{[\s\S]*?\})\s*```/,
+    // Wzorzec 3: Pierwszy pełny obiekt JSON { ... }
+    /(\{[\s\S]*\})/,
+    // Wzorzec 4: JSON między nowymi liniami
+    /\n(\{[\s\S]*?\})\n/
+  ];
+
+  for (let i = 0; i < jsonPatterns.length; i++) {
+    const pattern = jsonPatterns[i];
+    const match = aiResponse.match(pattern);
+
+    if (match && match[1]) {
+      console.log(`🎯 JSON found using pattern ${i + 1}`);
+      console.log('🔍 Extracted JSON preview:', match[1].substring(0, 200) + '...');
+
+      try {
+        return JSON.parse(match[1].trim());
+      } catch (error) {
+        console.log(`❌ Pattern ${i + 1} failed to parse:`, error);
+        continue;
+      }
+    }
+  }
+
+  // Metoda 3: Znajdź najbardziej prawdopodobny JSON
+  // Szukaj pierwszego { i ostatniego } z odpowiednim zagnieżdżeniem
+  let firstBrace = aiResponse.indexOf('{');
+  if (firstBrace === -1) {
+    throw new Error('No opening brace found in response');
+  }
+
+  let braceCount = 0;
+  let lastBrace = -1;
+
+  for (let i = firstBrace; i < aiResponse.length; i++) {
+    if (aiResponse[i] === '{') {
+      braceCount++;
+    } else if (aiResponse[i] === '}') {
+      braceCount--;
+      if (braceCount === 0) {
+        lastBrace = i;
+        break;
+      }
+    }
+  }
+
+  if (lastBrace === -1) {
+    throw new Error('No matching closing brace found in response');
+  }
+
+  const extractedJson = aiResponse.substring(firstBrace, lastBrace + 1);
+  console.log('🎯 JSON extracted using brace matching');
+  console.log('🔍 Extracted length:', extractedJson.length);
+
+  try {
+    return JSON.parse(extractedJson);
+  } catch (error) {
+    console.error('❌ Final parsing attempt failed');
+    console.error('🔍 Problematic JSON preview:', extractedJson.substring(0, 500));
+    throw new Error(`JSON parsing failed: ${error.message}`);
+  }
 }
 
 // Helper function to save LinkedIn AI analysis
@@ -284,7 +368,7 @@ export async function POST(request: NextRequest) {
     // 3. Sprawdź czy już istnieje analiza w bazie danych (opcjonalne cache)
     const existingAnalysis = await getLinkedInAIAnalysis(userId, username);
     if (existingAnalysis) {
-      console.log('🔄 Found existing LinkedIn AI analysis in database');
+      console.log('📄 Found existing LinkedIn AI analysis in database');
 
       // Sprawdź czy analiza nie jest za stara (np. starsze niż 7 dni)
       const analysis = await prisma.linkedInCreatorAIAnalysis.findUnique({
@@ -346,7 +430,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log(`📝 Found ${posts.length} LinkedIn posts for analysis`);
+    console.log(`🔎 Found ${posts.length} LinkedIn posts for analysis`);
 
     // 5. Format context for AI (using postText)
     const context = posts
@@ -383,9 +467,10 @@ export async function POST(request: NextRequest) {
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-3-5-sonnet-20241022', // Claude Sonnet 4
+        model: 'claude-sonnet-4-20250514', // Claude Sonnet 4
         max_tokens: 4000,
-        temperature: 0.3, // Niższa temperatura dla bardziej konsystentnych odpowiedzi
+        temperature: 0.1, // ✨ ZMNIEJSZONA temperatura dla bardziej deterministycznych odpowiedzi
+        system: 'You are a JSON API. Return only valid JSON without any explanations or formatting.', // ✨ POPRAWNY format system prompt
         messages: [
           {
             role: 'user',
@@ -409,25 +494,80 @@ export async function POST(request: NextRequest) {
     }
 
     const claudeData = await claudeResponse.json();
+
+    // ✨ NOWY: Lepszy error handling dla Claude 4
+    console.log('🔍 Claude response structure:', JSON.stringify(claudeData, null, 2));
+
+    // Sprawdź czy odpowiedź ma poprawną strukturę
+    if (!claudeData.content || !claudeData.content[0]) {
+      console.error('❌ Invalid Claude response structure:', claudeData);
+      return NextResponse.json(
+        {
+          error: 'Invalid Claude response',
+          details: 'Claude API returned malformed response structure',
+          rawResponse: JSON.stringify(claudeData)
+        },
+        { status: 500 }
+      );
+    }
+
+    // ✨ NOWY: Sprawdź Claude 4 refusal stop reason
+    if (claudeData.stop_reason === 'refusal') {
+      console.error('❌ Claude refused to generate content:', claudeData.content[0]?.text);
+      return NextResponse.json(
+        {
+          error: 'Content generation refused',
+          details: 'Claude declined to generate the requested analysis for safety reasons',
+          refusalText: claudeData.content[0]?.text || 'No refusal text provided'
+        },
+        { status: 400 }
+      );
+    }
+
+    // ✨ NOWY: Sprawdź czy content zawiera text
+    if (!claudeData.content[0].text) {
+      console.error('❌ No text content in Claude response:', claudeData.content[0]);
+      return NextResponse.json(
+        {
+          error: 'Empty Claude response',
+          details: 'Claude API returned response without text content',
+          contentType: claudeData.content[0].type || 'unknown'
+        },
+        { status: 500 }
+      );
+    }
+
     const aiResponse = claudeData.content[0].text;
-
     console.log('✅ Claude response received for LinkedIn');
+    console.log('📝 Response length:', aiResponse.length);
+    console.log('🔍 First 200 chars:', aiResponse.substring(0, 200));
 
-    // 8. Parse and validate JSON response
+    // 8. Parse and validate JSON response - NOWY ULEPSONY PARSER
     let analysisResult: LinkedInAIAnalysisResponse;
 
     try {
-      analysisResult = JSON.parse(aiResponse);
+      // ✨ NOWE: Użyj ulepszonego parsera
+      analysisResult = extractAndParseJSON(aiResponse);
       console.log('✅ LinkedIn JSON parsed successfully');
+      console.log('📊 Parsed structure:', {
+        username: analysisResult.username,
+        competenciesCount: analysisResult.businessCompetencies?.length,
+        hasExpertiseNiche: !!analysisResult.expertiseNiche,
+        profileDescLength: analysisResult.profileDescription?.length
+      });
     } catch (parseError) {
       console.error('❌ Failed to parse LinkedIn AI response as JSON:', parseError);
-      console.error('Raw AI response:', aiResponse);
+      console.error('🔍 Raw AI response sample:', aiResponse.substring(0, 1000) + '...');
+
+      // Zapisz pełną odpowiedź do debugowania
+      console.error('📝 Full raw response for debugging:', aiResponse);
 
       return NextResponse.json(
         {
           error: 'Invalid AI response format',
-          details: 'AI returned non-JSON response',
-          rawResponse: aiResponse.substring(0, 500) + '...'
+          details: `AI returned non-JSON response: ${parseError.message}`,
+          rawResponseSample: aiResponse.substring(0, 500) + '...',
+          responseLength: aiResponse.length
         },
         { status: 500 }
       );
@@ -479,9 +619,9 @@ export async function POST(request: NextRequest) {
     const currentTime = new Date().toISOString();
     const metadata = {
       generatedAt: currentTime,
-      aiModel: 'claude-3-5-sonnet-20241022',
+      aiModel: 'claude-sonnet-4-20250514', // ✨ ZAKTUALIZOWANE dla Claude 4
       postsCount: posts.length,
-      version: '2.0-linkedin'
+      version: '3.0-linkedin-claude4'
     };
 
     const saveResult = await saveLinkedInAIAnalysis({
@@ -537,8 +677,8 @@ export async function GET(request: NextRequest) {
 
   if (!username) {
     return NextResponse.json({
-      message: 'LinkedIn Creator Analysis AI Endpoint v2.0 with Database Integration',
-      description: 'Enhanced with expertiseNiche discovery and automatic database storage',
+      message: 'LinkedIn Creator Analysis AI Endpoint v3.0 with Claude 4 Support',
+      description: 'Enhanced with Claude 4 compatibility, robust JSON parsing, and expertiseNiche discovery',
       usage: 'POST with {"username": "linkedin_username"}',
       example: 'GET ?username=test_user for quick test',
       features: [
@@ -547,6 +687,9 @@ export async function GET(request: NextRequest) {
         'marketValue field',
         'evidence for expertise',
         'improved business-focused analysis',
+        '🆕 Claude 4 Sonnet compatibility',
+        '🆕 Robust JSON extraction',
+        '🆕 Enhanced error handling',
         '🆕 Automatic database storage',
         '🆕 Smart caching (7 days)',
         '🆕 User session integration'
@@ -556,7 +699,8 @@ export async function GET(request: NextRequest) {
         strategy: 'upsert per userId+username',
         caching: '7 days auto-refresh',
         fields: ['profileDescription', 'businessCompetencies', 'expertiseNiche', 'metadata']
-      }
+      },
+      claudeVersion: 'claude-sonnet-4-20250514'
     });
   }
 
@@ -588,7 +732,7 @@ export async function GET(request: NextRequest) {
       })),
       aiAnalysisCount: aiAnalysisCount,
       message: 'Use POST method to generate LinkedIn AI analysis with expertiseNiche discovery and auto-save',
-      version: 'v2.0-linkedin-database',
+      version: 'v3.0-linkedin-claude4',
       databaseIntegration: {
         enabled: true,
         caching: '7 days',
