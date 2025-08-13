@@ -245,7 +245,7 @@ function extractAndParseJSON(aiResponse: string): any {
   } catch (error) {
     console.error('❌ Final parsing attempt failed');
     console.error('🔍 Problematic JSON preview:', extractedJson.substring(0, 500));
-    throw new Error(`JSON parsing failed: ${error.message}`);
+    throw new Error(`JSON parsing failed: ${error instanceof Error ? error.message : 'Unknown parsing error'}`);
   }
 }
 
@@ -565,7 +565,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           error: 'Invalid AI response format',
-          details: `AI returned non-JSON response: ${parseError.message}`,
+          details: `AI returned non-JSON response: ${parseError instanceof Error ? parseError.message : 'Unknown parsing error'}`,
           rawResponseSample: aiResponse.substring(0, 500) + '...',
           responseLength: aiResponse.length
         },
