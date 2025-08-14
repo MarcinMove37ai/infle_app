@@ -4,7 +4,7 @@ const nextConfig: NextConfig = {
   // Usunięcie output: 'standalone' - powoduje problemy z env vars
 
   // Zaktualizowana opcja zgodnie z nową wersją Next.js
-  serverExternalPackages: ['@prisma/client', 'prisma'],
+  serverExternalPackages: ['@prisma/client', 'prisma', 'pdf-parse'],
 
   eslint: {
     // Warning: This allows production builds to successfully complete even if

@@ -48,6 +48,13 @@ interface EbookCoverData {
 
 // Główny komponent generatora ebooków
 const EbookGenerator = () => {
+    // NOWE STANY dla single URL scraping
+  const [scrapingResult, setScrapingResult] = useState<'success' | 'empty' | 'error' | null>(null);
+  const [scrapingErrorDetails, setScrapingErrorDetails] = useState<string>('');
+  const [pendingUrl, setPendingUrl] = useState('');
+  const [previewScrapedContent, setPreviewScrapedContent] = useState<ScrapedContent | null>(null);
+  const [showScrapingPreview, setShowScrapingPreview] = useState(false);
+  const [isScrapingSingleUrl, setIsScrapingSingleUrl] = useState(false);
   // Istniejące stany aplikacji
   const [isGeneratingAllImages, setIsGeneratingAllImages] = useState(false);
   const [generatedImagesCount, setGeneratedImagesCount] = useState(0);
@@ -363,6 +370,121 @@ const EbookGenerator = () => {
       setIsGeneratingCover(false);
     }
   };
+    // NOWA FUNKCJA pobierania treści z pojedynczego URL
+    const scrapeSingleUrl = async (url: string) => {
+      if (!url.trim()) return;
+
+      try {
+        new URL(url); // Walidacja URL
+      } catch {
+        setError('Nieprawidłowy format URL');
+        return;
+      }
+
+      setIsScrapingSingleUrl(true);
+      setError(null);
+      setScrapingResult(null);
+      setScrapingErrorDetails('');
+
+      try {
+        const response = await fetch('/api/scrape-urls', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ urls: [url] }),
+        });
+
+        if (!response.ok) {
+          throw new Error('Błąd podczas pobierania treści z linku');
+        }
+
+        const data = await response.json();
+
+        // ZAWSZE pokazuj modal - niezależnie od wyniku
+        if (data.scrapedContent && data.scrapedContent.length > 0) {
+          // Sukces z treścią
+          setPreviewScrapedContent(data.scrapedContent[0]);
+          setScrapingResult('success');
+        } else if (data.errors && data.errors.length > 0) {
+          // Błąd scrapingu
+          setPreviewScrapedContent({
+            url: url,
+            title: 'Błąd scrapingu',
+            content: ''
+          });
+          setScrapingResult('error');
+          setScrapingErrorDetails(data.errors[0].error || 'Nieznany błąd');
+        } else {
+          // Pusta treść
+          setPreviewScrapedContent({
+            url: url,
+            title: 'Brak treści',
+            content: ''
+          });
+          setScrapingResult('empty');
+          setScrapingErrorDetails('Nie znaleziono treści na tej stronie lub treść jest za krótka');
+        }
+
+        setShowScrapingPreview(true);
+
+      } catch (err) {
+        console.error('Błąd scraping single URL:', err);
+
+        // Pokaż modal z błędem
+        setPreviewScrapedContent({
+          url: url,
+          title: 'Błąd połączenia',
+          content: ''
+        });
+        setScrapingResult('error');
+        setScrapingErrorDetails(err instanceof Error ? err.message : 'Nie udało się połączyć z serwerem');
+        setShowScrapingPreview(true);
+      } finally {
+        setIsScrapingSingleUrl(false);
+      }
+    };
+
+    // FUNKCJA do usuwania źródła z listy
+    const handleRemoveScrapedContent = (urlToRemove: string) => {
+      setScrapedContent(prev => prev.filter(item => item.url !== urlToRemove));
+      console.log('🗑️ Usunięto źródło:', urlToRemove);
+    };
+
+  // FUNKCJE obsługi modala podglądu treści
+    const handleAcceptScrapedContent = () => {
+      if (previewScrapedContent) {
+        setScrapedContent(prev => [...prev, previewScrapedContent]);
+
+        // Wyczyść input URL, który został zatwierdzony
+        const urlIndex = urlInputs.findIndex(url => url === previewScrapedContent.url);
+        if (urlIndex !== -1) {
+          const newUrls = [...urlInputs];
+          newUrls[urlIndex] = '';
+          setUrlInputs(newUrls);
+        }
+      }
+
+      // Zamknij modal i wyczyść stan
+      setShowScrapingPreview(false);
+      setPreviewScrapedContent(null);
+    };
+
+    const handleRejectScrapedContent = () => {
+      // Wyczyść input URL, który został odrzucony
+      if (previewScrapedContent) {
+        const urlIndex = urlInputs.findIndex(url => url === previewScrapedContent.url);
+        if (urlIndex !== -1) {
+          const newUrls = [...urlInputs];
+          newUrls[urlIndex] = '';
+          setUrlInputs(newUrls);
+        }
+      }
+
+      // Zamknij modal i wyczyść stan
+      setShowScrapingPreview(false);
+      setPreviewScrapedContent(null);
+    };
 
   // NOWE FUNKCJE obsługi URL-ów
   const handleUrlChange = (index: number, value: string) => {
@@ -2000,7 +2122,7 @@ const EbookGenerator = () => {
         <div className="bg-white p-4 rounded-lg border border-blue-100 text-gray-700">
           <div className="flex justify-between items-center mb-3">
             <label className="text-sm font-medium text-gray-700">
-              Źródła PubMed:
+              Źródła WWW:
               <span className="text-gray-400 font-normal ml-1">(opcjonalnie, max 5)</span>
             </label>
             {scrapedContent.length > 0 && (
@@ -2011,55 +2133,80 @@ const EbookGenerator = () => {
           </div>
 
           <div className="space-y-2">
-            {urlInputs.map((url, index) => (
-              <div key={index} className="flex items-center gap-2">
-                <input
-                  type="url"
-                  value={url}
-                  onChange={(e) => handleUrlChange(index, e.target.value)}
-                  placeholder="https://example.com/article"
-                  className="flex-1 px-3 py-2 border border-blue-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  disabled={isGeneratingToc || isSaving || isScrapingUrls}
-                />
-                {urlInputs.length > 1 && (
-                  <button
-                    onClick={() => removeUrlInput(index)}
-                    className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
-                    disabled={isGeneratingToc || isSaving || isScrapingUrls}
-                  >
-                    <X size={16} />
-                  </button>
-                )}
-              </div>
-            ))}
+              {urlInputs.map((url, index) => (
+                <div key={index} className="flex items-center gap-2">
+                  <input
+                    type="url"
+                    value={url}
+                    onChange={(e) => handleUrlChange(index, e.target.value)}
+                    placeholder="https://example.com/article"
+                    className="flex-1 px-3 py-2 border border-blue-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    disabled={isGeneratingToc || isSaving || isScrapingUrls || isScrapingSingleUrl}
+                  />
+
+                  {url.trim() && !scrapedContent.find(item => item.url === url) && (
+                      <button
+                        onClick={() => scrapeSingleUrl(url)}
+                        disabled={isGeneratingToc || isSaving || isScrapingUrls || isScrapingSingleUrl}
+                        className={`px-3 py-2 text-sm rounded-lg transition-colors ${
+                          isScrapingSingleUrl
+                            ? 'bg-gray-400 text-white cursor-not-allowed'
+                            : 'bg-blue-600 text-white hover:bg-blue-700 cursor-pointer'
+                        }`}
+                      >
+                        {isScrapingSingleUrl ? (
+                          <>
+                            <Loader size={14} className="animate-spin mr-1" />
+
+                          </>
+                        ) : (
+                          'Zatwierdź'
+                        )}
+                      </button>
+                    )}
+
+                    {url.trim() && scrapedContent.find(item => item.url === url) && (
+                      <span className="px-3 py-2 text-sm bg-green-100 text-green-700 rounded-lg border border-green-200 flex items-center">
+                        <Check size={14} className="mr-1" />
+                        Już dodane
+                      </span>
+                  )}
+
+                  {urlInputs.length > 1 && (
+                    <button
+                      onClick={() => removeUrlInput(index)}
+                      className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                      disabled={isGeneratingToc || isSaving || isScrapingUrls || isScrapingSingleUrl}
+                    >
+                      <X size={16} />
+                    </button>
+                  )}
+                </div>
+              ))}
           </div>
 
-          {urlInputs.length < 5 && (
-            <button
-              onClick={addUrlInput}
-              className="mt-2 text-sm text-blue-600 hover:text-blue-700 flex items-center cursor-pointer"
-              disabled={isGeneratingToc || isSaving || isScrapingUrls}
-            >
-              <Plus size={14} className="mr-1" />
-              Dodaj kolejny link
-            </button>
-          )}
-
           {/* Podgląd pobranych treści */}
-          {scrapedContent.length > 0 && (
-            <div className="mt-4 border-t border-gray-200 pt-4">
-              <h4 className="text-sm font-medium text-gray-700 mb-2">Pobrane źródła:</h4>
-              <div className="space-y-2 max-h-32 overflow-y-auto">
-                {scrapedContent.map((item, index) => (
-                  <div key={index} className="text-xs bg-gray-50 p-2 rounded border">
-                    <div className="font-medium text-gray-800 truncate">{item.title}</div>
-                    <div className="text-gray-500 truncate">{item.url}</div>
-                    <div className="text-gray-600 truncate mt-1">{item.content.substring(0, 100)}...</div>
-                  </div>
-                ))}
+            {scrapedContent.length > 0 && (
+              <div className="mt-4 border-t border-gray-200 pt-6">
+                <h4 className="text-sm font-medium text-gray-700 mb-2">Pobrane źródła:</h4>
+                <div className="space-y-2 max-h-32 overflow-y-auto">
+                  {scrapedContent.map((item, index) => (
+                    <div key={index} className="text-xs bg-gray-50 p-2 rounded border relative">
+                      <button
+                        onClick={() => handleRemoveScrapedContent(item.url)}
+                        className="absolute top-1 right-1 text-red-500 hover:text-red-700 hover:bg-red-100 rounded-full p-1 transition-colors cursor-pointer"
+                        title="Usuń źródło"
+                      >
+                        <X size={12} />
+                      </button>
+                      <div className="font-medium text-gray-800 truncate pr-6">{item.title}</div>
+                      <div className="text-gray-500 truncate pr-6">{item.url}</div>
+                      <div className="text-gray-600 truncate mt-1 pr-6">{item.content.substring(0, 100)}...</div>
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
-          )}
+            )}
         </div>
       </div>
 
@@ -2118,7 +2265,7 @@ const EbookGenerator = () => {
           <p className="text-gray-600">
             {subtitle !== originalSubtitle
               ? 'Tytuł lub podtytuł e-booka zostały zmienione, co może wpłynąć na jego zawartość.'
-              : 'Tytuł e-booka został zmieniony, co może wpłynąć na jego zawartość.'}
+              : 'Podstawowe dane e-booka zostały zmienione co może wpłynąć na jego zawartość.'}
             Czy chcesz wygenerować nową propozycję rozdziałów?
           </p>
         </div>
@@ -3513,6 +3660,104 @@ const EbookGenerator = () => {
         />
       )}
 
+      {showScrapingPreview && previewScrapedContent && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+            <div className="bg-white rounded-xl shadow-2xl p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto animate-fadeIn">
+              <div className="flex justify-between items-start mb-4">
+                <h3 className="text-xl font-bold text-gray-800">Podgląd pobranej treści</h3>
+                <button
+                  onClick={handleRejectScrapedContent}
+                  className="text-gray-500 hover:text-gray-700 cursor-pointer"
+                >
+                  <X size={24} />
+                </button>
+              </div>
+
+              <div className="mb-6">
+                {/* Status scraping */}
+                {scrapingResult === 'success' && (
+                  <div className="bg-green-50 p-3 rounded-lg border border-green-200 mb-4">
+                    <div className="flex items-center text-green-700">
+                      <Check size={16} className="mr-2" />
+                      <span className="font-medium">Treść pobrana pomyślnie</span>
+                    </div>
+                  </div>
+                )}
+
+                {scrapingResult === 'error' && (
+                  <div className="bg-red-50 p-3 rounded-lg border border-red-200 mb-4">
+                    <div className="flex items-start text-red-700">
+                      <AlertCircle size={16} className="mr-2 mt-0.5 flex-shrink-0" />
+                      <div>
+                        <span className="font-medium block">Błąd podczas pobierania</span>
+                        <span className="text-sm">{scrapingErrorDetails}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {scrapingResult === 'empty' && (
+                  <div className="bg-yellow-50 p-3 rounded-lg border border-yellow-200 mb-4">
+                    <div className="flex items-start text-yellow-700">
+                      <AlertCircle size={16} className="mr-2 mt-0.5 flex-shrink-0" />
+                      <div>
+                        <span className="font-medium block">Brak treści</span>
+                        <span className="text-sm">{scrapingErrorDetails}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div className="bg-blue-50 p-4 rounded-lg border border-blue-200 mb-4">
+                  <h4 className="font-medium text-blue-800 mb-2">Tytuł:</h4>
+                  <p className="text-blue-700">{previewScrapedContent.title}</p>
+                </div>
+
+                <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 mb-4">
+                  <h4 className="font-medium text-gray-700 mb-2">URL:</h4>
+                  <p className="text-gray-600 text-sm break-all">{previewScrapedContent.url}</p>
+                </div>
+
+                <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                  <h4 className="font-medium text-gray-700 mb-2">
+                    Treść ({previewScrapedContent.content.length} znaków):
+                  </h4>
+                  {previewScrapedContent.content.length > 0 ? (
+                    <div className="text-gray-600 text-sm max-h-48 overflow-y-auto whitespace-pre-wrap">
+                      {previewScrapedContent.content}
+                    </div>
+                  ) : (
+                    <div className="text-gray-400 text-sm italic">
+                      Brak treści do wyświetlenia
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={handleRejectScrapedContent}
+                  className="px-6 py-2.5 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50 transition-all duration-200 cursor-pointer"
+                >
+                  {scrapingResult === 'success' ? 'Odrzuć' : 'Zamknij'}
+                </button>
+
+                <button
+                  onClick={handleAcceptScrapedContent}
+                  disabled={scrapingResult !== 'success'}
+                  className={`px-6 py-2.5 rounded-lg font-medium transition-all duration-200 ${
+                    scrapingResult === 'success'
+                      ? 'bg-blue-600 text-white hover:bg-blue-700 cursor-pointer'
+                      : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                  }`}
+                  title={scrapingResult !== 'success' ? 'Można dodać tylko źródła z poprawną treścią' : ''}
+                >
+                  {scrapingResult === 'success' ? 'Dodaj do źródeł' : 'Nie można dodać'}
+                </button>
+              </div>
+            </div>
+          </div>
+      )}
       <style jsx global>{`
         button:not(:disabled),
         .cursor-pointer,
