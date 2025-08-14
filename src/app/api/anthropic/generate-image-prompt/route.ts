@@ -21,16 +21,16 @@ interface AnthropicRequest {
 // 🎯 ROZSZERZONA KONFIGURACJA DLA WSZYSTKICH PROVIDERÓW - GOOGLE + OPENAI
 const PROMPT_CONFIGS = {
   // 🆕 GOOGLE MODELS - AI STUDIO COMPATIBLE
-  "gemini-image": {
-    maxLength: 2000,
-    optimalLength: 800,
-    targetLength: 750,
-    style: "experimental-creative",
+  "imagen-3": {
+    maxLength: 4000,
+    optimalLength: 1200,
+    targetLength: 1100,
+    style: "photorealistic-standard",
     supportsComplexInstructions: true,
-    qualityTarget: "experimental_quality",
+    qualityTarget: "high_realism",
     provider: "google",
-    costEstimate: 0.00,
-    enhancement_level: "experimental"
+    costEstimate: 0.03,
+    enhancement_level: "standard_plus"
   },
   "imagen-4": {
     maxLength: 4000,
@@ -313,7 +313,7 @@ ${forceRegenerate ? `
 - Stwórz KOMPLETNIE RÓŻNĄ interpretację wizualną
 ` : ''}
 
-📐 WZORZEC IDEALNEGO PROMPTU:
+📝 WZORZEC IDEALNEGO PROMPTU:
 
 "Professional ebook illustration: [KONKRETNY OPIS GŁÓWNEJ SCENY z treści rozdziału]. Shot with [PARAMETRY APARATU], f/1.8, ISO 100. [KONKRETNE OŚWIETLENIE] with natural shadows and volumetric lighting. Photorealistic, hyperrealistic, 8K UHD resolution, professional photography, ultra-sharp focus${maximumQuality ? ', commercial quality, HDR' : ''}. [KOMPOZYCJA] with shallow depth of field. Square 1:1 composition for ebook${enableTransparency ? ', transparent background with clean edges' : ''}. Perfect visual representation of "${chapterTitle}" chapter. ABSOLUTELY NO TEXT anywhere in image."
 
@@ -573,23 +573,23 @@ NAPISZ PHOTOREALISTIC PROMPT (${config.optimalLength} znaków):`;
 export async function GET() {
   return NextResponse.json({
     message: 'Multi-Provider Photorealistic Prompt Generator for Professional Ebook Illustrations',
-    version: "7.0-multi-provider-optimized",
+    version: "7.1-imagen3-optimized",
     supportedProviders: {
-      google: ['gemini-image', 'imagen-4', 'imagen-4-ultra'],
+      google: ['imagen-3', 'imagen-4', 'imagen-4-ultra'],
       openai: ['gpt-image-1', 'dall-e-3']
     },
-    supportedModels: ['gemini-image', 'imagen-4', 'imagen-4-ultra', 'gpt-image-1', 'dall-e-3'],
+    supportedModels: ['imagen-3', 'imagen-4', 'imagen-4-ultra', 'gpt-image-1', 'dall-e-3'],
     defaultProvider: 'google',
-    defaultModel: 'gemini-image',
+    defaultModel: 'imagen-3',
     costComparison: {
-      'gemini-image': '$0.00 (Free)',
-      'imagen-4': '$0.04',
-      'imagen-4-ultra': '$0.06',
-      'dall-e-3': '$0.08',
-      'gpt-image-1': '$0.19'
+      'imagen-3': '$0.03 (Standard Plus)',
+      'imagen-4': '$0.04 (Premium)',
+      'imagen-4-ultra': '$0.06 (Maximum)',
+      'dall-e-3': '$0.08 (OpenAI Standard)',
+      'gpt-image-1': '$0.19 (OpenAI Premium)'
     },
     optimalPromptLengths: {
-      'gemini-image': 800,
+      'imagen-3': 1200,
       'imagen-4': 1500,
       'imagen-4-ultra': 2000,
       'gpt-image-1': 900,
