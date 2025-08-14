@@ -129,7 +129,7 @@ export async function POST(
           effort: 10  // Maksymalny effort dla najlepszej kompresji
         })
         .resize(1024, 1024, {
-          fit: 'cover',
+          fit: 'inside',
           position: 'center',
           withoutEnlargement: false
         })
@@ -144,7 +144,7 @@ export async function POST(
           progressive: true
         })
         .resize(1024, 1024, {
-          fit: 'cover',
+          fit: 'inside',
           position: 'center',
           withoutEnlargement: false
         })

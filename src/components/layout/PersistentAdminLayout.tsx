@@ -180,13 +180,6 @@ const menuItems: MenuItem[] = [
     iconType: 'linkedin'
   },
   {
-    IconComponent: TrendingUp,
-    label: 'Trendy',
-    path: '/trendy',
-    roles: ['ADMIN', 'USER', 'GOD'],
-    requiredStatus: ['active']
-  },
-  {
     IconComponent: BookOpen,
     label: 'Ebooki',
     path: '/ebooki',

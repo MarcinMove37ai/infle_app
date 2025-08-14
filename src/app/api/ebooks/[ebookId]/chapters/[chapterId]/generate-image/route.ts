@@ -30,6 +30,7 @@ const MODEL_CONFIGS = {
     quality: "high" as const,
     costEstimate: 0.03,
     sizes: ['1024x1024', '1024x1536', '1536x1024'],
+    landscape_size: '1536x1024',
     enhancement_level: "standard",
     supports_transparency: false,
     supports_text_rendering: true,
@@ -47,6 +48,7 @@ const MODEL_CONFIGS = {
     quality: "high" as const,
     costEstimate: 0.04,
     sizes: ['1024x1024', '1024x1536', '1536x1024'],
+    landscape_size: '1536x1024',
     enhancement_level: "premium",
     supports_transparency: false,
     supports_text_rendering: true,
@@ -64,6 +66,7 @@ const MODEL_CONFIGS = {
     quality: "ultra" as const,
     costEstimate: 0.06,
     sizes: ['1024x1024', '1024x1536', '1536x1024'],
+    landscape_size: '1536x1024',
     enhancement_level: "maximum",
     supports_transparency: false,
     supports_text_rendering: true,
@@ -81,6 +84,7 @@ const MODEL_CONFIGS = {
     quality: "high" as const,
     costEstimate: 0.002, // Tańszy niż Imagen
     sizes: ['1024x1024', '1024x1536', '1536x1024'],
+    landscape_size: '1536x1024',
     enhancement_level: "standard",
     supports_transparency: false,
     supports_text_rendering: true,
@@ -102,6 +106,7 @@ const MODEL_CONFIGS = {
     moderation: "auto" as const,
     costEstimate: 0.19,
     sizes: ['1024x1024', '1024x1536', '1536x1024'],
+    landscape_size: '1536x1024',
     enhancement_level: "optimal",
     detail_focus: "focused",
     render_quality: "professional",
@@ -117,6 +122,7 @@ const MODEL_CONFIGS = {
     style: "natural" as const,
     costEstimate: 0.08,
     sizes: ['1024x1024', '1792x1024', '1024x1792'],
+    landscape_size: '1792x1024',
     supports_transparency: false,
     always_returns_base64: false,
     requires_user_key: false
@@ -528,7 +534,7 @@ export async function POST(
     const { ebookId, chapterId } = await params;
     console.log(`🎨 === MULTI-PROVIDER CHAPTER GENERATION START | Ebook: ${ebookId}, Chapter: ${chapterId} ===`);
 
-    const { forceRegenerate = false, size = '1536x1024' } = await request.json();
+    const { forceRegenerate = false } = await request.json();
     const ebookIdNum = parseInt(ebookId), chapterIdNum = parseInt(chapterId);
 
     const modelSelection = await selectOptimalModel(session.user.id);
@@ -579,7 +585,7 @@ export async function POST(
 
     console.log(`🚀 === IMAGE GENERATION WITH ${modelSelection.provider.toUpperCase()}/${modelSelection.model.toUpperCase()} ===`);
     const config = MODEL_CONFIGS[modelSelection.model as keyof typeof MODEL_CONFIGS];
-    const validSize = config.sizes.includes(size as any) ? size : config.sizes[0];
+    const validSize = (config as any).landscape_size || config.sizes[0];
     let actualModelUsed = modelSelection.model;
     let imageResponse;
     let finalPrompt = optimizePromptForModel(imagePrompt, chapterTitle, modelSelection.model);

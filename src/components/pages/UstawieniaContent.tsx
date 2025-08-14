@@ -42,8 +42,8 @@ const TEXT_PROVIDERS = [
     icon: '🧠',
     available: true,
     models: [
-      { id: 'claude-3-haiku', name: 'Claude Haiku 3.5', description: 'Szybki i ekonomiczny', tier: 'basic' },
-      { id: 'claude-3-sonnet', name: 'Claude Sonnet 4', description: 'Najnowszy i najlepszy', tier: 'premium' },
+      { id: 'claude-3-haiku', name: 'Claude Haiku 3.5', description: 'Dostępny bezpłatnie przez 30 dni', tier: 'basic' },
+      { id: 'claude-3-sonnet', name: 'Claude Sonnet 4', description: 'Input $3 / MTo | Output $15 / MTok', tier: 'premium', cost: '$0.025' },
     ]
   },
   {
@@ -51,28 +51,28 @@ const TEXT_PROVIDERS = [
     name: 'OpenAI',
     icon: '🤖',
     available: false,
-    models: [{ id: 'gpt-4o', name: 'GPT-4o', description: 'Najnowszy model', tier: 'premium' }]
+    models: [{ id: 'gpt-4o', name: 'GPT-4o', description: 'Najnowszy model ($0.030)', tier: 'premium', cost: '$0.030' }]
   },
   {
     id: 'gemini',
     name: 'Google Gemini',
     icon: '✨',
     available: false,
-    models: [{ id: 'gemini-pro', name: 'Gemini Pro', description: 'Model Google', tier: 'premium' }]
+    models: [{ id: 'gemini-pro', name: 'Gemini Pro', description: 'Model Google ($0.020)', tier: 'premium', cost: '$0.020' }]
   },
   {
     id: 'grok',
     name: 'Grok (X.AI)',
     icon: '⚡',
     available: false,
-    models: [{ id: 'grok-2', name: 'Grok 2', description: 'Model X.AI', tier: 'premium' }]
+    models: [{ id: 'grok-2', name: 'Grok 2', description: 'Model X.AI ($0.040)', tier: 'premium', cost: '$0.040' }]
   },
   {
     id: 'bielik',
     name: 'Bielik',
     icon: '🦅',
     available: false,
-    models: [{ id: 'bielik-11b', name: 'Bielik 11B', description: 'Polski model', tier: 'premium' }]
+    models: [{ id: 'bielik-11b', name: 'Bielik 11B', description: 'Polski model ($0.015)', tier: 'premium', cost: '$0.015' }]
   }
 ];
 
@@ -87,26 +87,22 @@ const IMAGE_PROVIDERS = [
       {
         id: 'imagen-3',
         name: 'Imagen 3',
-        description: 'Najtańszy ($0.03) - renderowanie tekstu',
-        tier: 'basic',
-        cost: '$0.03',
-        features: ['text_rendering', 'aspect_ratios', 'cost_effective']
+        description: 'Dostępny bezpłatnie przez 30 dni',
+        tier: 'basic'
       },
       {
         id: 'imagen-4',
         name: 'Imagen 4',
-        description: 'Wysoka jakość ($0.04) - wymaga klucza',
+        description: 'Wysoka jakość ($0.04) - wymaga własnego klucza API',
         tier: 'premium',
-        cost: '$0.04',
-        features: ['text_rendering', 'aspect_ratios', 'better_quality']
+        cost: '$0.04'
       },
       {
         id: 'imagen-4-ultra',
         name: 'Imagen 4 Ultra',
-        description: 'Najwyższa jakość ($0.06) - wymaga klucza',
+        description: 'Najwyższa jakość ($0.06) - wymaga własnego klucza API',
         tier: 'premium',
-        cost: '$0.06',
-        features: ['text_rendering', 'aspect_ratios', 'best_quality', 'prompt_adherence']
+        cost: '$0.06'
       }
     ]
   },
@@ -114,23 +110,20 @@ const IMAGE_PROVIDERS = [
     id: 'openai',
     name: 'OpenAI',
     icon: '🎨',
-    available: true,
+    available: false,
     models: [
       {
         id: 'dall-e-3',
         name: 'DALL-E 3',
-        description: 'Standardowy ($0.08) - bez klucza',
-        tier: 'basic',
-        cost: '$0.08',
-        features: ['natural_style', 'hd_quality']
+        description: 'Standardowy - bez klucza',
+        tier: 'basic'
       },
       {
         id: 'gpt-image-1',
         name: 'GPT-Image-1',
         description: 'Premium ($0.19) - wymaga klucza',
         tier: 'premium',
-        cost: '$0.19',
-        features: ['transparency', 'highest_quality']
+        cost: '$0.19'
       },
     ]
   }
@@ -281,65 +274,6 @@ export default function UstawieniaContent() {
       }
     }
   }, [user]); // ✅ USUNIĘTO initialUsername z zależności - zapobiega zapętleniu
-
-  // ✅ NOWE: Pobieranie ustawień autora z API (backup function)
-  const fetchAuthorSettings = useCallback(async () => {
-    if (!user) return;
-
-    setIsLoadingAuthorSettings(true);
-    try {
-      const response = await fetch('/api/user/author-settings', {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        const authorSettings: AuthorSettings = data.authorSettings;
-
-        // ✅ Dodaj cache busting do istniejącego avatara
-        let logoUrl = authorSettings.authorLogoUrl;
-        if (logoUrl) {
-          const separator = logoUrl.includes('?') ? '&' : '?';
-          logoUrl = `${logoUrl}${separator}t=${Date.now()}`;
-        }
-
-        // Aktualizuj settings z danymi z serwera
-        setSettings(prev => ({
-          ...prev,
-          username: authorSettings.authorDisplayName || authorSettings.fallbackName,
-          logo: logoUrl,
-          // ✅ DODANE: Aktualizuj ustawienia AI z serwera - Z GOOGLE DOMYŚLNYM
-          textProvider: authorSettings.textAiProvider || 'anthropic',
-          textModel: authorSettings.textAiModel || 'claude-3-haiku',
-          imageProvider: authorSettings.imageAiProvider || 'google', // 🆕 ZMIANA: Google domyślny
-          imageModel: authorSettings.imageAiModel || 'imagen-3' // 🆕 ZMIANA: Imagen 3 domyślny
-        }));
-
-        // Ustaw jako zapisane
-        setLastSavedUsername(authorSettings.authorDisplayName || authorSettings.fallbackName);
-
-        console.log('✅ Pobrano ustawienia autora:', authorSettings);
-        console.log('🔧 Załadowane ustawienia AI z serwera:', {
-          textProvider: authorSettings.textAiProvider || 'anthropic (default)',
-          textModel: authorSettings.textAiModel || 'claude-3-haiku (default)',
-          imageProvider: authorSettings.imageAiProvider || 'google (default)', // 🆕 ZMIANA
-          imageModel: authorSettings.imageAiModel || 'imagen-3 (default)' // 🆕 ZMIANA
-        });
-      } else {
-        console.error('❌ Błąd pobierania ustawień autora:', response.status);
-        setMessage({ type: 'error', text: 'Nie udało się pobrać ustawień autora' });
-      }
-    } catch (error) {
-      console.error('❌ Błąd sieci przy pobieraniu ustawień autora:', error);
-      setMessage({ type: 'error', text: 'Błąd połączenia z serwerem' });
-    } finally {
-      setIsLoadingAuthorSettings(false);
-      setTimeout(() => setMessage(null), 3000);
-    }
-  }, [user]); // ✅ Usunięto resetImageAspectRatio dependency
 
   // ✅ Pobierz ustawienia autora tylko raz przy załadowaniu
   useEffect(() => {
@@ -1083,7 +1017,7 @@ export default function UstawieniaContent() {
               <div className="relative">
                 <button onClick={() => toggleDropdown('textModel')} className="w-full px-4 py-3 border border-gray-300 rounded-lg text-left flex items-center justify-between hover:border-gray-400 focus:ring-2 focus:ring-blue-500 bg-white">
                   <div>
-                    <div className="font-medium text-gray-900 flex items-center">{textModel?.name}{textModel?.tier === 'premium' && (<span className="ml-2 px-2.5 py-0.5 bg-purple-100 text-purple-800 text-xs font-medium rounded-full">Własny klucz API</span>)}</div>
+                    <div className="font-medium text-gray-900 flex items-center">{textModel?.name}{textModel?.tier === 'premium' && (<span className="ml-2 px-2.5 py-0.5 bg-purple-100 text-purple-800 text-xs font-medium rounded-full">Wymagany własny klucz API</span>)}</div>
                     <div className="text-sm text-gray-500">{textModel?.description}</div>
                   </div>
                   <ChevronDown className={`h-5 w-5 text-gray-400 transition-transform ${dropdowns.textModel ? 'rotate-180' : ''}`} />
@@ -1100,7 +1034,7 @@ export default function UstawieniaContent() {
                       }} className={`w-full px-4 py-3 text-left hover:bg-gray-50 first:rounded-t-lg last:rounded-b-lg transition-colors ${settings.textModel === model.id ? 'bg-blue-50' : ''}`}>
                         <div className="flex items-center justify-between">
                           <div>
-                            <div className="font-medium text-gray-900 flex items-center">{model.name}{model.tier === 'premium' && (<span className="ml-2 px-2.5 py-0.5 bg-purple-100 text-purple-800 text-xs font-medium rounded-full">Własny klucz API</span>)}</div>
+                            <div className="font-medium text-gray-900 flex items-center">{model.name}{model.tier === 'premium' && (<span className="ml-2 px-2.5 py-0.5 bg-purple-100 text-purple-800 text-xs font-medium rounded-full">Wymagany własny klucz API</span>)}</div>
                             <div className="text-sm text-gray-500">{model.description}</div>
                           </div>
                           {settings.textModel === model.id && <Check className="h-4 w-4 text-blue-600" />}
@@ -1143,7 +1077,7 @@ export default function UstawieniaContent() {
           )}
         </div>
 
-        {/* 🆕 ZAKTUALIZOWANE Image Generation z Google */}
+        {/* Image Generation */}
         <div className="bg-white rounded-xl border border-gray-200 p-6">
           <div className="flex items-center mb-6">
             <Palette className="h-5 w-5 text-purple-600 mr-2" />
@@ -1194,15 +1128,10 @@ export default function UstawieniaContent() {
                     <div className="font-medium text-gray-900 flex items-center">
                       {imageModel?.name}
                       {imageModel?.tier === 'premium' && (
-                        <span className="ml-2 px-2.5 py-0.5 bg-purple-100 text-purple-800 text-xs font-medium rounded-full">Własny klucz API</span>
+                        <span className="ml-2 px-2.5 py-0.5 bg-purple-100 text-purple-800 text-xs font-medium rounded-full">Wymagany własny klucz API</span>
                       )}
                     </div>
-                    <div className="text-sm text-gray-500 flex items-center">
-                      {imageModel?.description}
-                      {imageModel?.cost && (
-                        <span className="ml-2 text-xs font-medium text-green-600">({imageModel.cost})</span>
-                      )}
-                    </div>
+                    <div className="text-sm text-gray-500">{imageModel?.description}</div>
                   </div>
                   <ChevronDown className={`h-5 w-5 text-gray-400 transition-transform ${dropdowns.imageModel ? 'rotate-180' : ''}`} />
                 </button>
@@ -1221,28 +1150,10 @@ export default function UstawieniaContent() {
                             <div className="font-medium text-gray-900 flex items-center">
                               {model.name}
                               {model.tier === 'premium' && (
-                                <span className="ml-2 px-2.5 py-0.5 bg-purple-100 text-purple-800 text-xs font-medium rounded-full">Własny klucz API</span>
+                                <span className="ml-2 px-2.5 py-0.5 bg-purple-100 text-purple-800 text-xs font-medium rounded-full">Wymagany własny klucz API</span>
                               )}
                             </div>
-                            <div className="text-sm text-gray-500 flex items-center">
-                              {model.description}
-                              {model.cost && (
-                                <span className="ml-2 text-xs font-medium text-green-600">({model.cost})</span>
-                              )}
-                            </div>
-                            {/* 🆕 DODANE: Wyświetlanie funkcji modelu */}
-                            {model.features && model.features.length > 0 && (
-                              <div className="mt-1 flex flex-wrap gap-1">
-                                {model.features.slice(0, 3).map((feature, idx) => (
-                                  <span key={idx} className="text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">
-                                    {feature.replace('_', ' ')}
-                                  </span>
-                                ))}
-                                {model.features.length > 3 && (
-                                  <span className="text-xs text-gray-400">+{model.features.length - 3}</span>
-                                )}
-                              </div>
-                            )}
+                            <div className="text-sm text-gray-500">{model.description}</div>
                           </div>
                           {settings.imageModel === model.id && <Check className="h-4 w-4 text-purple-600" />}
                         </div>
