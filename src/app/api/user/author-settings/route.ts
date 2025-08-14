@@ -131,7 +131,7 @@ export async function PUT(request: NextRequest) {
           imageAiModel = imageModelFromForm.trim();
         }
 
-        console.log('📝 Z formData - nazwa:', authorDisplayName, 'avatar:', !!imageFile, 'AI settings:', {
+        console.log('🔍 Z formData - nazwa:', authorDisplayName, 'avatar:', !!imageFile, 'AI settings:', {
           textAiProvider, textAiModel, imageAiProvider, imageAiModel
         });
       } catch (formError) {
@@ -167,7 +167,7 @@ export async function PUT(request: NextRequest) {
           imageAiModel = body.imageAiModel.trim();
         }
 
-        console.log('📝 Z JSON - nazwa:', authorDisplayName, 'AI settings:', {
+        console.log('🔍 Z JSON - nazwa:', authorDisplayName, 'AI settings:', {
           textAiProvider, textAiModel, imageAiProvider, imageAiModel
         });
       } catch (jsonError) {
@@ -207,36 +207,52 @@ export async function PUT(request: NextRequest) {
       }
     }
 
-    // ✅ NOWA WALIDACJA: Ustawienia AI
-    const validProviders = ['anthropic', 'openai', 'gemini'];
-    const validTextModels = ['claude-3-haiku', 'claude-3-sonnet', 'gpt-4o', 'gemini-pro'];
-    const validImageModels = ['dall-e-3', 'gpt-image-1', 'imagen-2'];
+    // 🆕 NAPRAWIONA WALIDACJA: Ustawienia AI z obsługą Google
+    const validProviders = ['anthropic', 'openai', 'google']; // 🆕 DODANE: 'google'
+    const validTextModels = [
+      // Anthropic
+      'claude-3-haiku', 'claude-3-sonnet', 'claude-4-opus',
+      // OpenAI
+      'gpt-4o', 'gpt-4-turbo',
+      // Google
+      'gemini-pro', 'gemini-flash'
+    ];
+    const validImageModels = [
+      // OpenAI
+      'dall-e-3', 'gpt-image-1',
+      // Google - 🆕 DODANE: wszystkie modele Google
+      'imagen-3', 'imagen-4', 'imagen-4-ultra', 'gemini-image'
+    ];
 
     if (textAiProvider !== undefined && !validProviders.includes(textAiProvider)) {
       return NextResponse.json({
         error: 'Nieprawidłowy provider tekstu',
-        validProviders: validProviders
+        validProviders: validProviders,
+        received: textAiProvider
       }, { status: 400 });
     }
 
     if (imageAiProvider !== undefined && !validProviders.includes(imageAiProvider)) {
       return NextResponse.json({
         error: 'Nieprawidłowy provider obrazów',
-        validProviders: validProviders
+        validProviders: validProviders,
+        received: imageAiProvider
       }, { status: 400 });
     }
 
     if (textAiModel !== undefined && !validTextModels.includes(textAiModel)) {
       return NextResponse.json({
         error: 'Nieprawidłowy model tekstu',
-        validModels: validTextModels
+        validModels: validTextModels,
+        received: textAiModel
       }, { status: 400 });
     }
 
     if (imageAiModel !== undefined && !validImageModels.includes(imageAiModel)) {
       return NextResponse.json({
         error: 'Nieprawidłowy model obrazów',
-        validModels: validImageModels
+        validModels: validImageModels,
+        received: imageAiModel
       }, { status: 400 });
     }
 
@@ -386,6 +402,8 @@ export async function PUT(request: NextRequest) {
     if (imageAiModel !== undefined) {
       updateData.imageAiModel = imageAiModel;
     }
+
+    console.log('🔄 Aktualizuję następujące pola:', Object.keys(updateData).filter(key => key !== 'updatedAt'));
 
     // Aktualizacja ustawień autora w bazie danych
     const updatedUser = await prisma.user.update({

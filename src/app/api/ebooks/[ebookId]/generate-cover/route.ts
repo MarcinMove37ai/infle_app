@@ -3,188 +3,139 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { getApiKeyForEndpoint, getUserAiSettings } from '@/lib/user-api-keys';
 import sharp from 'sharp';
 import fs from 'fs/promises';
 import path from 'path';
 import axios from 'axios';
 
-// 🚫 KRYTYCZNE OGRANICZENIA GRAFICZNE - ZAKAZ KAPSUŁEK I STAŁYCH FORM SUPLEMENTÓW
-const FORBIDDEN_SUPPLEMENT_ELEMENTS = {
-  // Formy stałe suplementów - ABSOLUTNIE ZABRONIONE
-  solidForms: [
-    'capsules', 'capsule', 'kapsułki', 'kapsułka', 'kapsułek', 'kapsułkami',
-    'tablets', 'tablet', 'tabletki', 'tabletka', 'tabletek', 'tabletkami',
-    'pills', 'pill', 'pilulki', 'pilulka', 'pilulek',
-    'softgels', 'softgel', 'żelki', 'żelka', 'żelek',
-    'lozenges', 'lozenge', 'pastylki', 'pastylka', 'pastylek',
-    'dragee', 'dragée'
-  ],
-
-  // Kombinacje omega-3 - SZCZEGÓLNIE ZABRONIONE
-  omega3Combinations: [
-    'omega-3 capsules', 'omega-3 tablets', 'omega-3 pills',
-    'fish oil capsules', 'fish oil tablets', 'fish oil pills',
-    'kapsułki omega-3', 'tabletki omega-3', 'pilulki omega-3',
-    'kapsułki z olejem rybim', 'tabletki fish oil'
-  ],
-
-  // Konteksty problematyczne
-  problematicContexts: [
-    'scattered pills', 'rozsypane kapsułki', 'scattered capsules',
-    'supplement capsules', 'vitamin tablets', 'mineral pills',
-    'kapsułki witaminowe', 'tabletki mineralne', 'suplementy w kapsułkach',
-    'small round objects', 'małe okrągłe obiekty',
-    'transparent capsules', 'przezroczyste kapsułki',
-    'gelowe kapsułki', 'blister packaging', 'gel caps'
-  ],
-
-  // Wzorce regex do skanowania
-  regexPatterns: [
-    /\b(capsule|tablet|pill|softgel|kapsułk|tabletk|pilulk|żelk)s?\b/gi,
-    /\b(omega-3|fish oil|supplement|vitamin)\s+(capsule|tablet|pill)s?\b/gi,
-    /\bscattered\s+(capsule|tablet|pill)s?\b/gi,
-    /\bsmall\s+round\s+(objects|obiekt)/gi,
-    /\b(gel\s*caps?|gelcaps?)\b/gi,
-    /\bblister\s+pack/gi
-  ]
-};
-
-// Funkcja KRYTYCZNEGO czyszczenia promptu z zabronionych form suplementów
-const criticalSupplementCleanup = (prompt: string, context: string = 'cover'): string => {
-  let cleanedPrompt = prompt;
-  let violationsFound = 0;
-
-  console.log(`🚫 === CRITICAL SUPPLEMENT CLEANUP (${context.toUpperCase()}) ===`);
-
-  // Poziom 1: Sprawdzenie i usunięcie wzorców regex
-  FORBIDDEN_SUPPLEMENT_ELEMENTS.regexPatterns.forEach((pattern, index) => {
-    const matches = cleanedPrompt.match(pattern);
-    if (matches) {
-      violationsFound += matches.length;
-      console.log(`❌ VIOLATION ${index + 1}: Found ${matches.length} forbidden patterns: ${matches.join(', ')}`);
-      cleanedPrompt = cleanedPrompt.replace(pattern, '');
-    }
-  });
-
-  // Poziom 2: Usunięcie konkretnych fraz - SOLIDFORMS (najważniejsze)
-  FORBIDDEN_SUPPLEMENT_ELEMENTS.solidForms.forEach(forbidden => {
-    const regex = new RegExp('\\b' + forbidden.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'gi');
-    const matches = cleanedPrompt.match(regex);
-    if (matches) {
-      violationsFound += matches.length;
-      console.log(`❌ SOLID FORM VIOLATION: Removing "${forbidden}" (${matches.length} occurrences)`);
-      cleanedPrompt = cleanedPrompt.replace(regex, '');
-    }
-  });
-
-  // Poziom 3: Usunięcie kombinacji omega-3 (szczególnie ważne)
-  FORBIDDEN_SUPPLEMENT_ELEMENTS.omega3Combinations.forEach(forbidden => {
-    const regex = new RegExp(forbidden.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
-    if (regex.test(cleanedPrompt)) {
-      violationsFound++;
-      console.log(`❌ OMEGA-3 VIOLATION: Removing "${forbidden}"`);
-      cleanedPrompt = cleanedPrompt.replace(regex, '');
-    }
-  });
-
-  // Poziom 4: Usunięcie kontekstów problematycznych
-  FORBIDDEN_SUPPLEMENT_ELEMENTS.problematicContexts.forEach(forbidden => {
-    const regex = new RegExp(forbidden.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
-    if (regex.test(cleanedPrompt)) {
-      violationsFound++;
-      console.log(`❌ CONTEXT VIOLATION: Removing "${forbidden}"`);
-      cleanedPrompt = cleanedPrompt.replace(regex, '');
-    }
-  });
-
-  // Poziom 5: Dodatkowe czyszczenie białych znaków i normalizacja
-  cleanedPrompt = cleanedPrompt
-    .replace(/\s+/g, ' ')
-    .replace(/\s*,\s*,/g, ',')
-    .replace(/\s*\.\s*\./g, '.')
-    .replace(/^[,.\s]+|[,.\s]+$/g, '')
-    .trim();
-
-  // Końcowy raport compliance
-  const complianceStatus = violationsFound === 0 ? 'COMPLIANT' : 'VIOLATIONS REMOVED';
-  console.log(`🔍 COMPLIANCE REPORT:`);
-  console.log(`   - Violations found: ${violationsFound}`);
-  console.log(`   - Original length: ${prompt.length} chars`);
-  console.log(`   - Cleaned length: ${cleanedPrompt.length} chars`);
-  console.log(`   - Status: ${complianceStatus}`);
-  console.log(`   - Change: ${prompt.length - cleanedPrompt.length} chars removed`);
-
-  if (violationsFound > 0) {
-    console.log(`✅ SUPPLEMENT COMPLIANCE ACHIEVED - ${violationsFound} violations removed`);
-  } else {
-    console.log(`✅ PROMPT WAS ALREADY SUPPLEMENT-COMPLIANT`);
+// Helper function to safely log API keys
+function getMaskedApiKey(apiKey: string | null): string {
+  if (!apiKey) {
+    return "KLUCZ NIEOBECNY (null)";
   }
-
-  return cleanedPrompt;
-};
-
-// Funkcja dodawania pozytywnych zakazów do promptu
-const addSupplementBanClauses = (prompt: string): string => {
-  const banClauses = [
-    "ABSOLUTELY FORBIDDEN: capsules, tablets, pills, softgels, lozenges, or any solid supplement forms",
-    "STRICTLY PROHIBITED: omega-3 capsules, fish oil tablets, vitamin pills, scattered round objects",
-    "BANNED: kapsułki, tabletki, pilulki, żelki, pastylki, gel caps, blister packaging",
-    "NO medication forms, supplement containers, or pharmaceutical representations",
-    "SEAMLESS: transparent background with natural edge blending, no borders or frames",
-    "COMPOSITION: contained within image bounds with fade-out edges for natural blending",
-    "MARGINS: proper internal spacing with adequate clearance from all image edges",
-    "BOUNDARIES: all elements positioned away from image perimeter for white background compatibility"
-  ];
-
-  // Sprawdź czy prompt już ma zakazy
-  const hasExistingBans = banClauses.some(clause =>
-    prompt.toLowerCase().includes(clause.toLowerCase().substring(0, 20))
-  );
-
-  if (hasExistingBans) {
-    console.log(`✅ Prompt already contains supplement ban and margin composition clauses`);
-    return prompt;
+  if (apiKey.length < 8) {
+    return "KLUCZ ZBYT KRÓTKI (prawdopodobnie nieprawidłowy)";
   }
+  return `${apiKey.substring(0, 7)}...${apiKey.substring(apiKey.length - 4)}`;
+}
 
-  console.log(`🔒 Adding supplement ban and margin composition clauses to prompt`);
-  const banSection = ` ${banClauses.join('. ')}.`;
-
-  return prompt + banSection;
-};
-
-// ===== KONFIGURACJA GPT-IMAGE-1 ZOPTYMALIZOWANA POD OKŁADKI =====
+// 🆕 MULTI-PROVIDER MODEL CONFIGURATION FOR COVERS
 const COVER_MODEL_CONFIGS = {
+  // 🆕 GOOGLE MODELS - OPTIMIZED FOR BOOK COVERS
+  "imagen-3": {
+    provider: "google",
+    maxPromptLength: 4000,
+    optimalLength: 2000,
+    quality: "high" as const,
+    costEstimate: 0.03,
+    sizes: ['1024x1024', '1024x1536', '1536x1024'],
+    enhancement_level: "standard",
+    supports_transparency: false,
+    supports_text_rendering: true,
+    always_returns_base64: true,
+    requires_user_key: true,
+    api_model: "imagen-3.0-generate-002",
+    api_method: "generateImages",
+    max_images: 4,
+    cover_optimized: true
+  },
+  "imagen-4": {
+    provider: "google",
+    maxPromptLength: 4000,
+    optimalLength: 2000,
+    quality: "high" as const,
+    costEstimate: 0.04,
+    sizes: ['1024x1024', '1024x1536', '1536x1024'],
+    enhancement_level: "premium",
+    supports_transparency: false,
+    supports_text_rendering: true,
+    always_returns_base64: true,
+    requires_user_key: true,
+    api_model: "imagen-4.0-generate-preview-06-06",
+    api_method: "generateImages",
+    max_images: 4,
+    cover_optimized: true
+  },
+  "imagen-4-ultra": {
+    provider: "google",
+    maxPromptLength: 4000,
+    optimalLength: 2500,
+    quality: "ultra" as const,
+    costEstimate: 0.06,
+    sizes: ['1024x1024', '1024x1536', '1536x1024'],
+    enhancement_level: "maximum",
+    supports_transparency: false,
+    supports_text_rendering: true,
+    prompt_adherence: "excellent",
+    always_returns_base64: true,
+    requires_user_key: true,
+    api_model: "imagen-4.0-ultra-generate-preview-06-06",
+    api_method: "generateImages",
+    max_images: 1,
+    cover_optimized: true
+  },
+  "gemini-image": {
+    provider: "google",
+    maxPromptLength: 4000,
+    optimalLength: 2000,
+    quality: "high" as const,
+    costEstimate: 0.002,
+    sizes: ['1024x1024', '1024x1536', '1536x1024'],
+    enhancement_level: "standard",
+    supports_transparency: false,
+    supports_text_rendering: true,
+    supports_conversational_edit: true,
+    always_returns_base64: true,
+    requires_user_key: true,
+    api_model: "gemini-2.0-flash-preview-image-generation",
+    api_method: "generateContent",
+    requires_text_and_image: true,
+    cover_optimized: true
+  },
+  // OPENAI MODELS - ENHANCED FOR COVERS
   "gpt-image-1": {
-    maxPromptLength: 4000,  // 🔥 PEŁNY LIMIT GPT-Image-1 dla okładek
-    quality: "high" as const,  // 🔥 Najwyższa jakość dla okładek
-    output_format: "png" as const,  // 🔥 Best dla okładek książek
-    background: "transparent" as const,  // 🔥 Przezroczyste tło jako priorytet
+    provider: "openai",
+    maxPromptLength: 4000,
+    optimalLength: 2000,
+    quality: "high" as const,
+    output_format: "png" as const,
+    background: "transparent" as const,
     moderation: "auto" as const,
-    costEstimate: 0.12,  // Wyższa cena za high quality
-    defaultSize: '1024x1024',  // 🔥 KWADRATOWY format dla okładek książek
-    sizes: ['1024x1024', '1536x1024', '1024x1536']  // Kwadratowy preferowany
+    costEstimate: 0.19,
+    sizes: ['1024x1024', '1024x1536', '1536x1024'],
+    enhancement_level: "optimal",
+    detail_focus: "focused",
+    render_quality: "professional",
+    supports_transparency: true,
+    supports_text_rendering: true,
+    always_returns_base64: true,
+    requires_user_key: true,
+    cover_optimized: true
   },
   "dall-e-3": {
-    maxPromptLength: 400,   // Fallback limits
-    quality: "standard" as const,
+    provider: "openai",
+    maxPromptLength: 400,
+    quality: "hd" as const,
     style: "natural" as const,
-    costEstimate: 0.04,
-    defaultSize: '1024x1024',
-    sizes: ['1024x1024', '1792x1024', '1024x1792']
+    costEstimate: 0.08,
+    sizes: ['1024x1024', '1792x1024', '1024x1792'],
+    supports_transparency: false,
+    always_returns_base64: false,
+    requires_user_key: false,
+    cover_optimized: true
   }
 } as const;
 
 // Sprawdzenie konfiguracji na starcie
-console.log('🚀 === GPT-IMAGE-1 BOOK COVER GENERATOR WITH SUPPLEMENT RESTRICTIONS ===');
-console.log(`   - API Key: ${!!process.env.OPENAI_API_KEY ? 'OK' : 'MISSING'}`);
-console.log(`   - Primary Model: gpt-image-1 (4000 char limit)`);
-console.log(`   - Default Format: Square 1024x1024 (book cover)`);
-console.log(`   - Background: transparent (PRIORITY)`);
-console.log(`   - Quality: high (maximum quality)`);
-console.log(`   - Composition: seamless edge-free design`);
-console.log(`   - Specialization: Professional book covers (supplement-safe, transparent, seamless)`);
-console.log(`   - Content Restrictions: FULL SUPPLEMENT COMPLIANCE`);
-console.log('🚀 === COVER GENERATOR READY ===');
+console.log('🚀 === MULTI-PROVIDER BOOK COVER GENERATOR ===');
+console.log(`   - Google Models: Imagen 3 ($0.03), Imagen 4 ($0.04), Imagen 4 Ultra ($0.06), Gemini 2.0 Flash ($0.002)`);
+console.log(`   - OpenAI Models: DALL-E 3 ($0.08), GPT-Image-1 ($0.19)`);
+console.log(`   - Total Models: 6 available (4 Google, 2 OpenAI)`);
+console.log(`   - Optimization: Professional book covers`);
+console.log(`   - Background: Transparent preferred, seamless composition`);
+console.log(`   - Raw API Logging: ENABLED`);
+console.log('🚀 === MULTI-PROVIDER COVER GENERATOR READY ===');
 
 function logApiKey(apiKey: string | undefined): string {
   if (!apiKey) return 'MISSING';
@@ -192,97 +143,352 @@ function logApiKey(apiKey: string | undefined): string {
   return `${apiKey.substring(0, 7)}...${apiKey.substring(apiKey.length - 4)}`;
 }
 
-function debugApiKey() {
-  console.log('🔍 === COVER API KEY DEBUG ===');
-  console.log(`   - OPENAI_API_KEY exists: ${!!process.env.OPENAI_API_KEY}`);
-  console.log(`   - Length: ${process.env.OPENAI_API_KEY?.length || 0}`);
-  console.log(`   - Format: ${logApiKey(process.env.OPENAI_API_KEY)}`);
-  console.log('🔍 === END DEBUG ===');
-}
+// ✅ COVER MODEL SELECTION - BASED ON USER PREFERENCES
+const selectOptimalCoverModel = async (userId: string | null): Promise<{
+  model: string;
+  provider: string;
+  apiKey: string | null;
+  keySource: 'user' | 'env' | 'none';
+  reasoning: string;
+}> => {
+  console.log('🧠 === MULTI-PROVIDER COVER MODEL SELECTION ===');
 
-// INTELIGENTNA OPTYMALIZACJA PROMPTU OKŁADKI Z KONTROLĄ SUPLEMENTÓW
-const optimizePromptForBookCover = (prompt: string, bookTitle: string): string => {
-  console.log(`🔍 === COVER PROMPT OPTIMIZATION WITH SUPPLEMENT CONTROL ===`);
-  console.log(`   - Input length: ${prompt.length} chars`);
-  console.log(`   - GPT-Image-1 limit: 4000 chars`);
+  if (!userId) {
+    console.log('   - User: Not logged in, using fallback model.');
+    return {
+      model: 'dall-e-3',
+      provider: 'openai',
+      apiKey: process.env.OPENAI_API_KEY || null,
+      keySource: 'env',
+      reasoning: 'No user logged in - using environment DALL-E 3.'
+    };
+  }
 
-  // ETAP 1: KRYTYCZNE czyszczenie z suplementów
-  let cleanedPrompt = criticalSupplementCleanup(prompt, 'optimization');
+  // Pobierz ustawienia AI użytkownika
+  const userAiSettings = await getUserAiSettings(userId);
+  const preferredProvider = userAiSettings.imageAiProvider;
+  const preferredModel = userAiSettings.imageAiModel;
 
-  // ETAP 2: Sprawdzenie czy prompt okładki jest już zoptymalizowany przez Claude
-  const claudeCoverOptimized = {
-    ultraSophisticated: cleanedPrompt.includes("ultra-sophisticated") || cleanedPrompt.includes("Create a professional"),
-    bookCover: cleanedPrompt.toLowerCase().includes("book cover") || cleanedPrompt.toLowerCase().includes("cover design"),
-    squareFormat: cleanedPrompt.includes("1024x1024") || cleanedPrompt.toLowerCase().includes("square") || cleanedPrompt.toLowerCase().includes('1024x1024'),
-    transparentBackground: cleanedPrompt.toLowerCase().includes("transparent background") || cleanedPrompt.toLowerCase().includes("transparent"),
-    seamlessComposition: cleanedPrompt.toLowerCase().includes("seamless") || cleanedPrompt.toLowerCase().includes("borderless") || cleanedPrompt.toLowerCase().includes("edge-free"),
-    naturalBlending: cleanedPrompt.toLowerCase().includes("natural") && (cleanedPrompt.toLowerCase().includes("blend") || cleanedPrompt.toLowerCase().includes("fade")),
-    properMargins: cleanedPrompt.toLowerCase().includes("margin") || cleanedPrompt.toLowerCase().includes("spacing") || cleanedPrompt.toLowerCase().includes("clearance"),
-    edgeBoundaries: cleanedPrompt.toLowerCase().includes("boundaries") || cleanedPrompt.toLowerCase().includes("contained") || cleanedPrompt.toLowerCase().includes("touch"),
-    noTextClause: cleanedPrompt.toLowerCase().includes("no text") || cleanedPrompt.toLowerCase().includes("absolutely no text"),
-    commercial: cleanedPrompt.toLowerCase().includes("commercial") || cleanedPrompt.toLowerCase().includes("marketing"),
-    professional: cleanedPrompt.toLowerCase().includes("professional"),
-    supplementBan: cleanedPrompt.toLowerCase().includes("forbidden") || cleanedPrompt.toLowerCase().includes("prohibited"),
-    longForm: cleanedPrompt.length > 2000  // Claude generuje długie prompty okładek
-  };
+  console.log(`   - User Settings: ${preferredProvider}/${preferredModel}`);
 
-  const isClaudeCoverOptimized = Object.values(claudeCoverOptimized).filter(Boolean).length >= 8;
+  const modelConfig = COVER_MODEL_CONFIGS[preferredModel as keyof typeof COVER_MODEL_CONFIGS];
 
-  console.log(`   - Claude cover optimization markers:`);
-  console.log(`     * Ultra-sophisticated: ${claudeCoverOptimized.ultraSophisticated ? '✅' : '❌'}`);
-  console.log(`     * Book cover specific: ${claudeCoverOptimized.bookCover ? '✅' : '❌'}`);
-  console.log(`     * Square format: ${claudeCoverOptimized.squareFormat ? '✅' : '❌'}`);
-  console.log(`     * Transparent background: ${claudeCoverOptimized.transparentBackground ? '✅' : '❌'}`);
-  console.log(`     * Seamless composition: ${claudeCoverOptimized.seamlessComposition ? '✅' : '❌'}`);
-  console.log(`     * Natural blending: ${claudeCoverOptimized.naturalBlending ? '✅' : '❌'}`);
-  console.log(`     * Proper margins: ${claudeCoverOptimized.properMargins ? '✅' : '❌'}`);
-  console.log(`     * Edge boundaries: ${claudeCoverOptimized.edgeBoundaries ? '✅' : '❌'}`);
-  console.log(`     * No text clause: ${claudeCoverOptimized.noTextClause ? '✅' : '❌'}`);
-  console.log(`     * Commercial appeal: ${claudeCoverOptimized.commercial ? '✅' : '❌'}`);
-  console.log(`     * Professional quality: ${claudeCoverOptimized.professional ? '✅' : '❌'}`);
-  console.log(`     * Supplement ban: ${claudeCoverOptimized.supplementBan ? '✅' : '❌'}`);
-  console.log(`     * Long form: ${claudeCoverOptimized.longForm ? '✅' : '❌'}`);
-  console.log(`   - IS CLAUDE COVER OPTIMIZED: ${isClaudeCoverOptimized ? '✅ YES' : '❌ NO'}`);
+  if (!modelConfig) {
+    console.log('   - Invalid model in settings, attempting fallback to DALL-E 3.');
+    return {
+      model: 'dall-e-3',
+      provider: 'openai',
+      apiKey: process.env.OPENAI_API_KEY || null,
+      keySource: 'env',
+      reasoning: 'Invalid model in user settings - using DALL-E 3 fallback.'
+    };
+  }
 
-  let finalPrompt = cleanedPrompt;
+  // Dla wszystkich modeli sprawdź dostępność kluczy
+  const providerForKey = modelConfig.provider === 'google' ? 'google' : 'openai';
+  const envKeyName = modelConfig.provider === 'google' ? 'GEMINI_API_KEY' : 'OPENAI_API_KEY';
 
-  if (isClaudeCoverOptimized) {
-    // PROMPT OKŁADKI Z CLAUDE - UŻYWAJ PRAKTYCZNIE BEZ ZMIAN
-    if (!claudeCoverOptimized.supplementBan) {
-      console.log(`🔒 Adding missing supplement ban to Claude prompt`);
-      finalPrompt = addSupplementBanClauses(cleanedPrompt);
-    }
+  try {
+    const { apiKey, source } = await getApiKeyForEndpoint(
+      userId,
+      providerForKey,
+      envKeyName
+    );
 
-    if (finalPrompt.length <= COVER_MODEL_CONFIGS["gpt-image-1"].maxPromptLength) {
-      console.log(`✅ PERFECT COVER - Using Claude prompt with supplement safety (${finalPrompt.length}/4000 chars)`);
-      return finalPrompt;
+    if (apiKey) {
+      console.log(`   - Using ${source.toUpperCase()} ${modelConfig.provider.toUpperCase()} API key for ${preferredModel}`);
+      return {
+        model: preferredModel,
+        provider: preferredProvider,
+        apiKey: apiKey,
+        keySource: source,
+        reasoning: `Using ${source} ${modelConfig.provider} key for ${preferredModel}`
+      };
     } else {
-      console.warn(`⚠️ Claude cover prompt slightly too long (${finalPrompt.length}), minimal trim to 4000`);
-      return finalPrompt.substring(0, 3997) + "...";
+       console.log(`   - No API key available for ${modelConfig.provider}/${preferredModel}, trying fallback`);
+
+       // Fallback to environment DALL-E 3 if available
+       if (process.env.OPENAI_API_KEY) {
+         return {
+           model: 'dall-e-3',
+           provider: 'openai',
+           apiKey: process.env.OPENAI_API_KEY,
+           keySource: 'env',
+           reasoning: `No API key for preferred model, using environment DALL-E 3.`
+         };
+       }
+
+       return {
+        model: preferredModel,
+        provider: preferredProvider,
+        apiKey: null,
+        keySource: 'none',
+        reasoning: `No API key found for the preferred model ${preferredModel}.`
+      };
+    }
+  } catch (error) {
+    console.log(`   - Error getting API key for ${modelConfig.provider}: ${error}`);
+
+    // Fallback to environment DALL-E 3 if available
+    if (process.env.OPENAI_API_KEY) {
+      return {
+        model: 'dall-e-3',
+        provider: 'openai',
+        apiKey: process.env.OPENAI_API_KEY,
+        keySource: 'env',
+        reasoning: `API key error for preferred model, using environment DALL-E 3.`
+      };
+    }
+  }
+
+  return {
+    model: preferredModel,
+    provider: preferredProvider,
+    apiKey: null,
+    keySource: 'none',
+    reasoning: 'An error occurred during API key retrieval.'
+  };
+};
+
+// ✅ GOOGLE IMAGE GENERATION FOR COVERS WITH RAW API LOGGING
+const callGoogleCoverGeneration = async (
+  model: string,
+  prompt: string,
+  size: string,
+  apiKey: string | null
+): Promise<any> => {
+  console.log(`🎨 === GOOGLE ${model.toUpperCase()} COVER GENERATION ===`);
+
+  const modelConfig = COVER_MODEL_CONFIGS[model as keyof typeof COVER_MODEL_CONFIGS];
+
+  if (!modelConfig) {
+    throw new Error(`Cover model configuration not found for: ${model}`);
+  }
+
+  console.log(`   - Identyfikacja użytego klucza API: ${getMaskedApiKey(apiKey)}`);
+  console.log(`   - Model API: ${'api_model' in modelConfig ? (modelConfig as any).api_model : 'N/A'}`);
+  console.log(`   - Method: ${'api_method' in modelConfig ? (modelConfig as any).api_method : 'N/A'}`);
+
+  if (!apiKey) {
+    throw new Error('API Key is null or not provided to callGoogleCoverGeneration.');
+  }
+
+  // Określ endpoint i body na podstawie typu modelu
+  let apiUrl: string;
+  let requestBody: any;
+
+  if (modelConfig.provider === 'google' && 'api_method' in modelConfig && (modelConfig as any).api_method === 'generateImages') {
+    // DLA MODELI IMAGEN – REST :predict
+    apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${(modelConfig as any).api_model}:predict`;
+
+    // Konwersja rozmiaru na format Imagen
+    let aspectRatio = "1:1";
+    if (size === "1024x1536") aspectRatio = "3:4";
+    else if (size === "1536x1024") aspectRatio = "4:3";
+
+    requestBody = {
+      instances: [{ prompt: prompt }],
+      parameters: {
+        sampleCount: 1,
+        aspectRatio: aspectRatio,
+        personGeneration: "allow_adult"
+      }
+    };
+  } else {
+    // DLA GEMINI 2.0 FLASH – :generateContent
+    apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${(modelConfig as any).api_model}:generateContent`;
+
+    requestBody = {
+      contents: [{
+        parts: [{ text: prompt }]
+      }],
+      generation_config: {
+        temperature: 1,
+        responseModalities: ["TEXT", "IMAGE"] // Gemini wymaga obu
+      }
+    };
+  }
+
+  // 📝 RAW API REQUEST LOGGING
+  console.log(`📝 === RAW GOOGLE API REQUEST ===`);
+  console.log(`   - URL: ${apiUrl}`);
+  console.log(`   - Method: POST`);
+  console.log(`   - Headers:`);
+  console.log(`     * Content-Type: application/json`);
+  console.log(`     * x-goog-api-key: ${getMaskedApiKey(apiKey)}`);
+  console.log(`   - Raw Request Body:`);
+  console.log(JSON.stringify(requestBody, null, 2));
+  console.log(`   - Prompt Length: ${prompt.length} chars`);
+  console.log(`   - Full Prompt Text:`);
+  console.log(`"${prompt}"`);
+  console.log(`📝 === END RAW REQUEST ===`);
+
+  const response = await fetch(apiUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-goog-api-key': apiKey,
+    },
+    body: JSON.stringify(requestBody)
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error(`   - API Error Response: ${errorText}`);
+    throw new Error(`Google API error: ${response.status} - ${errorText}`);
+  }
+
+  const result = await response.json();
+  console.log(`   - Response received, processing...`);
+
+  // Parsowanie odpowiedzi
+  if (modelConfig.provider === 'google' && 'api_method' in modelConfig && (modelConfig as any).api_method === 'generateImages') {
+    // ODPOWIEDŹ IMAGEN (SDK i REST)
+    if (result.generatedImages && result.generatedImages.length > 0) {
+      console.log(`   - Found ${result.generatedImages.length} generated images (SDK schema)`);
+      return {
+        data: [{
+          b64_json: result.generatedImages[0].image.imageBytes
+        }]
+      };
+    }
+    // REST :predict schema -> { predictions: [ { bytesBase64Encoded, mimeType } ] }
+    if (result.predictions && result.predictions.length > 0) {
+      console.log(`   - Found ${result.predictions.length} predictions (REST schema)`);
+      const first = result.predictions[0];
+      const b64 = first.bytesBase64Encoded || first.bytes || first.imageBytes;
+      if (b64) {
+        return { data: [{ b64_json: b64 }] };
+      }
     }
   } else {
-    // PROSTY PROMPT OKŁADKI - DODAJ ULEPSZENIA SPECYFICZNE DLA OKŁADEK I SUPPLEMENT BAN
-    console.log(`🔧 SIMPLE COVER PROMPT - Adding book cover enhancements with supplement restrictions, transparent background, seamless composition, and proper margins`);
-
-    const enhanced = `Create a professional ultra-high-definition book cover illustration with transparent background and seamless edge-free composition with proper internal margins: ${cleanedPrompt}
-
-Technical book cover specifications: Perfect square 1024x1024 composition with transparent background and borderless seamless design optimized for book covers, photorealistic rendering with commercial appeal, rich harmonious color palette designed for shelf visibility with transparent background and natural edge blending, professional book cover lighting with transparent background integration and soft fade-out edges, no text or letters whatsoever, premium publishing quality with transparent background and composition contained within image bounds for natural blending with any surface. CRITICAL SPACING: All compositional elements positioned with adequate margins from image edges, ensuring no objects touch or approach image boundaries for seamless white background integration.
-
-ABSOLUTELY FORBIDDEN: capsules, tablets, pills, softgels, lozenges, kapsułki, tabletki, pilulki, or any solid supplement forms. STRICTLY PROHIBITED: omega-3 capsules, fish oil tablets, scattered round objects, gel caps, blister packaging.
-
-Perfect book cover design with transparent background, seamless edges, proper internal margins, and natural blending capability for "${bookTitle}".`.trim();
-
-    if (enhanced.length <= COVER_MODEL_CONFIGS["gpt-image-1"].maxPromptLength) {
-      console.log(`✅ Enhanced cover prompt with supplement safety (${enhanced.length}/4000 chars)`);
-      return enhanced;
-    } else {
-      console.warn(`⚠️ Enhanced cover prompt too long, trimming to 4000`);
-      return enhanced.substring(0, 3950) + " Perfect cover design.";
+    // ODPOWIEDŹ GEMINI
+    if (result.candidates && result.candidates.length > 0) {
+      const candidate = result.candidates[0];
+      const parts = candidate.content?.parts || [];
+      // Szukamy inlineData z obrazem
+      const imagePart = parts.find((p: any) => p.inlineData && p.inlineData.mimeType?.startsWith('image/'));
+      if (imagePart) {
+        console.log(`   - Found inline image data`);
+        return {
+          data: [{
+            b64_json: imagePart.inlineData.data
+          }]
+        };
+      }
     }
+  }
+
+  throw new Error('No image data found in Google API response');
+};
+
+// 🆕 UNIFIED REQUEST BODY PREPARATION FOR COVERS WITH RAW LOGGING
+const prepareCoverRequestBody = (model: string, prompt: string, size: string) => {
+  const config = COVER_MODEL_CONFIGS[model as keyof typeof COVER_MODEL_CONFIGS];
+
+  if (config.provider === 'google') {
+    return null; // Obsługiwane przez callGoogleCoverGeneration
+  } else if (model === "gpt-image-1") {
+    const requestBody = {
+      model: "gpt-image-1",
+      prompt: prompt,
+      n: 1,
+      size: size as "1024x1024" | "1024x1536" | "1536x1024",
+      quality: "high",
+      background: "transparent",
+      moderation: "auto",
+      output_format: "png",
+    };
+
+    // 📝 RAW API REQUEST LOGGING for OpenAI
+    console.log(`📝 === RAW OPENAI API REQUEST (GPT-IMAGE-1) ===`);
+    console.log(`   - URL: https://api.openai.com/v1/images/generations`);
+    console.log(`   - Method: POST`);
+    console.log(`   - Headers:`);
+    console.log(`     * Content-Type: application/json`);
+    console.log(`     * Authorization: Bearer ${getMaskedApiKey(process.env.OPENAI_API_KEY || '')}`);
+    console.log(`   - Raw Request Body:`);
+    console.log(JSON.stringify(requestBody, null, 2));
+    console.log(`   - Prompt Length: ${prompt.length} chars`);
+    console.log(`   - Full Prompt Text:`);
+    console.log(`"${prompt}"`);
+    console.log(`📝 === END RAW REQUEST ===`);
+
+    return JSON.stringify(requestBody);
+  } else { // dall-e-3
+    const requestBody = {
+      model: "dall-e-3",
+      prompt: prompt.substring(0, 380) + "...",
+      n: 1,
+      size: size as "1024x1024" | "1024x1792" | "1792x1024",
+      quality: "hd",
+      style: "natural",
+      response_format: 'url'
+    };
+
+    // 📝 RAW API REQUEST LOGGING for DALL-E 3
+    console.log(`📝 === RAW OPENAI API REQUEST (DALL-E-3) ===`);
+    console.log(`   - URL: https://api.openai.com/v1/images/generations`);
+    console.log(`   - Method: POST`);
+    console.log(`   - Headers:`);
+    console.log(`     * Content-Type: application/json`);
+    console.log(`     * Authorization: Bearer ${getMaskedApiKey(process.env.OPENAI_API_KEY || '')}`);
+    console.log(`   - Raw Request Body:`);
+    console.log(JSON.stringify(requestBody, null, 2));
+    console.log(`   - Prompt Length: ${requestBody.prompt.length} chars (trimmed from ${prompt.length})`);
+    console.log(`   - Full Prompt Text (trimmed):`);
+    console.log(`"${requestBody.prompt}"`);
+    console.log(`   - Original Prompt (before trimming):`);
+    console.log(`"${prompt}"`);
+    console.log(`📝 === END RAW REQUEST ===`);
+
+    return JSON.stringify(requestBody);
   }
 };
 
-// Retry logic dla okładek
+// 🎯 SIMPLIFIED COVER PROMPT OPTIMIZATION
+const optimizePromptForModel = (prompt: string, bookTitle: string, model: string): string => {
+  console.log(`🔧 === COVER PROMPT OPTIMIZATION FOR ${model.toUpperCase()} ===`);
+
+  const config = COVER_MODEL_CONFIGS[model as keyof typeof COVER_MODEL_CONFIGS];
+  console.log(`   - Provider: ${config.provider.toUpperCase()}`);
+  console.log(`   - Input length: ${prompt.length} chars`);
+  console.log(`   - Model limit: ${config.maxPromptLength} chars`);
+
+  let finalPrompt = prompt;
+
+  // ETAP 1: Dodanie elementów specyficznych dla okładek książek
+  if (!finalPrompt.toLowerCase().includes('no text')) {
+    finalPrompt += " Absolutely no text elements.";
+    console.log(`🔧 Added NO TEXT clause`);
+  }
+
+  if (!finalPrompt.toLowerCase().includes(bookTitle.toLowerCase().substring(0, 15))) {
+    finalPrompt += ` Perfect book cover illustration for "${bookTitle}".`;
+    console.log(`🔧 Added book title reference`);
+  }
+
+  // ETAP 2: Optymalizacje specyficzne dla providera
+  if (config.provider === 'google' && 'supports_text_rendering' in config && (config as any).supports_text_rendering && !prompt.toLowerCase().includes('clear')) {
+    finalPrompt += " Clear, professional book cover composition.";
+    console.log(`🔧 Added clarity for Google model`);
+  } else if (config.provider === 'openai' && 'supports_transparency' in config && (config as any).supports_transparency && !prompt.toLowerCase().includes('transparent')) {
+    finalPrompt += " Transparent background with seamless edges for book cover.";
+    console.log(`🔧 Added transparency for OpenAI model`);
+  }
+
+  // ETAP 3: Przycięcie do limitu modelu
+  if (finalPrompt.length > config.maxPromptLength) {
+    const availableSpace = config.maxPromptLength - 50;
+    finalPrompt = prompt.substring(0, availableSpace) + " No text. Perfect cover.";
+    console.warn(`⚠️ Prompt trimmed to fit ${model} limit`);
+  }
+
+  console.log(`✅ Optimized for ${config.provider}/${model} (${finalPrompt.length} chars)`);
+  return finalPrompt;
+};
+
+// Retry logic - unchanged
 const executeWithRetry = async <T>(
   operation: () => Promise<T>,
   maxRetries: number = 3,
@@ -293,42 +499,39 @@ const executeWithRetry = async <T>(
       return await operation();
     } catch (error: any) {
       console.log(`❌ Cover attempt ${attempt}/${maxRetries} failed: ${error.message}`);
-
       if (attempt === maxRetries) throw error;
-
-      let delay = baseDelay;
-      if (error?.status === 429) {
-        delay = baseDelay * Math.pow(2, attempt);
-        console.log(`⏳ Cover rate limited, waiting ${delay}ms...`);
-      } else if (error?.status >= 500) {
-        delay = baseDelay * attempt;
-        console.log(`🔄 Cover server error, waiting ${delay}ms...`);
-      } else {
-        delay = 1000;
-      }
-
+      let delay = baseDelay * (error?.status >= 500 ? attempt : 1);
+      if (error?.status === 429) delay = baseDelay * Math.pow(2, attempt);
       await new Promise(resolve => setTimeout(resolve, delay));
     }
   }
   throw new Error('Cover generation max retries exceeded');
 };
 
-// Sprawdzenie fallback conditions
-const shouldFallbackToDallE3 = (error: any): boolean => {
-  const fallbackConditions = [
-    error?.status === 403,
-    error?.status === 400 && error?.code === 'billing_hard_limit_reached',
-    error?.status === 429 && error?.message?.includes('organization'),
-    error?.message?.toLowerCase().includes('organization'),
-    error?.message?.toLowerCase().includes('gpt-image-1'),
-    error?.message?.toLowerCase().includes('verification'),
-    error?.message?.toLowerCase().includes('access denied')
+// 🔄 ENHANCED FALLBACK CONDITIONS FOR COVERS
+const shouldFallback = (error: any, currentModel: string): boolean => {
+  // Nie próbuj fallback jeśli już używamy najtańszego modelu
+  if (currentModel === 'dall-e-3' || currentModel === 'gemini-image') return false;
+
+  const errorMsg = error?.message?.toLowerCase() || '';
+  const status = error?.status;
+
+  const conditions = [
+    status === 404 && errorMsg.includes('model'),
+    status === 400 && errorMsg.includes('model'),
+    status === 403,
+    status === 401,
+    errorMsg.includes('api key'),
+    errorMsg.includes('organization'),
+    errorMsg.includes('verification'),
+    errorMsg.includes('quota'),
+    errorMsg.includes('billing')
   ];
 
-  return fallbackConditions.some(condition => condition);
+  return conditions.some(Boolean);
 };
 
-// Zaawansowana optymalizacja obrazu dla okładek książek
+// 🖼️ IMAGE OPTIMIZATION FOR BOOK COVERS
 const optimizeImageForBookCover = async (imageBuffer: ArrayBuffer): Promise<Buffer> => {
   const originalSize = (imageBuffer.byteLength / 1024).toFixed(1);
 
@@ -349,7 +552,7 @@ const optimizeImageForBookCover = async (imageBuffer: ArrayBuffer): Promise<Buff
     .toBuffer();
 
   const optimizedSize = (optimized.length / 1024).toFixed(1);
-  console.log(`🔧 Book cover optimization: ${originalSize}KB → ${optimizedSize}KB (square format with transparent background)`);
+  console.log(`🔧 Book cover optimization: ${originalSize}KB → ${optimizedSize}KB (square format with enhanced quality)`);
 
   return optimized;
 };
@@ -367,18 +570,15 @@ export async function POST(
       return NextResponse.json({ error: 'Brak autoryzacji' }, { status: 401 });
     }
 
-    debugApiKey();
-
     const resolvedParams = await params;
     const ebookId = resolvedParams.ebookId;
 
-    console.log(`🎨 === BOOK COVER GENERATION WITH SUPPLEMENT RESTRICTIONS ===`);
+    console.log(`🎨 === MULTI-PROVIDER BOOK COVER GENERATION ===`);
     console.log(`   - Ebook ID: ${ebookId}`);
+    console.log(`   - User ID: ${session.user.id}`);
     console.log(`   - Timestamp: ${new Date().toISOString()}`);
-    console.log(`   - Target: Professional book cover (square, transparent background, supplement-safe)`);
-    console.log(`   - Content Policy: FULL SUPPLEMENT BAN ENFORCEMENT`);
 
-    const { forceRegenerate = false, size = '1024x1024' } = await request.json();  // 🔥 Domyślnie kwadratowy
+    const { forceRegenerate = false, size = '1024x1024' } = await request.json();
 
     if (!ebookId) {
       return NextResponse.json({ error: 'Missing required parameter: ebookId' }, { status: 400 });
@@ -388,6 +588,10 @@ export async function POST(
     if (isNaN(ebookIdNum)) {
       return NextResponse.json({ error: 'Invalid ebook identifier' }, { status: 400 });
     }
+
+    // Model selection based on user preferences
+    const modelSelection = await selectOptimalCoverModel(session.user.id);
+    console.log(`🎯 Cover Model Selection: ${modelSelection.provider}/${modelSelection.model} (${modelSelection.reasoning})`);
 
     // Fetch ebook data using Prisma
     const ebook = await prisma.ebooks.findFirst({
@@ -430,24 +634,27 @@ export async function POST(
     // 🔧 FIX: Dodaj fallback dla null coverPrompt
     let coverPrompt = existingCoverPrompt || '';
 
-    // ETAP 1: Generate ultra-detailed cover prompt via Claude (with supplement restrictions)
-    console.log('🔄 === GENERATING ULTRA-DETAILED SUPPLEMENT-SAFE COVER PROMPT ===');
+    // ETAP 1: Generate ultra-detailed cover prompt via Claude
+    console.log('🔥 === GENERATING COVER PROMPT ===');
 
     let promptData;
     try {
       const promptResponse = await axios.post(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/anthropic/generate-cover-prompt`, {
         title: ebookTitle,
         subtitle: ebookSubtitle,
-        chapters: chapters
+        chapters: chapters,
+        targetModel: modelSelection.model,
+        enableTransparency: COVER_MODEL_CONFIGS[modelSelection.model as keyof typeof COVER_MODEL_CONFIGS] && 'supports_transparency' in COVER_MODEL_CONFIGS[modelSelection.model as keyof typeof COVER_MODEL_CONFIGS] && (COVER_MODEL_CONFIGS[modelSelection.model as keyof typeof COVER_MODEL_CONFIGS] as any).supports_transparency || false,
+        forceRegenerate
       }, {
         headers: {
           'Content-Type': 'application/json',
-          'x-internal-request': 'true'  // ✅ DODANY HEADER WEWNĘTRZNY
+          'x-internal-request': 'true'
         },
-        timeout: 90000 // 30 sekund timeout
+        timeout: 90000
       });
 
-      promptData = promptResponse.data; // axios automatycznie parsuje JSON
+      promptData = promptResponse.data;
     } catch (error: any) {
       console.error('❌ Claude cover prompt generation failed:', error.response?.data || error.message);
       return NextResponse.json({
@@ -458,16 +665,18 @@ export async function POST(
 
     coverPrompt = promptData.coverPrompt;
 
-    console.log(`✅ Ultra-detailed supplement-safe cover prompt generated:`);
+    if (!coverPrompt) {
+      console.error('❌ Cover prompt is null or empty');
+      return NextResponse.json({
+        error: 'No cover prompt available',
+        details: 'Cover prompt generation failed or returned null'
+      }, { status: 500 });
+    }
+
+    console.log(`✅ Cover prompt generated:`);
     console.log(`   - Length: ${promptData.promptLength} chars`);
     console.log(`   - Quality: ${(promptData.qualityMetrics?.overallQuality * 100 || 0).toFixed(1)}%`);
     console.log(`   - Format: ${promptData.format || 'portrait'}`);
-    console.log(`   - Supplement Compliance: ${promptData.supplementCompliance ? '✅' : '❌'}`);
-    console.log(`   - Utilization: ${promptData.utilization || 'N/A'}`);
-
-    if (!promptData.supplementCompliance) {
-      console.warn(`⚠️ COMPLIANCE WARNING: Generated prompt may contain forbidden elements!`);
-    }
 
     // Save cover prompt to database using Prisma
     await prisma.ebooks.update({
@@ -479,132 +688,98 @@ export async function POST(
     });
     console.log('💾 Cover prompt saved to database');
 
-    // ETAP 2: GPT-Image-1 Cover Generation with CRITICAL supplement filtering
-    console.log(`🚀 === GPT-IMAGE-1 SUPPLEMENT-SAFE COVER GENERATION ===`);
+    // ETAP 2: Multi-Provider Cover Generation
+    console.log(`🚀 === ${modelSelection.provider.toUpperCase()}/${modelSelection.model.toUpperCase()} COVER GENERATION ===`);
 
-    let modelToUse = "gpt-image-1";
-    let actualModelUsed = modelToUse;
+    const config = COVER_MODEL_CONFIGS[modelSelection.model as keyof typeof COVER_MODEL_CONFIGS];
+    const validSize = config.sizes.includes(size as any) ? size : config.sizes[0];
+    let actualModelUsed = modelSelection.model;
     let imageResponse;
-    // 🔧 FIX: Teraz coverPrompt już jest string (nie null)
-    let finalPrompt: string = coverPrompt;
-    let supplementCompliant = false;
+    let finalPrompt = optimizePromptForModel(coverPrompt, ebookTitle, modelSelection.model);
 
-    // GPT-Image-1 configuration for covers
-    const gptImage1Config = COVER_MODEL_CONFIGS["gpt-image-1"];
-    const validSize = gptImage1Config.sizes.includes(size as any) ? size : gptImage1Config.defaultSize;
-
-    console.log(`   - Target model: ${modelToUse}`);
-    console.log(`   - Size: ${validSize} (square book cover)`);
-    console.log(`   - Quality: ${gptImage1Config.quality}`);
-    console.log(`   - Format: ${gptImage1Config.output_format}`);
-    console.log(`   - Background: ${gptImage1Config.background} (PRIORITY)`);
-    console.log(`   - Content Policy: FULL SUPPLEMENT RESTRICTIONS`);
+    console.log(`   - Model: ${modelSelection.model}, Key Source: ${modelSelection.keySource}, Size: ${validSize}, Cost: $${config.costEstimate}`);
 
     try {
-      // KRYTYCZNA optymalizacja promptu z kontrolą suplementów
-      finalPrompt = optimizePromptForBookCover(coverPrompt, ebookTitle);
-
-      // FINALNA walidacja compliance przed wysłaniem do OpenAI
-      const finalComplianceCheck = FORBIDDEN_SUPPLEMENT_ELEMENTS.regexPatterns.some(pattern =>
-        pattern.test(finalPrompt)
-      );
-
-      if (finalComplianceCheck) {
-        console.error(`❌ CRITICAL COMPLIANCE FAILURE: Final prompt contains forbidden elements!`);
-        console.log(`🧹 Performing emergency cleanup...`);
-        finalPrompt = criticalSupplementCleanup(finalPrompt, 'final-check');
-
-        // Dodaj silne zakazy jako ostatni środek
-        finalPrompt = addSupplementBanClauses(finalPrompt);
-
-        // Przytnij jeśli za długi
-        if (finalPrompt.length > gptImage1Config.maxPromptLength) {
-          finalPrompt = finalPrompt.substring(0, gptImage1Config.maxPromptLength - 3) + "...";
-        }
-      }
-
-      supplementCompliant = !FORBIDDEN_SUPPLEMENT_ELEMENTS.regexPatterns.some(pattern =>
-        pattern.test(finalPrompt)
-      );
-
-      console.log(`📝 === FINAL SUPPLEMENT-SAFE COVER PROMPT ANALYSIS ===`);
-      console.log(`   - Original (from source): ${coverPrompt.length} chars`);
-      console.log(`   - Final (for GPT-Image-1): ${finalPrompt.length} chars`);
-      console.log(`   - Processing change: ${finalPrompt.length - coverPrompt.length} chars`);
-      console.log(`   - Utilization: ${((finalPrompt.length/4000)*100).toFixed(1)}% of GPT-Image-1 capacity`);
-      console.log(`   - 🚫 SUPPLEMENT COMPLIANCE: ${supplementCompliant ? '✅ COMPLIANT' : '❌ VIOLATIONS DETECTED'}`);
-
-      if (!supplementCompliant) {
-        console.error(`❌ CRITICAL ERROR: Cannot proceed with non-compliant prompt!`);
-        throw new Error('Prompt contains forbidden supplement elements and cannot be processed');
-      }
-
-      // Generate with OpenAI API (using dall-e-3 as gpt-image-1 might not be available)
-      const generationStartTime = Date.now();
-
       imageResponse = await executeWithRetry(async () => {
-        const openaiResponse = await fetch('https://api.openai.com/v1/images/generations', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            model: "dall-e-3", // Use dall-e-3 as gpt-image-1 might not be available
-            prompt: finalPrompt,
-            n: 1,
-            size: validSize as "1024x1024" | "1024x1792" | "1792x1024",
-            quality: "hd", // Use high quality
-            response_format: 'url'
-          })
-        });
-
-        if (!openaiResponse.ok) {
-          const errorData = await openaiResponse.json();
-          throw new Error(`OpenAI API error: ${errorData.error?.message || 'Unknown error'}`);
+        console.log(`🎨 Generating cover with ${modelSelection.provider}/${modelSelection.model}...`);
+        if (config.provider === 'google') {
+          return await callGoogleCoverGeneration(modelSelection.model, finalPrompt, validSize, modelSelection.apiKey);
+        } else {
+          const requestBody = prepareCoverRequestBody(modelSelection.model, finalPrompt, validSize);
+          const openaiResponse = await fetch('https://api.openai.com/v1/images/generations', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${modelSelection.apiKey}`, 'Content-Type': 'application/json' },
+            body: requestBody
+          });
+          if (!openaiResponse.ok) {
+            const errorText = await openaiResponse.text();
+            const error = new Error(`${modelSelection.model} API error: ${JSON.parse(errorText).error?.message || 'Unknown'}`);
+            (error as any).status = openaiResponse.status;
+            throw error;
+          }
+          return await openaiResponse.json();
         }
-
-        return await openaiResponse.json();
       });
-
-      const generationEndTime = Date.now();
-      console.log(`✅ GPT-Image-1 SUPPLEMENT-SAFE COVER SUCCESS!`);
-      console.log(`   - Generation time: ${generationEndTime - generationStartTime}ms`);
-      console.log(`   - Cost estimate: ${gptImage1Config.costEstimate}`);
-      console.log(`   - Model used: ${actualModelUsed} (primary)`);
-      console.log(`   - Format: Professional book cover (${validSize}) with transparent background`);
-      console.log(`   - Content Safety: SUPPLEMENT-COMPLIANT`);
-
+      console.log(`✅ ${modelSelection.provider.toUpperCase()}/${modelSelection.model.toUpperCase()} COVER SUCCESS!`);
     } catch (error: any) {
-      console.error(`❌ Cover generation failed:`, error.message);
-      throw error;
+      console.error(`❌ ${modelSelection.provider}/${modelSelection.model} failed:`, error.message);
+
+      // Próba fallback do tańszego modelu
+      if (shouldFallback(error, modelSelection.model)) {
+        console.log(`🔄 === FALLBACK TO CHEAPER MODEL ===`);
+
+        // Wybierz fallback model w zależności od providera
+        const fallbackModel = modelSelection.provider === 'google' ? 'gemini-image' : 'dall-e-3';
+        const fallbackConfig = COVER_MODEL_CONFIGS[fallbackModel as keyof typeof COVER_MODEL_CONFIGS];
+        actualModelUsed = fallbackModel;
+        finalPrompt = optimizePromptForModel(coverPrompt, ebookTitle, fallbackModel);
+
+        try {
+          if (fallbackConfig.provider === 'google') {
+            // Użyj tego samego klucza Google API jeśli jest dostępny
+            imageResponse = await executeWithRetry(() =>
+              callGoogleCoverGeneration(fallbackModel, finalPrompt, '1024x1024', modelSelection.apiKey)
+            );
+          } else {
+            // Fallback do DALL-E 3 z environment key
+            const requestBody = prepareCoverRequestBody(fallbackModel, finalPrompt, '1024x1024');
+            imageResponse = await executeWithRetry(async () => {
+              const openaiResponse = await fetch('https://api.openai.com/v1/images/generations', {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
+                body: requestBody
+              });
+              if (!openaiResponse.ok) {
+                const errorText = await openaiResponse.text();
+                throw new Error(`DALL-E 3 fallback error: ${JSON.parse(errorText).error?.message || 'Unknown'}`);
+              }
+              return await openaiResponse.json();
+            });
+          }
+          console.log(`✅ FALLBACK TO ${fallbackModel.toUpperCase()} SUCCESS!`);
+        } catch (fallbackError: any) {
+          console.error(`❌ Fallback to ${fallbackModel} failed:`, fallbackError.message);
+          throw fallbackError;
+        }
+      } else {
+        throw error;
+      }
     }
 
-    const endTime = Date.now();
-    const totalGenerationTime = endTime - startTime;
+    if (!imageResponse?.data?.[0]) throw new Error('No image data in response');
 
-    console.log(`⏱️ Total supplement-safe cover process time: ${totalGenerationTime}ms`);
-
-    if (!imageResponse.data || imageResponse.data.length === 0) {
-      throw new Error('No cover image data in OpenAI response');
-    }
-
-    // Handle response format (base64 vs URL)
-    const imageData = imageResponse.data[0];
     let imageBuffer: ArrayBuffer;
-
+    const imageData = imageResponse.data[0];
     if (imageData.b64_json) {
-      console.log('📥 Decoding cover from base64 (GPT-Image-1)');
+      console.log('🔥 Decoding cover from base64');
       imageBuffer = Buffer.from(imageData.b64_json, 'base64').buffer;
     } else if (imageData.url) {
-      console.log(`📥 Fetching cover from URL (DALL-E 3): ${imageData.url}`);
-      const imageResponseData = await fetch(imageData.url);
-      if (!imageResponseData.ok) {
-        throw new Error(`Failed to fetch cover image: ${imageResponseData.status}`);
-      }
-      imageBuffer = await imageResponseData.arrayBuffer();
+      console.log(`🔥 Fetching cover from URL...`);
+      const imageFetch = await fetch(imageData.url);
+      if (!imageFetch.ok) throw new Error(`Failed to fetch cover image: ${imageFetch.status}`);
+      imageBuffer = await imageFetch.arrayBuffer();
     } else {
-      throw new Error('Invalid OpenAI cover response format');
+      throw new Error('Invalid response format');
     }
 
     // Advanced image optimization for book covers
@@ -614,22 +789,18 @@ export async function POST(
     const storageBasePath = process.env.FILE_STORAGE_PATH || '/data';
     const uploadsDir = path.join(storageBasePath, 'uploads');
 
-    // Upewnij się, że folder istnieje
     await fs.mkdir(uploadsDir, { recursive: true });
 
     const fileName = `EB${ebookIdNum}_COVER.png`;
     const filePath = path.join(uploadsDir, fileName);
 
     console.log(`💾 Zapisywanie okładki jako ${fileName} w Railway storage`);
-
-    // Zapisanie pliku w Railway storage
     await fs.writeFile(filePath, processedImageBuffer);
 
-    // Generowanie publicznego URL dla okładki
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
     const finalCoverUrl = `${baseUrl}/api/assets/uploads/${fileName}`;
 
-    console.log(`☁️ Supplement-safe cover uploaded to Railway: ${fileName}`);
+    console.log(`☁️ Multi-provider cover uploaded to Railway: ${fileName}`);
 
     // Database updates using Prisma
     const updatedEbook = await prisma.ebooks.update({
@@ -647,22 +818,15 @@ export async function POST(
       }
     });
 
-    // Comprehensive success metrics with compliance info
-    const costEstimate = COVER_MODEL_CONFIGS[actualModelUsed as keyof typeof COVER_MODEL_CONFIGS]?.costEstimate || 0;
+    const totalTime = Date.now() - startTime;
+    const finalConfig = COVER_MODEL_CONFIGS[actualModelUsed as keyof typeof COVER_MODEL_CONFIGS];
 
-    console.log(`📊 === SUPPLEMENT-SAFE COVER GENERATION COMPLETE ===`);
-    console.log(`   - Model: ${actualModelUsed} ${actualModelUsed !== "gpt-image-1" ? '(fallback)' : '(primary)'}`);
-    console.log(`   - Total time: ${totalGenerationTime}ms`);
-    console.log(`   - Cost: ${costEstimate}`);
-    console.log(`   - Prompt length: ${finalPrompt?.length || coverPrompt.length}/${COVER_MODEL_CONFIGS["gpt-image-1"].maxPromptLength} chars`);
-    console.log(`   - Image size: ${(processedImageBuffer.length / 1024).toFixed(1)}KB`);
-    console.log(`   - Format: ${validSize} (professional book cover with transparent background)`);
-    console.log(`   - 🚫 Supplement Compliance: ${supplementCompliant ? '✅ FULLY COMPLIANT' : '❌ COMPLIANCE ISSUES'}`);
-    console.log(`   - 🎨 Background: transparent (PRIORITY ACHIEVED)`);
-    console.log(`   - Content Safety: FULL SUPPLEMENT BAN ENFORCED`);
-    console.log(`   - Railway URL: ${finalCoverUrl}`);
-    console.log(`   - Success: TRUE`);
-    console.log(`📊 === END SUPPLEMENT-SAFE COVER METRICS ===`);
+    console.log(`📊 === MULTI-PROVIDER COVER GENERATION COMPLETE ===`);
+    console.log(`   - Model: ${actualModelUsed} ${actualModelUsed !== modelSelection.model ? '(fallback)' : '(primary)'}`);
+    console.log(`   - Provider: ${finalConfig.provider.toUpperCase()}`);
+    console.log(`   - Total time: ${totalTime}ms`);
+    console.log(`   - Cost: $${finalConfig.costEstimate.toFixed(3)}`);
+    console.log(`   - Key source: ${modelSelection.keySource}`);
 
     return NextResponse.json({
       success: true,
@@ -670,75 +834,55 @@ export async function POST(
       ebook: updatedEbook,
       generation_metrics: {
         model_used: actualModelUsed,
-        model_attempted: "gpt-image-1",
-        generation_time_ms: totalGenerationTime,
-        cost_estimate: costEstimate,
+        model_attempted: modelSelection.model,
+        generation_time_ms: totalTime,
+        cost_estimate: finalConfig.costEstimate,
         prompt_length: finalPrompt?.length || coverPrompt.length,
-        prompt_utilization: `${(((finalPrompt?.length || coverPrompt.length)/4000)*100).toFixed(1)}%`,
+        prompt_utilization: `${(((finalPrompt?.length || coverPrompt.length)/finalConfig.maxPromptLength)*100).toFixed(1)}%`,
         image_size_kb: Math.round(processedImageBuffer.length / 1024),
-        optimization_level: 'gpt-image-1-professional-book-cover-supplement-safe-transparent-seamless-margins',
-        fallback_used: actualModelUsed !== "gpt-image-1",
-        quality_setting: actualModelUsed === "gpt-image-1" ? "high" : "standard",
+        fallback_used: actualModelUsed !== modelSelection.model,
+        quality_setting: finalConfig.quality || "high",
         cover_format: validSize,
-        background_type: "transparent",
-        composition_type: "seamless-edge-free-with-margins",
-        margin_control: "proper-internal-spacing",
-        prompt_processing: "full-supplement-restriction-applied-transparent-background-seamless-composition-margins",
-        supplement_compliant: supplementCompliant,
-        content_safety_level: "full-supplement-ban-enforced"
+        background_type: ('supports_transparency' in finalConfig && (finalConfig as any).supports_transparency) ? "transparent" : "standard"
+      },
+      model_info: {
+        provider: finalConfig.provider,
+        model: actualModelUsed,
+        key_source: modelSelection.keySource
       },
       prompt_used: coverPrompt,
       prompt_was_generated: !existingCoverPrompt || forceRegenerate,
-      // 🎯 DODAJ TIMESTAMP dla cache busting (jak w rozdziałach)
       generation_timestamp: Date.now(),
-      cache_bust_url: finalCoverUrl + '?t=' + Date.now(),
-      content_compliance: {
-        supplement_safe: supplementCompliant,
-        restrictions_applied: true,
-        forbidden_elements_removed: true,
-        compliance_level: "full-supplement-ban",
-        validation_passed: supplementCompliant,
-        transparent_background_applied: true,
-        square_format_optimized: true,
-        seamless_composition_applied: true,
-        natural_blending_integrated: true,
-        borderless_design_enforced: true,
-        edge_free_composition: true,
-        proper_margins_enforced: true,
-        internal_spacing_controlled: true,
-        white_background_compatible: true,
-        edge_clearance_maintained: true
-      }
+      cache_bust_url: finalCoverUrl + '?t=' + Date.now()
     });
 
   } catch (error) {
     const totalTime = Date.now() - startTime;
-    console.error('❌ === SUPPLEMENT-SAFE COVER WITH MARGINS GENERATION FAILED ===');
+    console.error('❌ === MULTI-PROVIDER COVER GENERATION FAILED ===');
     console.error(`   - Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
     console.error(`   - Total time: ${totalTime}ms`);
-    console.error(`   - API Key: ${logApiKey(process.env.OPENAI_API_KEY)}`);
 
     return NextResponse.json({
-      error: 'Supplement-safe book cover with proper margins generation failed',
+      error: 'Multi-provider book cover generation failed',
       details: error instanceof Error ? error.message : 'Unknown error',
-      model_attempted: "gpt-image-1",
-      generation_time_ms: totalTime,
-      content_safety: "supplement-restrictions-and-margin-control-attempted"
+      generation_time_ms: totalTime
     }, { status: 500 });
   }
 }
 
 export async function GET() {
   return NextResponse.json({
-    message: 'GPT-Image-1 Ultra-Detailed Book Cover Generator with Full Supplement Restrictions, Transparent Background, Seamless Composition, and Proper Margins',
-    supportedModels: ['gpt-image-1', 'dall-e-3'],
+    message: 'Multi-Provider Book Cover Generator',
+    version: "8.0-multi-provider-no-restrictions",
+    supportedProviders: ['google', 'openai'],
+    supportedModels: ['imagen-3', 'imagen-4', 'imagen-4-ultra', 'gemini-image', 'gpt-image-1', 'dall-e-3'],
     maxPromptLength: 4000,
-    recommendedFormat: 'square-1024x1024-transparent-seamless-margins',
-    backgroundType: 'transparent',
-    compositionType: 'seamless-edge-free-with-margins',
-    marginControl: 'proper-internal-spacing',
+    recommendedFormat: 'square-1024x1024',
+    backgroundType: 'transparent-preferred',
+    compositionType: 'seamless-professional',
     qualityLevel: 'high',
-    optimizedFor: 'ultra-detailed-book-cover-design-supplement-safe-transparent-seamless-margins',
-    version: "6.0-supplement-safe-transparent-seamless-margins"
+    optimizedFor: 'professional-book-covers',
+    userPreferences: 'automatically-detected',
+    rawApiLogging: 'enabled'
   }, { status: 405 });
 }

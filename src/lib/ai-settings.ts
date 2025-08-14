@@ -17,7 +17,8 @@ export interface UserAuthorSettings {
 export interface UserEbookSettings extends UserAiSettings, UserAuthorSettings {}
 
 /**
- * Pobiera ustawienia AI użytkownika lub zwraca wartości domyślne
+ * 🆕 ZAKTUALIZOWANE: Pobiera ustawienia AI użytkownika lub zwraca wartości domyślne
+ * Domyślnie używa Google Gemini Image Generation (FREE - no API key needed)
  */
 export async function getUserAiSettings(userId: string): Promise<UserAiSettings> {
   try {
@@ -34,22 +35,25 @@ export async function getUserAiSettings(userId: string): Promise<UserAiSettings>
     return {
       textAiProvider: user?.textAiProvider || 'anthropic',
       textAiModel: user?.textAiModel || 'claude-3-haiku',
-      imageAiProvider: user?.imageAiProvider || 'openai',
-      imageAiModel: user?.imageAiModel || 'dall-e-3'
+      // 🆕 ZMIANA: Google Gemini Image Generation jako domyślny (FREE)
+      imageAiProvider: user?.imageAiProvider || 'google',
+      imageAiModel: user?.imageAiModel || 'gemini-image'
     };
   } catch (error) {
     console.warn('Błąd podczas pobierania ustawień AI, używam wartości domyślnych:', error);
     return {
       textAiProvider: 'anthropic',
       textAiModel: 'claude-3-haiku',
-      imageAiProvider: 'openai',
-      imageAiModel: 'dall-e-3'
+      // 🆕 ZMIANA: Google Gemini Image Generation jako fallback (FREE)
+      imageAiProvider: 'google',
+      imageAiModel: 'gemini-image'
     };
   }
 }
 
 /**
- * Pobiera wszystkie ustawienia użytkownika (AI + dane autora) dla ebooka
+ * 🆕 ZAKTUALIZOWANE: Pobiera wszystkie ustawienia użytkownika (AI + dane autora) dla ebooka
+ * Domyślnie używa Google Gemini Image Generation (FREE - no API key needed)
  */
 export async function getUserEbookSettings(userId: string): Promise<UserEbookSettings> {
   try {
@@ -68,8 +72,9 @@ export async function getUserEbookSettings(userId: string): Promise<UserEbookSet
     return {
       textAiProvider: user?.textAiProvider || 'anthropic',
       textAiModel: user?.textAiModel || 'claude-3-haiku',
-      imageAiProvider: user?.imageAiProvider || 'openai',
-      imageAiModel: user?.imageAiModel || 'dall-e-3',
+      // 🆕 ZMIANA: Google Gemini Image Generation jako domyślny dla ebooków (FREE)
+      imageAiProvider: user?.imageAiProvider || 'google',
+      imageAiModel: user?.imageAiModel || 'gemini-image',
       authorDisplayName: user?.authorDisplayName || null,
       authorLogoUrl: user?.authorLogoUrl || null
     };
@@ -78,8 +83,9 @@ export async function getUserEbookSettings(userId: string): Promise<UserEbookSet
     return {
       textAiProvider: 'anthropic',
       textAiModel: 'claude-3-haiku',
-      imageAiProvider: 'openai',
-      imageAiModel: 'dall-e-3',
+      // 🆕 ZMIANA: Google Gemini Image Generation jako fallback dla ebooków (FREE)
+      imageAiProvider: 'google',
+      imageAiModel: 'gemini-image',
       authorDisplayName: null,
       authorLogoUrl: null
     };

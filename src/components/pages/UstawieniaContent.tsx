@@ -76,25 +76,62 @@ const TEXT_PROVIDERS = [
   }
 ];
 
-// Konfiguracja providerów obrazów
+// 🆕 ZAKTUALIZOWANA Konfiguracja providerów obrazów z Google
 const IMAGE_PROVIDERS = [
+  {
+    id: 'google',
+    name: 'Google AI',
+    icon: '✨',
+    available: true, // 🆕 ODBLOKOWANY
+    models: [
+      {
+        id: 'imagen-3',
+        name: 'Imagen 3',
+        description: 'Najtańszy ($0.03) - renderowanie tekstu',
+        tier: 'basic',
+        cost: '$0.03',
+        features: ['text_rendering', 'aspect_ratios', 'cost_effective']
+      },
+      {
+        id: 'imagen-4',
+        name: 'Imagen 4',
+        description: 'Wysoka jakość ($0.04) - wymaga klucza',
+        tier: 'premium',
+        cost: '$0.04',
+        features: ['text_rendering', 'aspect_ratios', 'better_quality']
+      },
+      {
+        id: 'imagen-4-ultra',
+        name: 'Imagen 4 Ultra',
+        description: 'Najwyższa jakość ($0.06) - wymaga klucza',
+        tier: 'premium',
+        cost: '$0.06',
+        features: ['text_rendering', 'aspect_ratios', 'best_quality', 'prompt_adherence']
+      }
+    ]
+  },
   {
     id: 'openai',
     name: 'OpenAI',
     icon: '🎨',
     available: true,
     models: [
-      { id: 'dall-e-3', name: 'DALL-E 3', description: 'Tani model OpenAI', tier: 'basic' },
-      { id: 'dall-e-3-hd', name: 'GPT-Image 1', description: 'Wyższa jakość, wymaga klucza', tier: 'premium' },
-    ]
-  },
-  {
-    id: 'gemini',
-    name: 'Google Gemini',
-    icon: '✨',
-    available: false,
-    models: [
-      { id: 'imagen-2', name: 'Imagen 2', description: 'Najnowszy model od Google', tier: 'premium' },
+      {
+        id: 'dall-e-3',
+        name: 'DALL-E 3',
+        description: 'Standardowy ($0.08) - bez klucza',
+        tier: 'basic',
+        cost: '$0.08',
+        features: ['natural_style', 'hd_quality']
+      },
+      {
+        id: 'gpt-image-1',
+        name: 'GPT-Image-1',
+        description: 'Premium ($0.19) - wymaga klucza',
+        tier: 'premium',
+        cost: '$0.19',
+        features: ['transparency', 'highest_quality']
+      },
     ]
   }
 ];
@@ -102,13 +139,14 @@ const IMAGE_PROVIDERS = [
 export default function UstawieniaContent() {
   const { user } = useAuth();
 
+  // 🆕 ZMIANA: Domyślny provider na Google i model na Imagen 3
   const [settings, setSettings] = useState<UserSettings>({
     username: '',
     logo: null,
     textProvider: 'anthropic',
     textModel: 'claude-3-haiku',
-    imageProvider: 'openai',
-    imageModel: 'dall-e-3'
+    imageProvider: 'google', // 🆕 ZMIANA: Google domyślny
+    imageModel: 'imagen-3'   // 🆕 ZMIANA: Imagen 3 domyślny
   });
 
   const [initialUsername, setInitialUsername] = useState('');
@@ -125,7 +163,7 @@ export default function UstawieniaContent() {
   const [apiKeys, setApiKeys] = useState<Record<string, ApiKey>>({
     anthropic: { value: '', showValue: false, isSaved: false },
     openai: { value: '', showValue: false, isSaved: false },
-    gemini: { value: '', showValue: false, isSaved: false }
+    google: { value: '', showValue: false, isSaved: false } // 🆕 ZMIANA: 'google' zamiast 'gemini'
   });
 
   const [dropdowns, setDropdowns] = useState({
@@ -225,7 +263,7 @@ export default function UstawieniaContent() {
     const img = event.currentTarget;
     const aspectRatio = img.naturalWidth / img.naturalHeight;
     setImageAspectRatio(aspectRatio);
-    console.log(`📐 Proporcje obrazu: ${img.naturalWidth}x${img.naturalHeight}, ratio: ${aspectRatio.toFixed(2)}`);
+    console.log(`🔍 Proporcje obrazu: ${img.naturalWidth}x${img.naturalHeight}, ratio: ${aspectRatio.toFixed(2)}`);
   }, []);
 
   const resetImageAspectRatio = useCallback(() => {
@@ -273,11 +311,11 @@ export default function UstawieniaContent() {
           ...prev,
           username: authorSettings.authorDisplayName || authorSettings.fallbackName,
           logo: logoUrl,
-          // ✅ DODANE: Aktualizuj ustawienia AI z serwera
+          // ✅ DODANE: Aktualizuj ustawienia AI z serwera - Z GOOGLE DOMYŚLNYM
           textProvider: authorSettings.textAiProvider || 'anthropic',
           textModel: authorSettings.textAiModel || 'claude-3-haiku',
-          imageProvider: authorSettings.imageAiProvider || 'openai',
-          imageModel: authorSettings.imageAiModel || 'dall-e-3'
+          imageProvider: authorSettings.imageAiProvider || 'google', // 🆕 ZMIANA: Google domyślny
+          imageModel: authorSettings.imageAiModel || 'imagen-3' // 🆕 ZMIANA: Imagen 3 domyślny
         }));
 
         // Ustaw jako zapisane
@@ -287,8 +325,8 @@ export default function UstawieniaContent() {
         console.log('🔧 Załadowane ustawienia AI z serwera:', {
           textProvider: authorSettings.textAiProvider || 'anthropic (default)',
           textModel: authorSettings.textAiModel || 'claude-3-haiku (default)',
-          imageProvider: authorSettings.imageAiProvider || 'openai (default)',
-          imageModel: authorSettings.imageAiModel || 'dall-e-3 (default)'
+          imageProvider: authorSettings.imageAiProvider || 'google (default)', // 🆕 ZMIANA
+          imageModel: authorSettings.imageAiModel || 'imagen-3 (default)' // 🆕 ZMIANA
         });
       } else {
         console.error('❌ Błąd pobierania ustawień autora:', response.status);
@@ -335,11 +373,11 @@ export default function UstawieniaContent() {
               ...prev,
               username: authorSettings.authorDisplayName || authorSettings.fallbackName,
               logo: logoUrl,
-              // ✅ DODANE: Aktualizuj ustawienia AI z serwera
+              // ✅ DODANE: Aktualizuj ustawienia AI z serwera - Z GOOGLE DOMYŚLNYM
               textProvider: authorSettings.textAiProvider || 'anthropic',
               textModel: authorSettings.textAiModel || 'claude-3-haiku',
-              imageProvider: authorSettings.imageAiProvider || 'openai',
-              imageModel: authorSettings.imageAiModel || 'dall-e-3'
+              imageProvider: authorSettings.imageAiProvider || 'google', // 🆕 ZMIANA
+              imageModel: authorSettings.imageAiModel || 'imagen-3' // 🆕 ZMIANA
             }));
 
             // Ustaw jako zapisane
@@ -349,8 +387,8 @@ export default function UstawieniaContent() {
             console.log('🔧 Załadowane ustawienia AI z serwera:', {
               textProvider: authorSettings.textAiProvider || 'anthropic (default)',
               textModel: authorSettings.textAiModel || 'claude-3-haiku (default)',
-              imageProvider: authorSettings.imageAiProvider || 'openai (default)',
-              imageModel: authorSettings.imageAiModel || 'dall-e-3 (default)'
+              imageProvider: authorSettings.imageAiProvider || 'google (default)', // 🆕 ZMIANA
+              imageModel: authorSettings.imageAiModel || 'imagen-3 (default)' // 🆕 ZMIANA
             });
           } else if (isMounted) {
             console.error('❌ Błąd pobierania ustawień autora:', response.status);
@@ -437,18 +475,23 @@ export default function UstawieniaContent() {
     [apiKeys, settings.textProvider]
   );
 
-  const currentImageApiKey = useMemo(() =>
-    apiKeys[settings.imageProvider],
-    [apiKeys, settings.imageProvider]
-  );
+  const currentImageApiKey = useMemo(() => {
+    // 🆕 ZMIANA: Mapowanie provider ID na klucz API
+    const providerKeyMap: Record<string, string> = {
+      'google': 'google',
+      'openai': 'openai'
+    };
+    const keyName = providerKeyMap[settings.imageProvider] || settings.imageProvider;
+    return apiKeys[keyName];
+  }, [apiKeys, settings.imageProvider]);
 
-  // Walidacja API key
+  // 🆕 ROZSZERZONA Walidacja API key - obsługuje Google
   const isValidApiKey = useCallback((provider: string, key: string): boolean => {
     if (!key || key.length < 20) return false;
     switch (provider) {
       case 'anthropic': return key.startsWith('sk-ant-');
       case 'openai': return key.startsWith('sk-');
-      case 'gemini': return key.startsWith('AIza');
+      case 'google': return key.startsWith('AIza'); // 🆕 DODANE: Google API key validation
       default: return false;
     }
   }, []);
@@ -458,16 +501,21 @@ export default function UstawieniaContent() {
     [currentTextApiKey?.value, settings.textProvider, isValidApiKey]
   );
 
-  const isValidImageKey = useMemo(() =>
-    currentImageApiKey?.value ? isValidApiKey(settings.imageProvider, currentImageApiKey.value) : false,
-    [currentImageApiKey?.value, settings.imageProvider, isValidApiKey]
-  );
+  const isValidImageKey = useMemo(() => {
+    const providerKeyMap: Record<string, string> = {
+      'google': 'google',
+      'openai': 'openai'
+    };
+    const keyName = providerKeyMap[settings.imageProvider] || settings.imageProvider;
+    return currentImageApiKey?.value ? isValidApiKey(keyName, currentImageApiKey.value) : false;
+  }, [currentImageApiKey?.value, settings.imageProvider, isValidApiKey]);
 
+  // 🆕 ROZSZERZONA funkcja placeholder - obsługuje Google
   const getApiKeyPlaceholder = useCallback((provider: string) => {
     switch (provider) {
       case 'anthropic': return 'sk-ant-... lub sk-ant-api03-...';
       case 'openai': return 'sk-...';
-      case 'gemini': return 'AIza...';
+      case 'google': return 'AIza... (z Google AI Studio)'; // 🆕 DODANE
       default: return 'Wklej klucz API';
     }
   }, []);
@@ -483,24 +531,45 @@ export default function UstawieniaContent() {
     }));
   }, []);
 
-  // Obsługa kluczy API
+  // 🆕 ZAKTUALIZOWANA Obsługa kluczy API - mapowanie provider na klucz
   const updateApiKey = useCallback((provider: string, value: string) => {
+    const providerKeyMap: Record<string, string> = {
+      'google': 'google',
+      'openai': 'openai',
+      'anthropic': 'anthropic'
+    };
+    const keyName = providerKeyMap[provider] || provider;
+
     setApiKeys(prev => ({
       ...prev,
-      [provider]: { ...prev[provider], value, isSaved: false }
+      [keyName]: { ...prev[keyName], value, isSaved: false }
     }));
   }, []);
 
   const toggleApiKeyVisibility = useCallback((provider: string) => {
+    const providerKeyMap: Record<string, string> = {
+      'google': 'google',
+      'openai': 'openai',
+      'anthropic': 'anthropic'
+    };
+    const keyName = providerKeyMap[provider] || provider;
+
     setApiKeys(prev => ({
       ...prev,
-      [provider]: { ...prev[provider], showValue: !prev[provider].showValue }
+      [keyName]: { ...prev[keyName], showValue: !prev[keyName].showValue }
     }));
   }, []);
 
   const saveApiKey = useCallback(async (provider: string) => {
-    const keyInfo = apiKeys[provider];
-    if (!keyInfo || !keyInfo.value || !isValidApiKey(provider, keyInfo.value) || savingApiKey) return;
+    const providerKeyMap: Record<string, string> = {
+      'google': 'google',
+      'openai': 'openai',
+      'anthropic': 'anthropic'
+    };
+    const keyName = providerKeyMap[provider] || provider;
+    const keyInfo = apiKeys[keyName];
+
+    if (!keyInfo || !keyInfo.value || !isValidApiKey(keyName, keyInfo.value) || savingApiKey) return;
 
     setSavingApiKey(provider);
     const providerName = TEXT_PROVIDERS.find(p=>p.id === provider)?.name || IMAGE_PROVIDERS.find(p=>p.id === provider)?.name || provider;
@@ -512,7 +581,7 @@ export default function UstawieniaContent() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          provider: provider,
+          provider: keyName, // Używaj zmapowanego keyName
           apiKey: keyInfo.value
         }),
       });
@@ -524,7 +593,7 @@ export default function UstawieniaContent() {
         // Wyczyść wprowadzony klucz i oznacz jako zapisany
         setApiKeys(prev => ({
           ...prev,
-          [provider]: { ...prev[provider], value: '', showValue: false, isSaved: true }
+          [keyName]: { ...prev[keyName], value: '', showValue: false, isSaved: true }
         }));
 
         setMessage({ type: 'success', text: `Klucz API dla ${providerName} został zapisany.` });
@@ -553,12 +622,19 @@ export default function UstawieniaContent() {
       message: `Czy na pewno chcesz usunąć klucz API ${providerName}?`,
       onConfirm: async () => {
         try {
+          const providerKeyMap: Record<string, string> = {
+            'google': 'google',
+            'openai': 'openai',
+            'anthropic': 'anthropic'
+          };
+          const keyName = providerKeyMap[provider] || provider;
+
           const response = await fetch('/api/user/api-keys', {
             method: 'DELETE',
             headers: {
               'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ provider: provider }),
+            body: JSON.stringify({ provider: keyName }),
           });
 
           if (response.ok) {
@@ -568,7 +644,7 @@ export default function UstawieniaContent() {
             // Zaktualizuj stan lokalny
             setApiKeys(prev => ({
               ...prev,
-              [provider]: { value: '', showValue: false, isSaved: false }
+              [keyName]: { value: '', showValue: false, isSaved: false }
             }));
 
             // ✅ NOWE: Automatyczne przełączenie na model basic po usunięciu klucza
@@ -613,14 +689,14 @@ export default function UstawieniaContent() {
                   setSettings(prev => ({ ...prev, imageModel: basicModel.id }));
                   console.log(`🔄 Przełączono na model basic obrazów: ${basicModel.name}`);
                 } else {
-                  // Jeśli provider nie ma modelu basic, przełącz na openai (który ma dall-e-3 basic)
-                  const openaiProvider = IMAGE_PROVIDERS.find(p => p.id === 'openai');
-                  const openaiBasic = openaiProvider?.models.find(m => m.tier === 'basic');
-                  if (openaiBasic) {
-                    settingsToUpdate.imageProvider = 'openai';
-                    settingsToUpdate.imageModel = openaiBasic.id;
-                    setSettings(prev => ({ ...prev, imageProvider: 'openai', imageModel: openaiBasic.id }));
-                    console.log(`🔄 Przełączono na OpenAI: ${openaiBasic.name}`);
+                  // 🆕 ZMIANA: Fallback na Google Imagen 3 (najtańszy)
+                  const googleProvider = IMAGE_PROVIDERS.find(p => p.id === 'google');
+                  const googleBasic = googleProvider?.models.find(m => m.tier === 'basic');
+                  if (googleBasic) {
+                    settingsToUpdate.imageProvider = 'google';
+                    settingsToUpdate.imageModel = googleBasic.id;
+                    setSettings(prev => ({ ...prev, imageProvider: 'google', imageModel: googleBasic.id }));
+                    console.log(`🔄 Przełączono na Google: ${googleBasic.name}`);
                   }
                 }
               }
@@ -1067,7 +1143,7 @@ export default function UstawieniaContent() {
           )}
         </div>
 
-        {/* Image Generation */}
+        {/* 🆕 ZAKTUALIZOWANE Image Generation z Google */}
         <div className="bg-white rounded-xl border border-gray-200 p-6">
           <div className="flex items-center mb-6">
             <Palette className="h-5 w-5 text-purple-600 mr-2" />
@@ -1115,13 +1191,23 @@ export default function UstawieniaContent() {
               <div className="relative">
                 <button onClick={() => toggleDropdown('imageModel')} className="w-full px-4 py-3 border border-gray-300 rounded-lg text-left flex items-center justify-between hover:border-gray-400 focus:ring-2 focus:ring-purple-500 bg-white">
                   <div>
-                    <div className="font-medium text-gray-900 flex items-center">{imageModel?.name}{imageModel?.tier === 'premium' && (<span className="ml-2 px-2.5 py-0.5 bg-purple-100 text-purple-800 text-xs font-medium rounded-full">Własny klucz API</span>)}</div>
-                    <div className="text-sm text-gray-500">{imageModel?.description}</div>
+                    <div className="font-medium text-gray-900 flex items-center">
+                      {imageModel?.name}
+                      {imageModel?.tier === 'premium' && (
+                        <span className="ml-2 px-2.5 py-0.5 bg-purple-100 text-purple-800 text-xs font-medium rounded-full">Własny klucz API</span>
+                      )}
+                    </div>
+                    <div className="text-sm text-gray-500 flex items-center">
+                      {imageModel?.description}
+                      {imageModel?.cost && (
+                        <span className="ml-2 text-xs font-medium text-green-600">({imageModel.cost})</span>
+                      )}
+                    </div>
                   </div>
                   <ChevronDown className={`h-5 w-5 text-gray-400 transition-transform ${dropdowns.imageModel ? 'rotate-180' : ''}`} />
                 </button>
                 {dropdowns.imageModel && imageProvider && (
-                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg">
+                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-y-auto">
                     {imageProvider.models.map((model) => (
                       <button key={model.id} onClick={() => {
                         const newSettings = { imageModel: model.id };
@@ -1132,8 +1218,31 @@ export default function UstawieniaContent() {
                       }} className={`w-full px-4 py-3 text-left hover:bg-gray-50 first:rounded-t-lg last:rounded-b-lg transition-colors ${settings.imageModel === model.id ? 'bg-purple-50' : ''}`}>
                         <div className="flex items-center justify-between">
                           <div>
-                            <div className="font-medium text-gray-900 flex items-center">{model.name}{model.tier === 'premium' && (<span className="ml-2 px-2.5 py-0.5 bg-purple-100 text-purple-800 text-xs font-medium rounded-full">Własny klucz API</span>)}</div>
-                            <div className="text-sm text-gray-500">{model.description}</div>
+                            <div className="font-medium text-gray-900 flex items-center">
+                              {model.name}
+                              {model.tier === 'premium' && (
+                                <span className="ml-2 px-2.5 py-0.5 bg-purple-100 text-purple-800 text-xs font-medium rounded-full">Własny klucz API</span>
+                              )}
+                            </div>
+                            <div className="text-sm text-gray-500 flex items-center">
+                              {model.description}
+                              {model.cost && (
+                                <span className="ml-2 text-xs font-medium text-green-600">({model.cost})</span>
+                              )}
+                            </div>
+                            {/* 🆕 DODANE: Wyświetlanie funkcji modelu */}
+                            {model.features && model.features.length > 0 && (
+                              <div className="mt-1 flex flex-wrap gap-1">
+                                {model.features.slice(0, 3).map((feature, idx) => (
+                                  <span key={idx} className="text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">
+                                    {feature.replace('_', ' ')}
+                                  </span>
+                                ))}
+                                {model.features.length > 3 && (
+                                  <span className="text-xs text-gray-400">+{model.features.length - 3}</span>
+                                )}
+                              </div>
+                            )}
                           </div>
                           {settings.imageModel === model.id && <Check className="h-4 w-4 text-purple-600" />}
                         </div>
@@ -1147,7 +1256,18 @@ export default function UstawieniaContent() {
            {/* Image API Key Section */}
            {needsImageApiKey && (
             <div className="mt-6 pt-6 border-t border-gray-100">
-              {!currentImageApiKey?.isSaved && (<div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4"><p className="text-sm text-blue-800">Model <strong>{imageModel?.name}</strong> wymaga własnego klucza API.</p></div>)}
+              {!currentImageApiKey?.isSaved && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                  <p className="text-sm text-blue-800">
+                    Model <strong>{imageModel?.name}</strong> wymaga własnego klucza API.
+                    {settings.imageProvider === 'google' && (
+                      <span className="block mt-1">
+                        Uzyskaj darmowy klucz z <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="underline font-medium">Google AI Studio</a>.
+                      </span>
+                    )}
+                  </p>
+                </div>
+              )}
               {currentImageApiKey?.isSaved ? (
                 <div className="space-y-4">
                   <div className="flex items-center justify-between p-4 bg-green-50 border border-green-200 rounded-lg">
@@ -1157,7 +1277,15 @@ export default function UstawieniaContent() {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  <label className="block text-sm font-medium text-gray-700"><div className="flex items-center"><span className="text-lg mr-2">{imageProvider?.icon}</span>{imageProvider?.name} API Key</div></label>
+                  <label className="block text-sm font-medium text-gray-700">
+                    <div className="flex items-center">
+                      <span className="text-lg mr-2">{imageProvider?.icon}</span>
+                      {imageProvider?.name} API Key
+                      {settings.imageProvider === 'google' && (
+                        <span className="ml-2 text-xs text-green-600 font-medium">(Darmowy)</span>
+                      )}
+                    </div>
+                  </label>
                   <div className="relative">
                     <input type={currentImageApiKey?.showValue ? 'text' : 'password'} value={currentImageApiKey?.value || ''} onChange={(e) => updateApiKey(settings.imageProvider, e.target.value)} placeholder={getApiKeyPlaceholder(settings.imageProvider)} autoComplete="new-password" className={`w-full px-4 py-3 ${currentImageApiKey?.value && isValidImageKey ? 'pr-32' : 'pr-12'} border rounded-lg focus:ring-2 focus:border-transparent transition-all text-gray-900 placeholder-gray-500 ${currentImageApiKey?.value && isValidImageKey ? 'border-green-300 focus:ring-green-500 bg-green-50' : currentImageApiKey?.value && !isValidImageKey ? 'border-red-300 focus:ring-red-500 bg-red-50' : 'border-gray-300 focus:ring-blue-500 bg-white'}`} />
                     <button type="button" onClick={() => toggleApiKeyVisibility(settings.imageProvider)} className={`absolute top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 z-10 ${currentImageApiKey?.value && isValidImageKey ? 'right-24' : 'right-3'}`}>{currentImageApiKey?.showValue ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}</button>
@@ -1168,7 +1296,16 @@ export default function UstawieniaContent() {
                     )}
                   </div>
                   {currentImageApiKey?.value && !isValidImageKey && (<div className="mt-2"><p className="text-xs text-red-600 font-medium flex items-center"><AlertCircle className="h-3 w-3 mr-1" />Nieprawidłowy format klucza API</p><p className="text-xs text-gray-500 mt-1">Oczekiwany format: {getApiKeyPlaceholder(settings.imageProvider)}</p></div>)}
-                  <div className="mt-3 pt-3 border-t border-gray-100"><p className="text-xs text-gray-500 flex items-center"><span className="mr-1">🔒</span>Klucz będzie szyfrowany AES-256 i przechowywany bezpiecznie</p></div>
+                  <div className="mt-3 pt-3 border-t border-gray-100">
+                    <p className="text-xs text-gray-500 flex items-center">
+                      <span className="mr-1">🔒</span>Klucz będzie szyfrowany AES-256 i przechowywany bezpiecznie
+                    </p>
+                    {settings.imageProvider === 'google' && (
+                      <p className="text-xs text-green-600 mt-1 flex items-center">
+                        <span className="mr-1">💰</span>Imagen 3 dostępny bez klucza API (najtańszy - $0.03/obraz)
+                      </p>
+                    )}
+                  </div>
                 </div>
               )}
             </div>

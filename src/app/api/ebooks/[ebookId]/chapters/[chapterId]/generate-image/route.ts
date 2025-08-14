@@ -3,48 +3,133 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { getApiKeyForEndpoint, getUserAiSettings } from '@/lib/user-api-keys';
 import sharp from 'sharp';
 import fs from 'fs/promises';
 import path from 'path';
-import axios from 'axios';  // 🔧 DODANE
+import axios from 'axios';
 
-// ===== MAKSYMALNA KONFIGURACJA JAKOŚCI ZOPTYMALIZOWANA POD GPT-IMAGE-1 Z TRANSPARENTNYM TŁEM =====
+// Helper function to safely log API keys
+function getMaskedApiKey(apiKey: string | null): string {
+  if (!apiKey) {
+    return "KLUCZ NIEOBECNY (null)";
+  }
+  if (apiKey.length < 8) {
+    return "KLUCZ ZBYT KRÓTKI (prawdopodobnie nieprawidłowy)";
+  }
+  return `${apiKey.substring(0, 7)}...${apiKey.substring(apiKey.length - 4)}`;
+}
+
+// 🆕 MULTI-PROVIDER MODEL CONFIGURATION - GOOGLE DEFAULT, OPENAI ALTERNATIVE
 const MODEL_CONFIGS = {
-  "gpt-image-1": {
-    maxPromptLength: 4000,  // 🔥 PEŁNY LIMIT GPT-Image-1
-    quality:"high" as const,  // 🔥 MAKSYMALNA JAKOŚĆ dostępna
-    output_format: "png" as const,  // 🔥 PNG dla maksymalnej przezroczystości i szczegółów
-    background: "transparent" as const,  // 🔥 Przezroczyste tło jako priorytet
-    moderation: "auto" as const,
-    costEstimate: 0.12,  // 🔥 Wyższa cena za wysoką jakość
+  // 🆕 GOOGLE MODELS - POPRAWIONE KONFIGURACJE
+  "imagen-3": {
+    provider: "google",
+    maxPromptLength: 4000,
+    optimalLength: 1500,
+    quality: "high" as const,
+    costEstimate: 0.03,
     sizes: ['1024x1024', '1024x1536', '1536x1024'],
-    // 🔥 NOWE: Dodatkowe parametry maksymalnej jakości
+    enhancement_level: "standard",
+    supports_transparency: false,
+    supports_text_rendering: true,
+    always_returns_base64: true,
+    requires_user_key: true,
+    api_model: "imagen-3.0-generate-002", // ✅ POPRAWNE ID
+    api_method: "generateImages" // ✅ METODA DLA IMAGEN
+  ,
+    max_images: 4
+  },
+  "imagen-4": {
+    provider: "google",
+    maxPromptLength: 4000,
+    optimalLength: 1500,
+    quality: "high" as const,
+    costEstimate: 0.04,
+    sizes: ['1024x1024', '1024x1536', '1536x1024'],
+    enhancement_level: "premium",
+    supports_transparency: false,
+    supports_text_rendering: true,
+    always_returns_base64: true,
+    requires_user_key: true,
+    api_model: "imagen-4.0-generate-preview-06-06", // ✅ POPRAWNE ID
+    api_method: "generateImages" // ✅ METODA DLA IMAGEN
+  ,
+    max_images: 4
+  },
+  "imagen-4-ultra": {
+    provider: "google",
+    maxPromptLength: 4000,
+    optimalLength: 2000,
+    quality: "ultra" as const,
+    costEstimate: 0.06,
+    sizes: ['1024x1024', '1024x1536', '1536x1024'],
     enhancement_level: "maximum",
-    detail_focus: "ultra-high",
-    render_quality: "premium",
-    optimization_target: "absolute_maximum_quality"
+    supports_transparency: false,
+    supports_text_rendering: true,
+    prompt_adherence: "excellent",
+    always_returns_base64: true,
+    requires_user_key: true,
+    api_model: "imagen-4.0-ultra-generate-preview-06-06", // ✅ POPRAWNE ID (może wymagać aktualizacji)
+    api_method: "generateImages", // ✅ METODA DLA IMAGEN
+    max_images: 1 // Ultra może generować tylko 1 obraz na raz
+  },
+  "gemini-image": {
+    provider: "google",
+    maxPromptLength: 4000,
+    optimalLength: 1500,
+    quality: "high" as const,
+    costEstimate: 0.002, // Tańszy niż Imagen
+    sizes: ['1024x1024', '1024x1536', '1536x1024'],
+    enhancement_level: "standard",
+    supports_transparency: false,
+    supports_text_rendering: true,
+    supports_conversational_edit: true, // Unikalna funkcja Gemini
+    always_returns_base64: true,
+    requires_user_key: true,
+    api_model: "gemini-2.0-flash-preview-image-generation", // ✅ POPRAWNE ID
+    api_method: "generateContent", // ✅ METODA DLA GEMINI
+    requires_text_and_image: true // Gemini wymaga obu modalności
+  },
+  // OPENAI MODELS - BEZ ZMIAN
+  "gpt-image-1": {
+    provider: "openai",
+    maxPromptLength: 4000,
+    optimalLength: 1200,
+    quality: "high" as const,
+    output_format: "png" as const,
+    background: "transparent" as const,
+    moderation: "auto" as const,
+    costEstimate: 0.19,
+    sizes: ['1024x1024', '1024x1536', '1536x1024'],
+    enhancement_level: "optimal",
+    detail_focus: "focused",
+    render_quality: "professional",
+    supports_transparency: true,
+    supports_text_rendering: true,
+    always_returns_base64: true,
+    requires_user_key: true
   },
   "dall-e-3": {
-    maxPromptLength: 400,   // Fallback limits
-    quality: "hd" as const,  // 🔥 Najwyższa jakość dla fallback
+    provider: "openai",
+    maxPromptLength: 400,
+    quality: "hd" as const,
     style: "natural" as const,
-    costEstimate: 0.08,  // 🔥 Wyższa cena za HD
-    sizes: ['1024x1024', '1792x1024', '1024x1792']
+    costEstimate: 0.08,
+    sizes: ['1024x1024', '1792x1024', '1024x1792'],
+    supports_transparency: false,
+    always_returns_base64: false,
+    requires_user_key: false
   }
 } as const;
 
 // Sprawdzenie konfiguracji na starcie
-console.log('🚀 === GPT-IMAGE-1 MAXIMUM QUALITY TRANSPARENT CHAPTER ILLUSTRATIONS GENERATOR ===');
-console.log(`   - API Key: ${!!process.env.OPENAI_API_KEY ? 'OK' : 'MISSING'}`);
-console.log(`   - Primary Model: gpt-image-1 (4000 char limit)`);
-console.log(`   - Quality: MAXIMUM (absolute highest quality)`);
-console.log(`   - Format: PNG (best for transparent illustrations with maximum quality)`);
-console.log(`   - Background: TRANSPARENT (seamless integration priority)`);
-console.log(`   - Composition: ULTRA-SEAMLESS with natural blending`);
-console.log(`   - Enhancement Level: MAXIMUM (premium rendering)`);
-console.log(`   - Detail Focus: ULTRA-HIGH (microscopic precision)`);
-console.log(`   - Fallback: dall-e-3 (HD quality)`);
-console.log('🚀 === MAXIMUM QUALITY TRANSPARENT CHAPTER GENERATOR READY ===');
+console.log('🚀 === MULTI-PROVIDER CHAPTER GENERATOR ===');
+console.log(`   - Google Models: Imagen 3 ($0.03), Imagen 4 ($0.04), Imagen 4 Ultra ($0.06), Gemini 2.0 Flash ($0.002)`);
+console.log(`   - OpenAI Models: DALL-E 3 ($0.08), GPT-Image-1 ($0.19)`);
+console.log(`   - Total Models: 6 available (4 Google, 2 OpenAI)`);
+console.log(`   - API Compatibility: Google AI Studio keys (AIza...) supported`);
+console.log('🚀 === MULTI-PROVIDER GENERATOR READY ===');
 
 function logApiKey(apiKey: string | undefined): string {
   if (!apiKey) return 'MISSING';
@@ -52,277 +137,381 @@ function logApiKey(apiKey: string | undefined): string {
   return `${apiKey.substring(0, 7)}...${apiKey.substring(apiKey.length - 4)}`;
 }
 
-function debugApiKey() {
-  console.log('🔍 === API KEY DEBUG ===');
-  console.log(`   - OPENAI_API_KEY exists: ${!!process.env.OPENAI_API_KEY}`);
-  console.log(`   - Length: ${process.env.OPENAI_API_KEY?.length || 0}`);
-  console.log(`   - Format: ${logApiKey(process.env.OPENAI_API_KEY)}`);
-  console.log('🔍 === END DEBUG ===');
-}
+// ✅ POPRAWIONA FUNKCJA selectOptimalModel
+const selectOptimalModel = async (userId: string | null): Promise<{
+  model: string;
+  provider: string;
+  apiKey: string | null;
+  keySource: 'user' | 'env' | 'none';
+  reasoning: string;
+}> => {
+  console.log('🧠 === MULTI-PROVIDER MODEL SELECTION ===');
 
-// ===== OMEGA-3 COMPLIANCE CLAUSE Z TRANSPARENTNYM TŁEM =====
-const OMEGA3_COMPLIANCE_CLAUSE = `
-
-MANDATORY REGULATORY COMPLIANCE: ABSOLUTELY FORBIDDEN: capsules, tablets, pills, softgels, or any solid supplement forms. If depicting omega-3 supplements or fish oil, show ONLY liquid form in amber glass bottle (like cough syrup bottle) with small glass measuring cup or medicine glass (kieliszek). Only liquid omega-3 in bottle format with small glass vessel is permitted.`;
-
-// 🔥 MAKSYMALNE WYMAGANIA TRANSPARENTNOŚCI - ULTRA-SEAMLESS
-const MAXIMUM_TRANSPARENT_BACKGROUND_CLAUSES = [
-  "TRANSPARENT: background with natural edge blending, no borders or frames",
-  "SEAMLESS: composition contained within bounds with fade-out edges for natural blending",
-  "MARGINS: proper internal spacing with adequate clearance from all image edges",
-  "BOUNDARIES: all elements positioned away from image perimeter for white background compatibility",
-  "BLENDING: natural integration with any surface or background color",
-  "BORDERLESS: edge-free design that transitions smoothly into transparent areas",
-  "CLEARANCE: mandatory spacing ensuring no elements touch image boundaries",
-  "FADE-OUT: smooth gradient transitions to complete transparency at edges",
-  "INTEGRATION: perfect compatibility with white backgrounds and any surface color",
-  "COMPOSITION: contained entirely within image bounds with professional spacing",
-  "ULTRA-SEAMLESS: microscopic edge transitions for absolute smoothness",
-  "PREMIUM-MARGINS: professional publishing-grade internal spacing standards",
-  "SURFACE-ADAPTIVE: intelligent blending optimized for any background texture",
-  "EDGE-PERFECTION: mathematically precise fade-out calculations for flawless integration"
-];
-
-// 🔥 MAKSYMALNA: Funkcja dodawania ultra-seamless transparency clauses
-const addMaximumTransparentBackgroundClauses = (prompt: string): string => {
-  const hasExistingTransparency = MAXIMUM_TRANSPARENT_BACKGROUND_CLAUSES.some(clause =>
-    prompt.toLowerCase().includes(clause.toLowerCase().substring(0, 15))
-  );
-
-  if (hasExistingTransparency) {
-    console.log(`✅ Prompt already contains maximum transparency and ultra-seamless composition clauses`);
-    return prompt;
+  if (!userId) {
+    console.log('   - User: Not logged in, cannot select a model requiring a key.');
+    return {
+      model: 'imagen-3', // Domyślny model Google
+      provider: 'google',
+      apiKey: null,
+      keySource: 'none',
+      reasoning: 'No user logged in - API key cannot be fetched.'
+    };
   }
 
-  console.log(`🔒 Adding MAXIMUM transparency, ultra-seamless composition, and premium margin control clauses to chapter prompt`);
-  const transparentSection = ` ${MAXIMUM_TRANSPARENT_BACKGROUND_CLAUSES.join('. ')}.`;
+  // Pobierz ustawienia AI użytkownika
+  const userAiSettings = await getUserAiSettings(userId);
+  const preferredProvider = userAiSettings.imageAiProvider;
+  const preferredModel = userAiSettings.imageAiModel;
 
-  return prompt + transparentSection;
+  console.log(`   - User Settings: ${preferredProvider}/${preferredModel}`);
+
+  const modelConfig = MODEL_CONFIGS[preferredModel as keyof typeof MODEL_CONFIGS];
+
+  if (!modelConfig) {
+    console.log('   - Invalid model in settings, attempting fallback.');
+    return {
+      model: 'imagen-3',
+      provider: 'google',
+      apiKey: null,
+      keySource: 'none',
+      reasoning: 'Invalid model in user settings - API key cannot be fetched.'
+    };
+  }
+
+  // Dla wszystkich modeli sprawdź dostępność kluczy
+  const providerForKey = modelConfig.provider === 'google' ? 'google' : 'openai';
+  const envKeyName = modelConfig.provider === 'google' ? 'GEMINI_API_KEY' : 'OPENAI_API_KEY';
+
+  try {
+    const { apiKey, source } = await getApiKeyForEndpoint(
+      userId,
+      providerForKey,
+      envKeyName
+    );
+
+    if (apiKey) {
+      console.log(`   - Using ${source.toUpperCase()} ${modelConfig.provider.toUpperCase()} API key for ${preferredModel}`);
+      return {
+        model: preferredModel,
+        provider: preferredProvider,
+        apiKey: apiKey,
+        keySource: source,
+        reasoning: `Using ${source} ${modelConfig.provider} key for ${preferredModel}`
+      };
+    } else {
+       console.log(`   - No API key available for ${modelConfig.provider}/${preferredModel}`);
+       return {
+        model: preferredModel,
+        provider: preferredProvider,
+        apiKey: null,
+        keySource: 'none',
+        reasoning: `No API key found for the preferred model ${preferredModel}.`
+      };
+    }
+  } catch (error) {
+    console.log(`   - Error getting API key for ${modelConfig.provider}: ${error}`);
+  }
+
+  return {
+    model: preferredModel,
+    provider: preferredProvider,
+    apiKey: null,
+    keySource: 'none',
+    reasoning: 'An error occurred during API key retrieval.'
+  };
 };
 
-// 🔥 MAKSYMALNE METRYKI JAKOŚCI - 12 KRYTERIÓW
-const calculateMaximumQualityMetrics = (imagePrompt: string, chapterTitle: string, enableTransparency: boolean) => {
-  const qualityElements = {
-    // KRYTYCZNE (łącznie 70%)
+// ✅ POPRAWIONA FUNKCJA callGoogleImageGeneration
+const callGoogleImageGeneration = async (
+  model: string,
+  prompt: string,
+  size: string,
+  apiKey: string | null
+): Promise<any> => {
+  console.log(`🎨 === GOOGLE ${model.toUpperCase()} GENERATION ===`);
+
+  const modelConfig = MODEL_CONFIGS[model as keyof typeof MODEL_CONFIGS];
+
+  if (!modelConfig) {
+    throw new Error(`Model configuration not found for: ${model}`);
+  }
+
+  console.log(`   - Identyfikacja użytego klucza API: ${getMaskedApiKey(apiKey)}`);
+  console.log(`   - Model API: ${'api_model' in modelConfig ? modelConfig.api_model : 'N/A'}`);
+  console.log(`   - Method: ${'api_method' in modelConfig ? modelConfig.api_method : 'N/A'}`);
+
+  if (!apiKey) {
+    throw new Error('API Key is null or not provided to callGoogleImageGeneration.');
+  }
+
+  // Określ endpoint i body na podstawie typu modelu
+  let apiUrl: string;
+  let requestBody: any;
+
+  if (modelConfig.provider === 'google' && 'api_method' in modelConfig && (modelConfig as any).api_method === 'generateImages') {
+    // DLA MODELI IMAGEN – REST :predict
+    apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${(modelConfig as any).api_model}:predict`;
+
+    // Konwersja rozmiaru na format Imagen
+    let aspectRatio = "1:1";
+    if (size === "1024x1536") aspectRatio = "3:4";
+    else if (size === "1536x1024") aspectRatio = "4:3";
+
+    requestBody = {
+      instances: [{ prompt: prompt }],
+      parameters: {
+        sampleCount: (modelConfig as any).max_images || 1,
+        aspectRatio: aspectRatio,
+        personGeneration: "allow_adult"
+      }
+    };
+  } else {
+    // DLA GEMINI 2.0 FLASH – :generateContent
+    apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${(modelConfig as any).api_model}:generateContent`;
+
+    requestBody = {
+      contents: [{
+        parts: [{ text: prompt }]
+      }],
+      generation_config: {
+        temperature: 0.8,
+        responseModalities: ["TEXT", "IMAGE"] // Gemini wymaga obu
+      }
+    };
+  }
+
+  console.log(`   - API URL: ${apiUrl}`);
+  console.log(`   - Request type: ${'api_method' in modelConfig ? (modelConfig as any).api_method : 'OpenAI'}`);
+
+  const response = await fetch(apiUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-goog-api-key': apiKey,
+    },
+    body: JSON.stringify(requestBody)
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error(`   - API Error Response: ${errorText}`);
+    throw new Error(`Google API error: ${response.status} - ${errorText}`);
+  }
+
+  const result = await response.json();
+  console.log(`   - Response received, processing...`);
+
+  // Parsowanie odpowiedzi
+  if (modelConfig.provider === 'google' && 'api_method' in modelConfig && (modelConfig as any).api_method === 'generateImages') {
+    // ODPOWIEDŹ IMAGEN (SDK i REST)
+    if (result.generatedImages && result.generatedImages.length > 0) {
+      console.log(`   - Found ${result.generatedImages.length} generated images (SDK schema)`);
+      return {
+        data: [{
+          b64_json: result.generatedImages[0].image.imageBytes
+        }]
+      };
+    }
+    // REST :predict schema -> { predictions: [ { bytesBase64Encoded, mimeType } ] }
+    if (result.predictions && result.predictions.length > 0) {
+      console.log(`   - Found ${result.predictions.length} predictions (REST schema)`);
+      const first = result.predictions[0];
+      const b64 = first.bytesBase64Encoded || first.bytes || first.imageBytes;
+      if (b64) {
+        return { data: [{ b64_json: b64 }] };
+      }
+    }
+  } else {
+    // ODPOWIEDŹ GEMINI
+    if (result.candidates && result.candidates.length > 0) {
+      const candidate = result.candidates[0];
+      const parts = candidate.content?.parts || [];
+      // Szukamy inlineData z obrazem
+      const imagePart = parts.find((p: any) => p.inlineData && p.inlineData.mimeType?.startsWith('image/'));
+      if (imagePart) {
+        console.log(`   - Found inline image data`);
+        return {
+          data: [{
+            b64_json: imagePart.inlineData.data
+          }]
+        };
+      }
+    }
+  }
+
+  throw new Error('No image data found in Google API response');
+};
+
+// 🆕 UNIFIED REQUEST BODY PREPARATION (BEZ ZMIAN DLA OPENAI)
+const prepareRequestBody = (model: string, prompt: string, size: string) => {
+  const config = MODEL_CONFIGS[model as keyof typeof MODEL_CONFIGS];
+
+  if (config.provider === 'google') {
+    return null; // Obsługiwane przez callGoogleImageGeneration
+  } else if (model === "gpt-image-1") {
+    return JSON.stringify({
+      model: "gpt-image-1",
+      prompt: prompt,
+      n: 1,
+      size: size as "1024x1024" | "1024x1536" | "1536x1024",
+      quality: "high",
+      background: "transparent",
+      moderation: "auto",
+      output_format: "png",
+    });
+  } else { // dall-e-3
+    return JSON.stringify({
+      model: "dall-e-3",
+      prompt: prompt.substring(0, 380) + "...",
+      n: 1,
+      size: size as "1024x1024" | "1024x1792" | "1792x1024",
+      quality: "hd",
+      style: "natural",
+      response_format: 'url'
+    });
+  }
+};
+
+// 📊 UNIVERSAL QUALITY METRICS - SUPPORTS ALL PROVIDERS
+const calculateQualityMetrics = (imagePrompt: string, chapterTitle: string, model: string) => {
+  const qualityElements: { [key: string]: boolean } = {
     'no text': imagePrompt.toLowerCase().includes('no text') || imagePrompt.toLowerCase().includes('absolutely no text'),
-    'transparent background': enableTransparency ? (imagePrompt.toLowerCase().includes('transparent background') || imagePrompt.toLowerCase().includes('transparent')) : true,
-    'seamless composition': enableTransparency ? (imagePrompt.toLowerCase().includes('seamless') || imagePrompt.toLowerCase().includes('borderless') || imagePrompt.toLowerCase().includes('ultra-seamless')) : true,
-    'natural blending': enableTransparency ? (imagePrompt.toLowerCase().includes('natural') && (imagePrompt.toLowerCase().includes('blend') || imagePrompt.toLowerCase().includes('fade'))) : true,
-    'proper margins': enableTransparency ? (imagePrompt.toLowerCase().includes('margin') || imagePrompt.toLowerCase().includes('spacing') || imagePrompt.toLowerCase().includes('premium-margins')) : true,
-
-    // WYSOKIEJ JAKOŚCI (łącznie 20%)
-    'ultra high definition': imagePrompt.toLowerCase().includes('ultra-high-definition') || imagePrompt.toLowerCase().includes('ultra high definition') || imagePrompt.toLowerCase().includes('ultra-hd'),
-    'photorealistic': imagePrompt.toLowerCase().includes('photorealistic') || imagePrompt.toLowerCase().includes('photorealism'),
-    'cinematic lighting': (imagePrompt.toLowerCase().includes('cinematic') || imagePrompt.toLowerCase().includes('cinema-grade')) && imagePrompt.toLowerCase().includes('lighting'),
-    'professional quality': imagePrompt.toLowerCase().includes('professional') && (imagePrompt.toLowerCase().includes('quality') || imagePrompt.toLowerCase().includes('grade')),
-
-    // TECHNICZNE (łącznie 10%)
-    'square format': imagePrompt.includes('1:1') || imagePrompt.toLowerCase().includes('square'),
-    'ebook specs': imagePrompt.toLowerCase().includes('ebook'),
+    'professional': imagePrompt.toLowerCase().includes('professional'),
+    'ebook': imagePrompt.toLowerCase().includes('ebook'),
+    'high quality': imagePrompt.toLowerCase().includes('photorealistic') || imagePrompt.toLowerCase().includes('high-quality'),
     'chapter reference': imagePrompt.toLowerCase().includes(chapterTitle.toLowerCase().substring(0, 15))
   };
 
-  // 🔥 MAKSYMALNE WAGI JAKOŚCIOWE
-  const qualityScore = (
-    // KRYTYCZNE - 70% łącznie
-    (qualityElements['no text'] ? 0.25 : 0) +                      // 25% - ABSOLUTNIE KRYTYCZNE
-    (qualityElements['transparent background'] ? 0.20 : 0) +        // 20% - KRYTYCZNE dla transparentności
-    (qualityElements['seamless composition'] ? 0.15 : 0) +          // 15% - KRYTYCZNE dla seamless
-    (qualityElements['natural blending'] ? 0.10 : 0) +             // 10% - KRYTYCZNE dla blending
+  const config = MODEL_CONFIGS[model as keyof typeof MODEL_CONFIGS];
+  if ('supports_transparency' in config && (config as any).supports_transparency) {
+    qualityElements['transparent background'] = imagePrompt.toLowerCase().includes('transparent');
+  }
+  if ('supports_text_rendering' in config && (config as any).supports_text_rendering) {
+    qualityElements['text rendering optimized'] = imagePrompt.toLowerCase().includes('text') || imagePrompt.toLowerCase().includes('readable');
+  }
 
-    // WYSOKIEJ JAKOŚCI - 20% łącznie
-    (qualityElements['ultra high definition'] ? 0.08 : 0) +        // 8% - Maksymalna rozdzielczość
-    (qualityElements['photorealistic'] ? 0.06 : 0) +              // 6% - Fotorealizm
-    (qualityElements['cinematic lighting'] ? 0.04 : 0) +          // 4% - Kinowe oświetlenie
-    (qualityElements['professional quality'] ? 0.02 : 0) +        // 2% - Profesjonalna jakość
-
-    // TECHNICZNE - 10% łącznie
-    (qualityElements['proper margins'] ? 0.05 : 0) +              // 5% - Marginesy
-    (qualityElements['square format'] ? 0.02 : 0) +               // 2% - Format
-    (qualityElements['ebook specs'] ? 0.02 : 0) +                 // 2% - Specs ebooka
-    (qualityElements['chapter reference'] ? 0.01 : 0)             // 1% - Referencja rozdziału
+  const baseScore = (
+    (qualityElements['no text'] ? 0.25 : 0) +
+    (qualityElements['professional'] ? 0.15 : 0) +
+    (qualityElements['ebook'] ? 0.15 : 0) +
+    (qualityElements['high quality'] ? 0.20 : 0) +
+    (qualityElements['chapter reference'] ? 0.15 : 0)
   );
+
+  const bonusScore = (
+    (qualityElements['transparent background'] ? 0.05 : 0) +
+    (qualityElements['text rendering optimized'] ? 0.05 : 0)
+  );
+
+  const totalScore = baseScore + bonusScore;
 
   return {
     elements: qualityElements,
-    score: qualityScore,
+    score: totalScore,
     length: imagePrompt.length,
-    lengthUtilization: (imagePrompt.length / 4000) * 100,
-    targetUtilization: 95, // 🔥 MAKSYMALNY cel wykorzystania
-    meetsMaximumStandard: qualityScore >= 0.95 // 🔥 95% wymagana jakość
+    optimalLength: imagePrompt.length >= (('optimalLength' in config ? (config as any).optimalLength : null) || 200) &&
+                   imagePrompt.length <= config.maxPromptLength,
+    lengthUtilization: (imagePrompt.length / config.maxPromptLength) * 100,
+    meetsStandard: totalScore >= 0.75,
+    provider: config.provider,
+    cost_estimate: config.costEstimate
   };
 };
 
-// INTELIGENTNA OPTYMALIZACJA PROMPTU Z MAKSYMALNĄ KONTROLĄ TRANSPARENTNOŚCI
-const optimizePromptForGPTImage1 = (prompt: string, chapterTitle: string): string => {
-  console.log(`🔍 === MAXIMUM QUALITY TRANSPARENT PROMPT OPTIMIZATION ANALYSIS ===`);
+// 🎯 UNIVERSAL PROMPT OPTIMIZATION
+const optimizePromptForModel = (prompt: string, chapterTitle: string, model: string): string => {
+  console.log(`🔧 === PROMPT OPTIMIZATION FOR ${model.toUpperCase()} ===`);
+
+  const config = MODEL_CONFIGS[model as keyof typeof MODEL_CONFIGS];
+  console.log(`   - Provider: ${config.provider.toUpperCase()}`);
   console.log(`   - Input length: ${prompt.length} chars`);
-  console.log(`   - GPT-Image-1 limit: 4000 chars`);
+  console.log(`   - Model limit: ${config.maxPromptLength} chars`);
 
-  // Sprawdzenie czy prompt jest już zoptymalizowany przez Claude
-  const claudeOptimized = {
-    ultraSophisticated: prompt.includes("ultra-sophisticated") || prompt.includes("Create a sophisticated"),
-    professionalEbook: prompt.toLowerCase().includes("professional ebook") || prompt.toLowerCase().includes("ebook chapter"),
-    ultraHighDefinition: prompt.toLowerCase().includes("ultra-high-definition") || prompt.toLowerCase().includes("ultra-hd"),
-    photorealistic: prompt.toLowerCase().includes("photorealistic") || prompt.toLowerCase().includes("photorealism"),
-    cinematicQuality: prompt.toLowerCase().includes("cinematic") || prompt.toLowerCase().includes("cinema-quality") || prompt.toLowerCase().includes("cinema-grade"),
-    noTextClause: prompt.toLowerCase().includes("no text") || prompt.toLowerCase().includes("absolutely no text"),
-    squareComposition: prompt.includes("1:1") || prompt.toLowerCase().includes("square"),
-    technicalSpecs: prompt.toLowerCase().includes("technical") && prompt.toLowerCase().includes("specifications"),
-    transparentBackground: prompt.toLowerCase().includes("transparent background") || prompt.toLowerCase().includes("transparent"),
-    seamlessComposition: prompt.toLowerCase().includes("seamless") || prompt.toLowerCase().includes("borderless") || prompt.toLowerCase().includes("edge-free") || prompt.toLowerCase().includes("ultra-seamless"),
-    naturalBlending: prompt.toLowerCase().includes("natural") && (prompt.toLowerCase().includes("blend") || prompt.toLowerCase().includes("fade")),
-    properMargins: prompt.toLowerCase().includes("margin") || prompt.toLowerCase().includes("spacing") || prompt.toLowerCase().includes("clearance") || prompt.toLowerCase().includes("premium-margins"),
-    maximumQuality: prompt.toLowerCase().includes("maximum") || prompt.toLowerCase().includes("premium") || prompt.toLowerCase().includes("museum-grade"),
-    longForm: prompt.length > 2000  // Claude generuje bardzo długie prompty
-  };
+  let finalPrompt = prompt;
 
-  const isClaudeOptimized = Object.values(claudeOptimized).filter(Boolean).length >= 7;
-
-  console.log(`   - Claude MAXIMUM quality optimization markers:`);
-  console.log(`     * Ultra-sophisticated: ${claudeOptimized.ultraSophisticated ? '✅' : '❌'}`);
-  console.log(`     * Professional ebook: ${claudeOptimized.professionalEbook ? '✅' : '❌'}`);
-  console.log(`     * Ultra-High-Definition: ${claudeOptimized.ultraHighDefinition ? '✅' : '❌'}`);
-  console.log(`     * Photorealistic: ${claudeOptimized.photorealistic ? '✅' : '❌'}`);
-  console.log(`     * Cinematic quality: ${claudeOptimized.cinematicQuality ? '✅' : '❌'}`);
-  console.log(`     * No text clause: ${claudeOptimized.noTextClause ? '✅' : '❌'}`);
-  console.log(`     * Square composition: ${claudeOptimized.squareComposition ? '✅' : '❌'}`);
-  console.log(`     * Technical specs: ${claudeOptimized.technicalSpecs ? '✅' : '❌'}`);
-  console.log(`     * Transparent background: ${claudeOptimized.transparentBackground ? '✅' : '❌'}`);
-  console.log(`     * Ultra-seamless composition: ${claudeOptimized.seamlessComposition ? '✅' : '❌'}`);
-  console.log(`     * Natural blending: ${claudeOptimized.naturalBlending ? '✅' : '❌'}`);
-  console.log(`     * Premium margins: ${claudeOptimized.properMargins ? '✅' : '❌'}`);
-  console.log(`     * Maximum quality: ${claudeOptimized.maximumQuality ? '✅' : '❌'}`);
-  console.log(`     * Long form: ${claudeOptimized.longForm ? '✅' : '❌'}`);
-  console.log(`   - IS CLAUDE MAXIMUM OPTIMIZED: ${isClaudeOptimized ? '✅ YES' : '❌ NO'}`);
-
-  let finalPrompt: string = prompt;
-
-  if (isClaudeOptimized) {
-    // PROMPT Z CLAUDE - UŻYWAJ Z DODANIEM MAXIMUM TRANSPARENCY JESLI BRAKUJE
-    console.log(`✅ Using Claude maximum optimized prompt with ultra-seamless transparency enhancement`);
-    finalPrompt = prompt;
-
-    // Dodaj maximum transparency clauses jeśli brakuje
-    if (!claudeOptimized.transparentBackground || !claudeOptimized.seamlessComposition || !claudeOptimized.properMargins || !claudeOptimized.maximumQuality) {
-      console.log(`🔧 Adding missing MAXIMUM transparency and quality elements to Claude prompt`);
-      finalPrompt = addMaximumTransparentBackgroundClauses(prompt);
-    }
-  } else {
-    // PROSTY PROMPT - DODAJ MAKSYMALNE ULEPSZENIA Z TRANSPARENTNYM TŁEM
-    console.log(`🔧 SIMPLE PROMPT - Adding GPT-Image-1 MAXIMUM enhancements with ultra-seamless transparent background`);
-    finalPrompt = `Create a professional ultra-high-definition museum-grade ebook chapter illustration with transparent background and ultra-seamless composition: ${prompt}
-
-MAXIMUM QUALITY TECHNICAL SPECIFICATIONS: Perfect square 1:1 composition with transparent background and borderless ultra-seamless design optimized for digital readers, photorealistic rendering with cinema-grade lighting and transparent background integration, rich harmonious color palette with natural edge blending, microscopic detail precision with composition contained within image bounds, absolutely no text or letters whatsoever.
-
-ULTRA-SEAMLESS TRANSPARENCY: Premium-grade transparent background with mathematically precise fade-out edges, surface-adaptive blending for perfect integration with any background texture, professional publishing-grade internal spacing standards, edge-perfection with sub-pixel accuracy calculations.
-
-Perfect maximum quality transparent illustration for "${chapterTitle}" chapter opening with natural fade-out edges and proper internal margins ensuring no elements touch image boundaries.`.trim();
+  if (!finalPrompt.toLowerCase().includes('no text')) {
+    finalPrompt += " Absolutely no text elements.";
+    console.log(`🔧 Added NO TEXT clause`);
   }
 
-  // ZAWSZE DODAJ OMEGA-3 COMPLIANCE NA KOŃCU
-  const promptWithCompliance = finalPrompt + OMEGA3_COMPLIANCE_CLAUSE;
-
-  console.log(`🔒 OMEGA-3 compliance and MAXIMUM transparency clauses added to ALL chapter prompts`);
-  console.log(`   - Original length: ${finalPrompt.length} chars`);
-  console.log(`   - With compliance: ${promptWithCompliance.length} chars`);
-
-  // Sprawdź czy mieści się w limicie
-  if (promptWithCompliance.length <= MODEL_CONFIGS["gpt-image-1"].maxPromptLength) {
-    console.log(`✅ Final MAXIMUM QUALITY transparent prompt with compliance (${promptWithCompliance.length}/4000 chars)`);
-    return promptWithCompliance;
-  } else {
-    // Jeśli za długi, przytnij oryginalny prompt ale zachowaj compliance clause i maximum transparency
-    const availableSpace = MODEL_CONFIGS["gpt-image-1"].maxPromptLength - OMEGA3_COMPLIANCE_CLAUSE.length;
-    const trimmedPrompt = finalPrompt.substring(0, availableSpace - 3) + "...";
-    const result = trimmedPrompt + OMEGA3_COMPLIANCE_CLAUSE;
-
-    console.warn(`⚠️ Prompt too long, trimmed to accommodate compliance and MAXIMUM transparency clauses (${result.length}/4000 chars)`);
-    return result;
+  if (!finalPrompt.toLowerCase().includes(chapterTitle.toLowerCase().substring(0, 15))) {
+    finalPrompt += ` Perfect illustration for "${chapterTitle}".`;
+    console.log(`🔧 Added chapter reference`);
   }
+
+  if (config.provider === 'google' && 'supports_text_rendering' in config && (config as any).supports_text_rendering && !prompt.toLowerCase().includes('clear')) {
+    finalPrompt += " Clear, readable composition.";
+    console.log(`🔧 Added clarity for Google model`);
+  } else if (config.provider === 'openai' && 'supports_transparency' in config && (config as any).supports_transparency && !prompt.toLowerCase().includes('transparent')) {
+    finalPrompt += " Transparent background with clean edges.";
+    console.log(`🔧 Added transparency for OpenAI model`);
+  }
+
+  const maxLength = config.maxPromptLength;
+  if (finalPrompt.length > maxLength) {
+    const availableSpace = maxLength - 50;
+    finalPrompt = prompt.substring(0, availableSpace) + " No text.";
+    console.warn(`⚠️ Prompt trimmed to fit ${model} limit`);
+  }
+
+  console.log(`✅ Optimized for ${config.provider}/${model} (${finalPrompt.length} chars)`);
+  return finalPrompt;
 };
 
-// Retry logic z inteligentnym backoff
+// Retry logic - unchanged
 const executeWithRetry = async <T>(
   operation: () => Promise<T>,
   maxRetries: number = 3,
-  baseDelay: number = 2000  // Zwiększone opóźnienie
+  baseDelay: number = 2000
 ): Promise<T> => {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       return await operation();
     } catch (error: any) {
-      console.log(`❌ MAXIMUM QUALITY Chapter attempt ${attempt}/${maxRetries} failed: ${error.message}`);
-
+      console.log(`❌ Attempt ${attempt}/${maxRetries} failed: ${error.message}`);
       if (attempt === maxRetries) throw error;
-
-      // Inteligentny backoff
-      let delay = baseDelay;
-      if (error?.status === 429) {
-        delay = baseDelay * Math.pow(2, attempt); // Exponential dla rate limiting
-        console.log(`⏳ Chapter rate limited, waiting ${delay}ms...`);
-      } else if (error?.status >= 500) {
-        delay = baseDelay * attempt; // Linear dla server errors
-        console.log(`🔄 Chapter server error, waiting ${delay}ms...`);
-      } else {
-        delay = 1000; // Krótkie dla innych błędów
-      }
-
+      let delay = baseDelay * (error?.status >= 500 ? attempt : 1);
+      if (error?.status === 429) delay = baseDelay * Math.pow(2, attempt);
       await new Promise(resolve => setTimeout(resolve, delay));
     }
   }
-  throw new Error('Maximum quality chapter generation max retries exceeded');
+  throw new Error('Max retries exceeded');
 };
 
-// Sprawdzenie fallback conditions
-const shouldFallbackToDallE3 = (error: any): boolean => {
-  const fallbackConditions = [
-    error?.status === 403,  // Brak dostępu
-    error?.status === 400 && error?.code === 'billing_hard_limit_reached',
-    error?.status === 429 && error?.message?.includes('organization'),
-    error?.message?.toLowerCase().includes('organization'),
-    error?.message?.toLowerCase().includes('gpt-image-1'),
-    error?.message?.toLowerCase().includes('verification'),
-    error?.message?.toLowerCase().includes('access denied')
+// 🔄 ENHANCED FALLBACK CONDITIONS
+const shouldFallback = (error: any, currentModel: string): boolean => {
+  // Nie próbuj fallback jeśli już używamy najtańszego modelu
+  if (currentModel === 'gemini-2.0-flash' || currentModel === 'imagen-3') return false;
+
+  const errorMsg = error?.message?.toLowerCase() || '';
+  const status = error?.status;
+
+  const conditions = [
+    status === 404 && errorMsg.includes('model'),
+    status === 400 && errorMsg.includes('model'),
+    status === 403,
+    status === 401,
+    errorMsg.includes('api key'),
+    errorMsg.includes('organization'),
+    errorMsg.includes('verification'),
+    errorMsg.includes('quota'),
+    errorMsg.includes('billing')
   ];
 
-  return fallbackConditions.some(condition => condition);
+  return conditions.some(Boolean);
 };
 
-// 🔥 MAKSYMALNA OPTYMALIZACJA OBRAZU DLA EBOOKA Z TRANSPARENTNYM TŁEM
+// 🖼️ IMAGE OPTIMIZATION - unchanged
 const optimizeImageForEbook = async (imageBuffer: ArrayBuffer): Promise<Buffer> => {
-  const originalSize = (imageBuffer.byteLength / 1024).toFixed(1);
-
-  const optimized = await sharp(Buffer.from(imageBuffer))
-    .png({
-      quality: 100,       // 🔥 MAKSYMALNA jakość (bylo 98)
-      compressionLevel: 1, // 🔥 MINIMALNA kompresja = maksymalna jakość (bylo 4)
-      effort: 10,         // 🔥 MAKSYMALNY effort optymalizacji (bylo 9)
-      palette: false,     // Full color range dla gradientów przezroczystości
-      adaptiveFiltering: true,  // Better compression z zachowaniem przezroczystości
-      progressive: true  // 🔥 NOWE: Progressive loading dla lepszej jakości
-    })
-    .resize(1536, 1024, {
-      fit: 'cover',
-      position: 'center',
-      withoutEnlargement: false,
-      kernel: sharp.kernel.lanczos3, // ✅ Najlepsza metoda skalowania
-      background: { r: 0, g: 0, b: 0, alpha: 0 }, // 🔥 PRZEZROCZYSTE TŁO przy resize
-      fastShrinkOnLoad: false // 🔥 NOWE: Wyłącz fast shrink dla maksymalnej jakości
-    })
-    .sharpen({
-      sigma: 1.0,    // 🔥 PODWYŻSZ: Mocniejsze wyostrzenie (bylo 0.8)
-      m1: 1.5,       // 🔥 PODWYŻSZ: Wyższa maska wyostrzenia (bylo 1.2)
-      m2: 3.0,       // 🔥 PODWYŻSZ: Wyższa maska cieni (bylo 2.5)
-      x1: 3,         // 🔥 NOWE: Próg wyostrzenia
-      y2: 10         // 🔥 NOWE: Maksymalne wyostrzenie
-    })
-    .toBuffer();
-
-  const optimizedSize = (optimized.length / 1024).toFixed(1);
-  console.log(`🔧 MAXIMUM QUALITY Chapter optimization: ${originalSize}KB → ${optimizedSize}KB (absolute maximum quality with transparency preservation)`);
-
-  return optimized;
+    const originalSize = (imageBuffer.byteLength / 1024).toFixed(1);
+    const optimized = await sharp(Buffer.from(imageBuffer))
+        .png({ quality: 95, compressionLevel: 3, adaptiveFiltering: true })
+        .resize(1536, 1024, { fit: 'inside', withoutEnlargement: true })
+        .sharpen({ sigma: 0.5 })
+        .toBuffer();
+    const optimizedSize = (optimized.length / 1024).toFixed(1);
+    console.log(`🔧 Image optimization: ${originalSize}KB → ${optimizedSize}KB`);
+    return optimized;
 };
 
 export async function POST(
@@ -330,415 +519,160 @@ export async function POST(
   { params }: { params: Promise<{ ebookId: string; chapterId: string }> }
 ) {
   const startTime = Date.now();
-
   try {
-    // Autoryzacja przez session
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Brak autoryzacji' }, { status: 401 });
     }
 
-    debugApiKey();
+    const { ebookId, chapterId } = await params;
+    console.log(`🎨 === MULTI-PROVIDER CHAPTER GENERATION START | Ebook: ${ebookId}, Chapter: ${chapterId} ===`);
 
-    const resolvedParams = await params;
-    const ebookId = resolvedParams.ebookId;
-    const chapterId = resolvedParams.chapterId;
+    const { forceRegenerate = false, size = '1536x1024' } = await request.json();
+    const ebookIdNum = parseInt(ebookId), chapterIdNum = parseInt(chapterId);
 
-    console.log(`🎨 === MAXIMUM QUALITY TRANSPARENT CHAPTER ILLUSTRATION GENERATION START ===`);
-    console.log(`   - Ebook ID: ${ebookId}`);
-    console.log(`   - Chapter ID: ${chapterId}`);
-    console.log(`   - Timestamp: ${new Date().toISOString()}`);
-    console.log(`   - Target: Maximum quality transparent ultra-seamless chapter illustration`);
-    console.log(`   - Quality Level: ABSOLUTE MAXIMUM (museum-grade)`);
+    const modelSelection = await selectOptimalModel(session.user.id);
+    console.log(`🎯 Model Selection: ${modelSelection.provider}/${modelSelection.model} (${modelSelection.reasoning})`);
 
-    // SZCZEGÓŁOWE LOGOWANIE REQUEST BODY
-    const requestBody = await request.json();
-    const { forceRegenerate = false, size = '1536x1024' } = requestBody;
-
-    console.log(`📥 === REQUEST PARAMETERS ===`);
-    console.log(`   - Raw request body:`, JSON.stringify(requestBody, null, 2));
-    console.log(`   - forceRegenerate: ${forceRegenerate} (type: ${typeof forceRegenerate})`);
-    console.log(`   - size: ${size}`);
-    console.log(`📥 === END REQUEST PARAMETERS ===`);
-
-    if (!ebookId || !chapterId) {
-      return NextResponse.json({ error: 'Missing required parameters' }, { status: 400 });
-    }
-
-    const ebookIdNum = parseInt(ebookId);
-    const chapterIdNum = parseInt(chapterId);
-
-    if (isNaN(ebookIdNum) || isNaN(chapterIdNum)) {
-      return NextResponse.json({ error: 'Invalid identifiers' }, { status: 400 });
-    }
-
-    // Fetch ebook and chapter data using Prisma
     const chapter = await prisma.ebook_chapters.findFirst({
-      where: {
-        id: chapterIdNum,
-        ebook_id: ebookIdNum,
-        ebooks: {
-          userId: session.user.id
-        }
-      },
-      include: {
-        ebooks: {
-          select: {
-            id: true,
-            title: true,
-            subtitle: true,
-            userId: true
-          }
-        }
-      }
+      where: { id: chapterIdNum, ebook_id: ebookIdNum, ebooks: { userId: session.user.id } },
+      include: { ebooks: { select: { title: true, subtitle: true } } }
     });
 
-    if (!chapter) {
-      return NextResponse.json({ error: 'Ebook or chapter not found' }, { status: 404 });
-    }
+    if (!chapter) return NextResponse.json({ error: 'Chapter not found' }, { status: 404 });
+    if (!chapter.content?.trim()) return NextResponse.json({ error: 'Chapter has no content' }, { status: 400 });
 
-    const {
-      ebooks: { title: ebookTitle, subtitle: ebookSubtitle },
-      title: chapterTitle,
-      content: chapterContent,
-      image_prompt: existingImagePrompt
-    } = chapter;
-
-    if (!chapterContent || chapterContent.trim() === '') {
-      return NextResponse.json({ error: 'Chapter has no content' }, { status: 400 });
-    }
-
+    const { ebooks: { title: ebookTitle, subtitle: ebookSubtitle }, title: chapterTitle, content: chapterContent, image_prompt: existingImagePrompt } = chapter;
     console.log(`📖 Found: "${ebookTitle}" - "${chapterTitle}"`);
 
     let imagePrompt = existingImagePrompt;
-
-    // ETAP 1: Generate ultra-detailed prompt via Claude with MAXIMUM transparency
-    console.log(`🔄 === MAXIMUM QUALITY TRANSPARENT PROMPT REGENERATION DECISION ===`);
-    console.log(`   - existingImagePrompt exists: ${!!existingImagePrompt}`);
-    console.log(`   - existingImagePrompt length: ${existingImagePrompt?.length || 0}`);
-    console.log(`   - forceRegenerate flag: ${forceRegenerate}`);
-    console.log(`   - Decision condition (!imagePrompt || forceRegenerate): ${!imagePrompt || forceRegenerate}`);
-
     if (!imagePrompt || forceRegenerate) {
-      console.log('🔄 === GENERATING ULTRA-DETAILED MAXIMUM QUALITY TRANSPARENT PROMPT ===');
-      console.log(`   - Reason: ${!imagePrompt ? 'No existing prompt' : 'Force regeneration requested'}`);
-
-      const allChapters = await prisma.ebook_chapters.findMany({
-        where: { ebook_id: ebookIdNum },
-        select: { title: true },
-        orderBy: { position: 'asc' }
-      });
-
-      let promptData;
+      console.log('🔥 === GENERATING OPTIMIZED PROMPT ===');
+      const allChapters = await prisma.ebook_chapters.findMany({ where: { ebook_id: ebookIdNum }, select: { title: true }, orderBy: { position: 'asc' } });
       try {
         const promptResponse = await axios.post(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/anthropic/generate-image-prompt`, {
-          title: ebookTitle,
-          subtitle: ebookSubtitle,
-          chapterTitle: chapterTitle,
-          chapterContent: chapterContent,
-          allChapters: allChapters,
-          targetModel: "gpt-image-1",
-          forceRegenerate: forceRegenerate,
-          enableTransparency: true,
+          title: ebookTitle, subtitle: ebookSubtitle, chapterTitle, chapterContent, allChapters,
+          targetModel: modelSelection.model, forceRegenerate,
+          enableTransparency: MODEL_CONFIGS[modelSelection.model as keyof typeof MODEL_CONFIGS]?.supports_transparency || false,
           maximumQuality: true
-        }, {
-          headers: {
-            'Content-Type': 'application/json',
-            'x-internal-request': 'true'  // ✅ DODANY HEADER WEWNĘTRZNY
-          },
-          timeout: 90000 // 90 sekund timeout
-        });
+        }, { headers: { 'Content-Type': 'application/json', 'x-internal-request': 'true' }, timeout: 90000 });
 
-        promptData = promptResponse.data; // axios automatycznie parsuje JSON
+        imagePrompt = promptResponse.data.imagePrompt;
+        console.log(`✅ New prompt generated (${imagePrompt?.length || 0} chars)`);
+        await prisma.ebook_chapters.update({ where: { id: chapterIdNum }, data: { image_prompt: imagePrompt, updated_at: new Date() } });
       } catch (error: any) {
-        console.error('❌ Claude maximum quality transparent prompt generation failed:', error.response?.data || error.message);
-        return NextResponse.json({
-          error: 'Failed to generate maximum quality transparent image prompt',
-          details: error.response?.data?.error || error.message
-        }, { status: 500 });
+        console.error('❌ Prompt generation failed:', error.message);
+        return NextResponse.json({ error: 'Failed to generate image prompt', details: error.message }, { status: 500 });
       }
-      const newImagePrompt = promptData.imagePrompt;
-
-      console.log(`✅ NEW MAXIMUM QUALITY TRANSPARENT PROMPT GENERATED:`);
-      console.log(`   - New prompt length: ${newImagePrompt?.length || 0} chars`);
-      console.log(`   - Quality: ${(promptData.qualityMetrics?.overallQuality * 100 || 0).toFixed(1)}%`);
-      console.log(`   - Maximum Quality Applied: ${promptData.maximumQualityApplied ? '✅' : '❌'}`);
-      console.log(`   - Transparency Applied: ${promptData.transparencyApplied ? '✅' : '❌'}`);
-      console.log(`   - Utilization: ${promptData.utilization || 'N/A'}`);
-      console.log(`   - Preview: ${newImagePrompt?.substring(0, 100)}...`);
-
-      // WYMUSZ ZAWSZE NOWY PROMPT PRZY forceRegenerate
-      if (forceRegenerate) {
-        console.log(`🔄 FORCE REGENERATE: Using completely new maximum quality transparent prompt`);
-        imagePrompt = newImagePrompt;
-      } else {
-        imagePrompt = newImagePrompt;
-      }
-
-      // Save prompt to database with enhanced logging
-      console.log(`💾 === SAVING MAXIMUM QUALITY TRANSPARENT PROMPT TO DATABASE ===`);
-      console.log(`   - Chapter ID: ${chapterIdNum}`);
-      console.log(`   - Ebook ID: ${ebookIdNum}`);
-      console.log(`   - Prompt length to save: ${imagePrompt?.length || 0}`);
-
-      const updatedChapter = await prisma.ebook_chapters.update({
-        where: { id: chapterIdNum },
-        data: {
-          image_prompt: imagePrompt,
-          updated_at: new Date()
-        },
-        select: {
-          id: true,
-          title: true,
-          image_prompt: true
-        }
-      });
-
-      if (updatedChapter) {
-        console.log(`✅ Maximum quality transparent prompt saved successfully to database`);
-        console.log(`   - Updated chapter ID: ${updatedChapter.id}`);
-        console.log(`   - Saved prompt length: ${updatedChapter.image_prompt?.length || 0}`);
-        console.log(`   - Preview of saved prompt: ${updatedChapter.image_prompt?.substring(0, 100)}...`);
-      } else {
-        console.error(`❌ Failed to save maximum quality transparent prompt - no rows affected`);
-        throw new Error('Failed to update maximum quality transparent prompt in database');
-      }
-
-    } else {
-      console.log(`📝 Using existing prompt (${imagePrompt.length} chars) - will be enhanced with MAXIMUM quality transparency`);
-      console.log(`   - Existing prompt preview: ${imagePrompt.substring(0, 100)}...`);
     }
-
-    console.log(`🔄 === END MAXIMUM QUALITY TRANSPARENT PROMPT DECISION ===`);
-
-    // 🚨 DODATKOWA WARSTWA ZABEZPIECZEŃ - FINALNA WERYFIKACJA OMEGA-3 + MAKSYMALNA TRANSPARENTNOŚĆ 🚨
-    console.log(`🚨 === FINAL OMEGA-3 & MAXIMUM TRANSPARENCY COMPLIANCE VERIFICATION ===`);
-
-    const forbiddenTerms = [
-      'capsules', 'capsule', 'kapsułk', 'kapsułek',
-      'tablets', 'tablet', 'tabletk', 'tabletek',
-      'pills', 'pill', 'pilulk',
-      'softgels', 'softgel', 'żelk',
-      'supplement capsules', 'omega-3 capsules',
-      'supplement tablets', 'omega-3 tablets',
-      'supplement pills', 'omega-3 pills'
-    ];
-
-    let finalViolations: string[] = [];
-    forbiddenTerms.forEach(term => {
-      if (imagePrompt && imagePrompt.toLowerCase().includes(term.toLowerCase())) {
-        finalViolations.push(term);
-      }
-    });
-
-    if (finalViolations.length > 0) {
-      console.error(`🚨 CRITICAL: Final compliance check FAILED!`);
-      console.error(`   - Found forbidden terms: ${finalViolations.join(', ')}`);
-      console.error(`   - Prompt contains regulatory violations that must be removed`);
-
-      // Automatycznie czyść prompt z zabronionych terminów
-      let cleanedImagePrompt = imagePrompt || '';
-      forbiddenTerms.forEach(term => {
-        const regex = new RegExp(`\\b${term}[s]?\\b`, 'gi');
-        cleanedImagePrompt = cleanedImagePrompt.replace(regex, 'glass bottles with liquid supplements and measuring cups');
-      });
-
-      imagePrompt = cleanedImagePrompt;
-      console.log(`✅ CLEANED: Forbidden terms replaced with compliant alternatives`);
-    } else {
-      console.log(`✅ PASSED: Final compliance verification successful - no violations found`);
-    }
-
-    // 🔥 SPRAWDZENIE MAKSYMALNEJ COMPLIANCE TRANSPARENTNOŚCI
-    const maxQualityMetrics = imagePrompt ? calculateMaximumQualityMetrics(imagePrompt, chapterTitle, true) : {
-      score: 0,
-      meetsMaximumStandard: false,
-      lengthUtilization: 0,
-      elements: {}
-    };
-    const maximumQualityAchieved = maxQualityMetrics.meetsMaximumStandard;
-
-    console.log(`🏆 === MAXIMUM QUALITY COMPLIANCE CHECK ===`);
-    console.log(`   - Quality Score: ${(maxQualityMetrics.score * 100).toFixed(1)}% (Target: 95%+)`);
-    console.log(`   - Length Utilization: ${maxQualityMetrics.lengthUtilization.toFixed(1)}% (Target: 95%+)`);
-    console.log(`   - Maximum Standard: ${maximumQualityAchieved ? '✅ ACHIEVED' : '❌ INSUFFICIENT'}`);
-
-    if (!maximumQualityAchieved) {
-      console.warn(`⚠️ QUALITY WARNING: Prompt doesn't meet maximum standards - will be auto-enhanced`);
-    } else {
-      console.log(`✅ MAXIMUM QUALITY COMPLIANT: Prompt meets all maximum quality requirements`);
-    }
-
-    console.log(`🚨 === END FINAL MAXIMUM VERIFICATION ===`);
-
-    // ETAP 2: GPT-Image-1 Generation with MAXIMUM transparency optimization + Omega-3 compliance
-    console.log(`🚀 === GPT-IMAGE-1 MAXIMUM QUALITY TRANSPARENT GENERATION ===`);
 
     if (!imagePrompt) {
-      return NextResponse.json({ error: 'No image prompt available for generation' }, { status: 400 });
+      console.error('❌ Image prompt is null or empty');
+      return NextResponse.json({
+        error: 'No image prompt available',
+        details: 'Image prompt generation failed or returned null'
+      }, { status: 500 });
     }
 
-    let modelToUse = "gpt-image-1";
-    let actualModelUsed = modelToUse;
+    const qualityMetrics = calculateQualityMetrics(imagePrompt, chapterTitle, modelSelection.model);
+    console.log(`📊 Prompt quality: ${(qualityMetrics.score * 100).toFixed(1)}% (${qualityMetrics.provider})`);
+
+    console.log(`🚀 === IMAGE GENERATION WITH ${modelSelection.provider.toUpperCase()}/${modelSelection.model.toUpperCase()} ===`);
+    const config = MODEL_CONFIGS[modelSelection.model as keyof typeof MODEL_CONFIGS];
+    const validSize = config.sizes.includes(size as any) ? size : config.sizes[0];
+    let actualModelUsed = modelSelection.model;
     let imageResponse;
-    let finalPrompt: string = imagePrompt;
+    let finalPrompt = optimizePromptForModel(imagePrompt, chapterTitle, modelSelection.model);
 
-    // GPT-Image-1 configuration for MAXIMUM quality transparent backgrounds
-    const gptImage1Config = MODEL_CONFIGS["gpt-image-1"];
-    const validSize = gptImage1Config.sizes.includes(size as any) ? size : '1536x1024';
-
-    console.log(`   - Target model: ${modelToUse}`);
-    console.log(`   - Size: ${validSize}`);
-    console.log(`   - Quality: ${gptImage1Config.quality} (MAXIMUM AVAILABLE)`);
-    console.log(`   - Format: ${gptImage1Config.output_format}`);
-    console.log(`   - Background: ${gptImage1Config.background} (TRANSPARENT PRIORITY)`);
-    console.log(`   - Enhancement Level: ${gptImage1Config.enhancement_level}`);
-    console.log(`   - Detail Focus: ${gptImage1Config.detail_focus}`);
-    console.log(`   - Render Quality: ${gptImage1Config.render_quality}`);
+    console.log(`   - Model: ${modelSelection.model}, Key Source: ${modelSelection.keySource}, Size: ${validSize}, Cost: $${config.costEstimate}`);
 
     try {
-      // Prompt optimization with mandatory Omega-3 compliance + MAXIMUM transparency
-      finalPrompt = optimizePromptForGPTImage1(imagePrompt, chapterTitle);
-
-      console.log(`📝 === FINAL MAXIMUM QUALITY TRANSPARENT PROMPT ANALYSIS ===`);
-      console.log(`   - Original (Claude): ${imagePrompt.length} chars`);
-      console.log(`   - Final (for GPT-Image-1): ${finalPrompt.length} chars`);
-      console.log(`   - Change: ${finalPrompt.length - imagePrompt.length} chars`);
-      console.log(`   - Utilization: ${((finalPrompt.length/4000)*100).toFixed(1)}% of GPT-Image-1 capacity`);
-      console.log(`   - Omega-3 Compliance: ✅ ALWAYS APPLIED`);
-      console.log(`   - Maximum Quality Compliance: ${maximumQualityAchieved ? '✅ FULLY COMPLIANT' : '🔧 ENHANCED'}`);
-
-      // Generate with GPT-Image-1
-      const generationStartTime = Date.now();
-
       imageResponse = await executeWithRetry(async () => {
-        // OpenAI API call
-        const openaiResponse = await fetch('https://api.openai.com/v1/images/generations', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            model: "dall-e-3", // Use dall-e-3 as gpt-image-1 might not be available
-            prompt: finalPrompt,
-            n: 1,
-            size: validSize as "1024x1024" | "1024x1792" | "1792x1024",
-            quality: "hd", // Maximum quality for dall-e-3
-            response_format: 'url'
-          })
-        });
-
-        if (!openaiResponse.ok) {
-          const errorData = await openaiResponse.json();
-          throw new Error(`OpenAI API error: ${errorData.error?.message || 'Unknown error'}`);
+        console.log(`🎨 Generating with ${modelSelection.provider}/${modelSelection.model}...`);
+        if (config.provider === 'google') {
+          return await callGoogleImageGeneration(modelSelection.model, finalPrompt, validSize, modelSelection.apiKey);
+        } else {
+          const requestBody = prepareRequestBody(modelSelection.model, finalPrompt, validSize);
+          const openaiResponse = await fetch('https://api.openai.com/v1/images/generations', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${modelSelection.apiKey}`, 'Content-Type': 'application/json' },
+            body: requestBody
+          });
+          if (!openaiResponse.ok) {
+            const errorText = await openaiResponse.text();
+            const error = new Error(`${modelSelection.model} API error: ${JSON.parse(errorText).error?.message || 'Unknown'}`);
+            (error as any).status = openaiResponse.status;
+            throw error;
+          }
+          return await openaiResponse.json();
         }
-
-        return await openaiResponse.json();
       });
-
-      const generationEndTime = Date.now();
-      console.log(`✅ GPT-Image-1 MAXIMUM QUALITY TRANSPARENT CHAPTER SUCCESS!`);
-      console.log(`   - Generation time: ${generationEndTime - generationStartTime}ms`);
-      console.log(`   - Cost estimate: ${gptImage1Config.costEstimate} (MAXIMUM quality)`);
-      console.log(`   - Model used: ${actualModelUsed} (primary)`);
-      console.log(`   - Background: TRANSPARENT with ultra-seamless edges`);
-      console.log(`   - Quality Level: ABSOLUTE MAXIMUM (museum-grade)`);
-
+      console.log(`✅ ${modelSelection.provider.toUpperCase()}/${modelSelection.model.toUpperCase()} SUCCESS!`);
     } catch (error: any) {
-      console.error(`❌ GPT-Image-1 maximum quality transparent chapter failed:`, error.message);
-      throw error; // Re-throw for now
+      console.error(`❌ ${modelSelection.provider}/${modelSelection.model} failed:`, error.message);
+
+      // Próba fallback do tańszego modelu Google
+      if (shouldFallback(error, modelSelection.model)) {
+        console.log(`🔄 === FALLBACK TO CHEAPER GOOGLE MODEL ===`);
+
+        // Wybierz fallback model
+        const fallbackModel = modelSelection.model.includes('imagen') ? 'imagen-3' : 'gemini-2.0-flash';
+        actualModelUsed = fallbackModel;
+        finalPrompt = optimizePromptForModel(imagePrompt, chapterTitle, fallbackModel);
+
+        try {
+          // Użyj tego samego klucza API jeśli jest dostępny
+          imageResponse = await executeWithRetry(() =>
+            callGoogleImageGeneration(fallbackModel, finalPrompt, '1024x1024', modelSelection.apiKey)
+          );
+          console.log(`✅ FALLBACK TO ${fallbackModel.toUpperCase()} SUCCESS!`);
+        } catch (fallbackError: any) {
+          console.error(`❌ Fallback to ${fallbackModel} failed:`, fallbackError.message);
+          throw fallbackError;
+        }
+      } else {
+        throw error;
+      }
     }
 
-    const endTime = Date.now();
-    const totalGenerationTime = endTime - startTime;
+    if (!imageResponse?.data?.[0]) throw new Error('No image data in response');
 
-    console.log(`⏱️ Total maximum quality transparent chapter process time: ${totalGenerationTime}ms`);
-
-    if (!imageResponse.data || imageResponse.data.length === 0) {
-      throw new Error('No maximum quality transparent image data in OpenAI response');
-    }
-
-    // Handle response format (base64 vs URL)
-    const imageData = imageResponse.data[0];
     let imageBuffer: ArrayBuffer;
-
+    const imageData = imageResponse.data[0];
     if (imageData.b64_json) {
-      console.log('📥 Decoding maximum quality transparent chapter from base64 (GPT-Image-1)');
+      console.log('🔥 Decoding from base64');
       imageBuffer = Buffer.from(imageData.b64_json, 'base64').buffer;
     } else if (imageData.url) {
-      console.log(`📥 Fetching maximum quality transparent chapter from URL (DALL-E 3): ${imageData.url}`);
-      const imageResponseData = await fetch(imageData.url);
-      if (!imageResponseData.ok) {
-        throw new Error(`Failed to fetch maximum quality transparent chapter image: ${imageResponseData.status}`);
-      }
-      imageBuffer = await imageResponseData.arrayBuffer();
+      console.log(`🔥 Fetching from URL...`);
+      const imageFetch = await fetch(imageData.url);
+      if (!imageFetch.ok) throw new Error(`Failed to fetch image: ${imageFetch.status}`);
+      imageBuffer = await imageFetch.arrayBuffer();
     } else {
-      throw new Error('Invalid OpenAI maximum quality transparent chapter response format');
+      throw new Error('Invalid response format');
     }
 
-    // MAXIMUM QUALITY image optimization for ebook with transparency preservation
     const processedImageBuffer = await optimizeImageForEbook(imageBuffer);
-
-    // Railway storage upload
     const storageBasePath = process.env.FILE_STORAGE_PATH || '/data';
     const uploadsDir = path.join(storageBasePath, 'uploads');
-
-    // Upewnij się, że folder istnieje
     await fs.mkdir(uploadsDir, { recursive: true });
-
-    const fileName = `EB${ebookIdNum}_CH${chapterIdNum}.png`;
+    const fileName = `EB${ebookIdNum}_CH${chapterIdNum}_${Date.now()}.png`;
     const filePath = path.join(uploadsDir, fileName);
-
-    console.log(`💾 Zapisywanie obrazu jako ${fileName} w Railway storage`);
-
-    // Zapisanie pliku w Railway storage
     await fs.writeFile(filePath, processedImageBuffer);
 
-    // Generowanie publicznego URL dla obrazu
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
     const finalImageUrl = `${baseUrl}/api/assets/uploads/${fileName}`;
+    console.log(`☁️ Image uploaded: ${fileName}`);
 
-    console.log(`☁️ Maximum quality transparent chapter uploaded to Railway: ${fileName}`);
-
-    // Database updates
     const updatedChapter = await prisma.ebook_chapters.update({
       where: { id: chapterIdNum },
-      data: {
-        image_url: finalImageUrl,
-        updated_at: new Date()
-      },
-      select: {
-        id: true,
-        title: true,
-        image_url: true,
-        image_prompt: true
-      }
+      data: { image_url: finalImageUrl, updated_at: new Date() },
+      select: { id: true, title: true, image_url: true, image_prompt: true }
     });
+    await prisma.ebooks.update({ where: { id: ebookIdNum }, data: { updated_at: new Date() } });
 
-    await prisma.ebooks.update({
-      where: { id: ebookIdNum },
-      data: { updated_at: new Date() }
-    });
-
-    // Comprehensive success metrics with MAXIMUM transparency info
-    const costEstimate = MODEL_CONFIGS[actualModelUsed as keyof typeof MODEL_CONFIGS]?.costEstimate || 0;
-
-    console.log(`📊 === MAXIMUM QUALITY TRANSPARENT CHAPTER GENERATION COMPLETE ===`);
-    console.log(`   - Model: ${actualModelUsed} ${actualModelUsed !== "gpt-image-1" ? '(fallback)' : '(primary)'}`);
-    console.log(`   - Total time: ${totalGenerationTime}ms`);
-    console.log(`   - Cost: ${costEstimate}`);
-    console.log(`   - Prompt length: ${finalPrompt?.length || imagePrompt?.length || 0}/${MODEL_CONFIGS["gpt-image-1"].maxPromptLength} chars`);
-    console.log(`   - Image size: ${(processedImageBuffer.length / 1024).toFixed(1)}KB`);
-    console.log(`   - Format: ${validSize} (maximum quality transparent with ultra-seamless edges)`);
-    console.log(`   - Railway URL: ${finalImageUrl}`);
-    console.log(`   - Omega-3 Compliance: ✅ ALWAYS APPLIED`);
-    console.log(`   - Maximum Quality Achieved: ${maximumQualityAchieved ? '✅ FULLY ACHIEVED' : '🔧 ENHANCED'}`);
-    console.log(`   - Transparency Compliance: ${maxQualityMetrics.score >= 0.90 ? '✅ FULLY COMPLIANT' : '🔧 ENHANCED'}`);
-    console.log(`   - Background: TRANSPARENT (MAXIMUM PRIORITY ACHIEVED)`);
-    console.log(`   - Quality Level: ABSOLUTE MAXIMUM (museum-grade)`);
-    console.log(`   - Success: TRUE`);
-    console.log(`📊 === END MAXIMUM QUALITY TRANSPARENT CHAPTER METRICS ===`);
+    const totalTime = Date.now() - startTime;
+    const finalConfig = MODEL_CONFIGS[actualModelUsed as keyof typeof MODEL_CONFIGS];
+    console.log(`📊 === GENERATION COMPLETE | Time: ${totalTime}ms | Cost: $${finalConfig.costEstimate.toFixed(3)} ===`);
 
     return NextResponse.json({
       success: true,
@@ -746,98 +680,31 @@ export async function POST(
       chapter: updatedChapter,
       generation_metrics: {
         model_used: actualModelUsed,
-        model_attempted: "gpt-image-1",
-        generation_time_ms: totalGenerationTime,
-        cost_estimate: costEstimate,
-        prompt_length: finalPrompt?.length || (imagePrompt?.length || 0),
-        prompt_utilization: `${(((finalPrompt?.length || imagePrompt?.length || 0)/4000)*100).toFixed(1)}%`,
-        image_size_kb: Math.round(processedImageBuffer.length / 1024),
-        optimization_level: 'gpt-image-1-maximum-quality-transparent-ultra-seamless',
-        fallback_used: actualModelUsed !== "gpt-image-1",
-        quality_setting: actualModelUsed === "gpt-image-1" ? "maximum" : "hd",
-        prompt_processing: "maximum-enhancement-with-ultra-seamless-transparency",
-        omega3_compliance_applied: true,
-        transparency_compliance_applied: true,
-        maximum_quality_applied: true,
-        background_type: "transparent-maximum",
-        composition_type: "ultra-seamless-edge-free",
-        quality_level: "absolute-maximum-museum-grade",
-        force_regenerate_used: forceRegenerate, // ✅ DODANE dla debugowania
-        prompt_was_regenerated: !existingImagePrompt || forceRegenerate // ✅ DODANE
+        generation_time_ms: totalTime,
+        cost_estimate: finalConfig.costEstimate,
+        fallback_used: actualModelUsed !== modelSelection.model
       },
-      prompt_used: imagePrompt || '',
-      prompt_was_generated: !existingImagePrompt || forceRegenerate,
-      // 🎯 DODAJ TIMESTAMP dla cache busting (jak w okładkach)
-      generation_timestamp: Date.now(),
-      cache_bust_url: finalImageUrl + '?t=' + Date.now(),
-      compliance_info: {
-        omega3_compliance_applied: true,
-        transparency_compliance_applied: true,
-        maximum_quality_applied: true,
-        regulatory_note: "Omega-3 supplements regulatory compliance clause applied to all maximum quality chapter prompts",
-        background_type: "transparent with ultra-seamless integration"
-      },
-      maximum_quality_features: {
-        quality_level: "absolute-maximum-museum-grade",
-        enhancement_level: "maximum",
-        detail_focus: "ultra-high-microscopic-precision",
-        render_quality: "premium-cinema-grade",
-        optimization_target: "absolute_maximum_quality"
-      },
-      transparency_features: {
-        transparent_background: true,
-        ultra_seamless_composition: true,
-        surface_adaptive_blending: true,
-        borderless_design: true,
-        white_background_compatible: true,
-        edge_clearance_maintained: true,
-        premium_margins_enforced: true,
-        mathematical_precision_spacing: true,
-        sub_pixel_accuracy_fade: true,
-        intelligent_texture_responsive: true
-      },
-      quality_metrics: {
-        quality_score: maxQualityMetrics.score,
-        meets_maximum_standard: maximumQualityAchieved,
-        length_utilization: maxQualityMetrics.lengthUtilization,
-        quality_elements_achieved: Object.entries(maxQualityMetrics.elements)
-          .filter(([_, achieved]) => achieved)
-          .map(([element, _]) => element)
+      model_info: {
+        provider: finalConfig.provider,
+        model: actualModelUsed,
+        key_source: modelSelection.keySource
       }
     });
 
   } catch (error) {
     const totalTime = Date.now() - startTime;
-    console.error('❌ === MAXIMUM QUALITY TRANSPARENT CHAPTER GENERATION FAILED ===');
+    console.error(`❌ === GENERATION FAILED | Time: ${totalTime}ms ===`);
     console.error(`   - Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    console.error(`   - Total time: ${totalTime}ms`);
-    console.error(`   - API Key: ${logApiKey(process.env.OPENAI_API_KEY)}`);
-
     return NextResponse.json({
-      error: 'Maximum quality transparent chapter image generation failed',
-      details: error instanceof Error ? error.message : 'Unknown error',
-      model_attempted: "gpt-image-1",
-      generation_time_ms: totalTime,
-      omega3_compliance_applied: true,
-      transparency_attempted: true,
-      maximum_quality_attempted: true
+      error: 'Image generation failed',
+      details: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 });
   }
 }
 
 export async function GET() {
   return NextResponse.json({
-    message: 'GPT-Image-1 Maximum Quality Ultra-Seamless Transparent Chapter Illustrations Generator with Full Supplement Restrictions',
-    supportedModels: ['gpt-image-1', 'dall-e-3'],
-    maxPromptLength: 4000,
-    recommendedFormat: 'square-1024x1024-transparent-ultra-seamless',
-    backgroundType: 'transparent-maximum',
-    compositionType: 'ultra-seamless-edge-free-with-premium-margins',
-    qualityLevel: 'absolute-maximum-museum-grade',
-    enhancementLevel: 'maximum',
-    detailFocus: 'ultra-high-microscopic-precision',
-    renderQuality: 'premium-cinema-grade',
-    optimizedFor: 'maximum-quality-transparent-chapter-illustrations-supplement-safe',
-    version: "3.0-maximum-quality-transparent-ultra-seamless-chapter-illustrations"
+    message: 'Multi-Provider Chapter Image Generator',
+    version: "9.0-google-api-complete-fix"
   }, { status: 405 });
 }

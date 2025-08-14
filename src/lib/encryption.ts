@@ -137,8 +137,8 @@ export function verifyKeyIntegrity(encryptedData: string, expectedHash: string):
 }
 
 /**
- * Waliduje format klucza API dla danego providera
- * @param provider - Provider API (anthropic, openai, gemini)
+ * 🆕 ZAKTUALIZOWANA Waliduje format klucza API dla danego providera
+ * @param provider - Provider API (anthropic, openai, google)
  * @param apiKey - Klucz API do walidacji
  * @returns true jeśli format jest prawidłowy
  */
@@ -152,6 +152,9 @@ export function validateApiKeyFormat(provider: string, apiKey: string): boolean 
       return apiKey.startsWith('sk-ant-');
     case 'openai':
       return apiKey.startsWith('sk-');
+    case 'google': // 🆕 ZMIANA: 'google' zamiast 'gemini'
+      return apiKey.startsWith('AIza');
+    // 🆕 DODANE: Backward compatibility dla starych zapisów
     case 'gemini':
       return apiKey.startsWith('AIza');
     default:
@@ -182,7 +185,7 @@ export function generateMasterKey(): string {
 }
 
 /**
- * Dostępne providery AI i ich walidatory
+ * 🆕 ZAKTUALIZOWANE Dostępne providery AI i ich walidatory
  */
 export const SUPPORTED_PROVIDERS = {
   anthropic: {
@@ -195,8 +198,8 @@ export const SUPPORTED_PROVIDERS = {
     validator: (key: string) => key.startsWith('sk-'),
     example: 'sk-...'
   },
-  gemini: {
-    name: 'Google Gemini',
+  google: { // 🆕 ZMIANA: 'google' zamiast 'gemini'
+    name: 'Google AI',
     validator: (key: string) => key.startsWith('AIza'),
     example: 'AIza...'
   }
