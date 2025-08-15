@@ -989,7 +989,7 @@ export default function UstawieniaContent() {
                   <ChevronDown className={`h-5 w-5 text-gray-400 transition-transform ${dropdowns.textProvider ? 'rotate-180' : ''}`} />
                 </button>
                 {dropdowns.textProvider && (
-                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg">
+                  <div className="absolute z-10 w-full bottom-full mb-1 bg-white border border-gray-200 rounded-lg shadow-lg">
                     {TEXT_PROVIDERS.map((provider) => (
                       <button key={provider.id} onClick={() => {
                         if (provider.available) {
@@ -1023,7 +1023,7 @@ export default function UstawieniaContent() {
                   <ChevronDown className={`h-5 w-5 text-gray-400 transition-transform ${dropdowns.textModel ? 'rotate-180' : ''}`} />
                 </button>
                 {dropdowns.textModel && textProvider && (
-                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg">
+                  <div className="absolute z-10 w-full bottom-full mb-1 bg-white border border-gray-200 rounded-lg shadow-lg">
                     {textProvider.models.map((model) => (
                       <button key={model.id} onClick={() => {
                         const newSettings = { textModel: model.id };
@@ -1097,7 +1097,7 @@ export default function UstawieniaContent() {
                   <ChevronDown className={`h-5 w-5 text-gray-400 transition-transform ${dropdowns.imageProvider ? 'rotate-180' : ''}`} />
                 </button>
                 {dropdowns.imageProvider && (
-                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg">
+                  <div className="absolute z-10 w-full bottom-full mb-1 bg-white border border-gray-200 rounded-lg shadow-lg">
                     {IMAGE_PROVIDERS.map((provider) => (
                       <button key={provider.id} onClick={() => {
                         if (provider.available) {
