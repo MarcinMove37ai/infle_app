@@ -118,7 +118,7 @@ export async function POST(request: Request) {
         if (source.source) {
           context += `• Pochodzenie: ${source.source}\n`;
         }
-        context += `• Tresc/Abstract: ${source.content.substring(0, 1200)}${source.content.length > 1200 ? '...' : ''}\n\n`;
+        context += `• Tresc/Abstract: ${source.content}\n\n`;
       });
 
       context += '=== INSTRUKCJE DLA ZRODEL ===\n';

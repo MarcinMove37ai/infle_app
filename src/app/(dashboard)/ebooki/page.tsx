@@ -1,4 +1,4 @@
-// src/components/views/EbookGenerator.tsx
+// src/app/(dashboard)/ebooki/page.tsx
 
 "use client"
 import React, { useState, useRef, useEffect } from 'react';
@@ -48,6 +48,13 @@ interface EbookCoverData {
 
 // Główny komponent generatora ebooków
 const EbookGenerator = () => {
+
+  // NOWE STANY dla PDF upload
+    const [isUploadingPdf, setIsUploadingPdf] = useState(false);
+    const [pdfUploadResult, setPdfUploadResult] = useState<'success' | 'error' | null>(null);
+    const [pdfUploadError, setPdfUploadError] = useState<string>('');
+    const [showPdfUploadPreview, setShowPdfUploadPreview] = useState(false);
+    const [previewPdfContent, setPreviewPdfContent] = useState<ScrapedContent | null>(null);
     // NOWE STANY dla single URL scraping
   const [scrapingResult, setScrapingResult] = useState<'success' | 'empty' | 'error' | null>(null);
   const [scrapingErrorDetails, setScrapingErrorDetails] = useState<string>('');
@@ -119,6 +126,7 @@ const EbookGenerator = () => {
   const [imageRefreshTimestamp, setImageRefreshTimestamp] = useState(0);
 
   // Referencje do elementów
+  const pdfInputRef = useRef<HTMLInputElement>(null);
   const newItemInputRef = useRef<HTMLInputElement>(null);
   const editItemInputRef = useRef<HTMLInputElement>(null);
   const contentEditRef = useRef<HTMLTextAreaElement>(null);
@@ -486,6 +494,93 @@ const EbookGenerator = () => {
       setPreviewScrapedContent(null);
     };
 
+  // NOWE FUNKCJE dla PDF upload
+    const handlePdfUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      if (!file) return;
+
+      // Walidacja pliku
+      if (!file.type.includes('pdf') && !file.name.toLowerCase().endsWith('.pdf')) {
+        setError('Wybrany plik nie jest plikiem PDF');
+        return;
+      }
+
+      // Sprawdź rozmiar (max 10MB)
+      const maxSize = 10 * 1024 * 1024;
+      if (file.size > maxSize) {
+        setError('Plik PDF jest za duży. Maksymalny rozmiar to 10MB');
+        return;
+      }
+
+      setIsUploadingPdf(true);
+      setError(null);
+      setPdfUploadResult(null);
+      setPdfUploadError('');
+
+      try {
+        const formData = new FormData();
+        formData.append('pdf', file);
+
+        const response = await fetch('/api/extract-pdf-text', {
+          method: 'POST',
+          body: formData,
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.success) {
+          // Sukces - pokaż preview
+          if (data.scrapedContent && data.scrapedContent.length > 0) {
+            setPreviewPdfContent(data.scrapedContent[0]);
+            setPdfUploadResult('success');
+            setShowPdfUploadPreview(true);
+          } else {
+            setPdfUploadResult('error');
+            setPdfUploadError('Nie udało się wyodrębnić tekstu z PDF');
+            setShowPdfUploadPreview(true);
+          }
+        } else {
+          // Błąd
+          setPdfUploadResult('error');
+          setPdfUploadError(data.error || 'Nieznany błąd podczas przetwarzania PDF');
+          setShowPdfUploadPreview(true);
+        }
+
+      } catch (err) {
+        console.error('Błąd upload PDF:', err);
+        setPdfUploadResult('error');
+        setPdfUploadError('Błąd połączenia z serwerem');
+        setShowPdfUploadPreview(true);
+      } finally {
+        setIsUploadingPdf(false);
+        // Wyczyść input
+        if (event.target) {
+          event.target.value = '';
+        }
+      }
+    };
+
+    // FUNKCJE do obsługi PDF preview modal
+    const handleAcceptPdfContent = () => {
+      if (previewPdfContent) {
+        setScrapedContent(prev => [...prev, previewPdfContent]);
+        console.log('📄 Dodano treść z PDF:', previewPdfContent.title);
+      }
+      setShowPdfUploadPreview(false);
+      setPreviewPdfContent(null);
+    };
+
+    const handleRejectPdfContent = () => {
+      setShowPdfUploadPreview(false);
+      setPreviewPdfContent(null);
+    };
+
+    const handleOpenPdfDialog = () => {
+      if (pdfInputRef.current) {
+        pdfInputRef.current.click();
+      }
+    };
+
   // NOWE FUNKCJE obsługi URL-ów
   const handleUrlChange = (index: number, value: string) => {
     const newUrls = [...urlInputs];
@@ -542,7 +637,7 @@ const EbookGenerator = () => {
       }
 
       const data = await response.json();
-      setScrapedContent(data.scrapedContent || []);
+      setScrapedContent(prev => [...prev, ...(data.scrapedContent || [])]);
       return data.scrapedContent || [];
     } catch (err) {
       console.error('Błąd scraping URLs:', err);
@@ -753,20 +848,6 @@ const EbookGenerator = () => {
     setIsGeneratingToc(true);
 
     try {
-      // 1. Pobierz treści z URL-ów
-      let scrapedData: ScrapedContent[] = [];
-      const validUrls = urlInputs.filter(url => {
-        try {
-          new URL(url);
-          return true;
-        } catch {
-          return false;
-        }
-      });
-
-      if (validUrls.length > 0) {
-        scrapedData = await scrapeUrls();
-      }
 
       let currentEbookId = ebookId;
 
@@ -869,7 +950,7 @@ const EbookGenerator = () => {
           title,
           subtitle: subtitle.trim() || undefined,
           description: description.trim() || undefined,
-          scrapedContent: scrapedData
+          scrapedContent: scrapedContent
         }),
       });
 
@@ -2183,13 +2264,52 @@ const EbookGenerator = () => {
                   )}
                 </div>
               ))}
-          </div>
+              <label className="block text-sm font-medium text-gray-700 mb-3">
+                Źródła PDF:
+                <span className="text-gray-400 font-normal ml-1">(opcjonalnie, max 10MB)</span>
+              </label>
 
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={handleOpenPdfDialog}
+                  disabled={isGeneratingToc || isSaving || isScrapingUrls || isScrapingSingleUrl || isUploadingPdf}
+                  className={`flex items-center px-4 py-2 border border-dashed border-gray-300 rounded-lg transition-colors ${
+                    isGeneratingToc || isSaving || isScrapingUrls || isScrapingSingleUrl || isUploadingPdf
+                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                      : 'bg-white text-gray-700 hover:bg-gray-50 cursor-pointer hover:border-blue-300'
+                  }`}
+                >
+                  {isUploadingPdf ? (
+                    <>
+                      <Loader size={16} className="animate-spin mr-2" />
+                      Przetwarzanie...
+                    </>
+                  ) : (
+                    <>
+                      <Upload size={16} className="mr-2" />
+                      Wybierz plik PDF
+                    </>
+                  )}
+                </button>
+
+                <span className="text-xs text-gray-500">
+                  Obsługujemy pliki PDF z tekstem (nie skany)
+                </span>
+              </div>
+
+              <input
+                type="file"
+                ref={pdfInputRef}
+                className="hidden"
+                accept=".pdf,application/pdf"
+                onChange={handlePdfUpload}
+              />
+          </div>
           {/* Podgląd pobranych treści */}
             {scrapedContent.length > 0 && (
               <div className="mt-4 border-t border-gray-200 pt-6">
                 <h4 className="text-sm font-medium text-gray-700 mb-2">Pobrane źródła:</h4>
-                <div className="space-y-2 max-h-32 overflow-y-auto">
+                <div className="space-y-2 max-h-128 overflow-y-auto">
                   {scrapedContent.map((item, index) => (
                     <div key={index} className="text-xs bg-gray-50 p-2 rounded border relative">
                       <button
@@ -3758,6 +3878,93 @@ const EbookGenerator = () => {
             </div>
           </div>
       )}
+      {/* PDF Upload Preview Modal */}
+        {showPdfUploadPreview && previewPdfContent && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+            <div className="bg-white rounded-xl shadow-2xl p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto animate-fadeIn">
+              <div className="flex justify-between items-start mb-4">
+                <h3 className="text-xl font-bold text-gray-800">Podgląd tekstu z PDF</h3>
+                <button
+                  onClick={handleRejectPdfContent}
+                  className="text-gray-500 hover:text-gray-700 cursor-pointer"
+                >
+                  <X size={24} />
+                </button>
+              </div>
+
+              <div className="mb-6">
+                {/* Status upload */}
+                {pdfUploadResult === 'success' && (
+                  <div className="bg-green-50 p-3 rounded-lg border border-green-200 mb-4">
+                    <div className="flex items-center text-green-700">
+                      <Check size={16} className="mr-2" />
+                      <span className="font-medium">Tekst wyodrębniony pomyślnie</span>
+                    </div>
+                  </div>
+                )}
+
+                {pdfUploadResult === 'error' && (
+                  <div className="bg-red-50 p-3 rounded-lg border border-red-200 mb-4">
+                    <div className="flex items-start text-red-700">
+                      <AlertCircle size={16} className="mr-2 mt-0.5 flex-shrink-0" />
+                      <div>
+                        <span className="font-medium block">Błąd podczas przetwarzania PDF</span>
+                        <span className="text-sm">{pdfUploadError}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div className="bg-blue-50 p-4 rounded-lg border border-blue-200 mb-4">
+                  <h4 className="font-medium text-blue-800 mb-2">Tytuł dokumentu:</h4>
+                  <p className="text-blue-700">{previewPdfContent.title}</p>
+                </div>
+
+                <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 mb-4">
+                  <h4 className="font-medium text-gray-700 mb-2">Źródło:</h4>
+                  <p className="text-gray-600 text-sm">{previewPdfContent.url}</p>
+                </div>
+
+                <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                  <h4 className="font-medium text-gray-700 mb-2">
+                    Wyodrębniony tekst ({previewPdfContent.content.length} znaków):
+                  </h4>
+                  {previewPdfContent.content.length > 0 ? (
+                    <div className="text-gray-600 text-sm max-h-48 overflow-y-auto whitespace-pre-wrap">
+                      {previewPdfContent.content}
+                    </div>
+                  ) : (
+                    <div className="text-gray-400 text-sm italic">
+                      Nie udało się wyodrębnić tekstu z tego PDF
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={handleRejectPdfContent}
+                  className="px-6 py-2.5 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50 transition-all duration-200 cursor-pointer"
+                >
+                  {pdfUploadResult === 'success' ? 'Odrzuć' : 'Zamknij'}
+                </button>
+
+                <button
+                  onClick={handleAcceptPdfContent}
+                  disabled={pdfUploadResult !== 'success'}
+                  className={`px-6 py-2.5 rounded-lg font-medium transition-all duration-200 ${
+                    pdfUploadResult === 'success'
+                      ? 'bg-blue-600 text-white hover:bg-blue-700 cursor-pointer'
+                      : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                  }`}
+                  title={pdfUploadResult !== 'success' ? 'Można dodać tylko PDF z poprawnie wyodrębnionym tekstem' : ''}
+                >
+                  {pdfUploadResult === 'success' ? 'Dodaj do źródeł' : 'Nie można dodać'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       <style jsx global>{`
         button:not(:disabled),
         .cursor-pointer,

@@ -91,7 +91,7 @@ export async function POST(request: Request) {
         if (source.source) {
           context += `• Źródło: ${source.source}\n`;
         }
-        context += `• Treść/Abstract: ${source.content.substring(0, 1500)}${source.content.length > 1500 ? '...' : ''}\n\n`;
+        context += `• Treść/Abstract: ${source.content}\n\n`;
       });
 
       context += '=== INSTRUKCJE DLA ŹRÓDEŁ ===\n';
