@@ -40,7 +40,7 @@ function logExtractedContent(url: string, data: { title: string; content: string
     console.log('🔧 Rozwiązanie: Zostanie użyta metoda Puppeteer jako fallback');
   } else if (data.content.length > 0 && data.content.length < 50) {
     console.log('⚠️ UWAGA: BARDZO KRÓTKA TREŚĆ!');
-    console.log(`📝 Treść: "${data.content}"`);
+    console.log(`🔍 Treść: "${data.content}"`);
     console.log('🔧 Rozwiązanie: Zostanie użyta metoda Puppeteer jako fallback');
   } else if (data.content.length > 0) {
     console.log('\n📄 PIERWSZYCH 200 ZNAKÓW:');
@@ -123,7 +123,7 @@ function extractStructuredData(document: Document): { title?: string; content?: 
 }
 
 // Funkcja do czyszczenia i skracania tekstu
-function cleanAndTruncateText(text: string, maxLength: number = 50000): string {
+function cleanAndTruncateText(text: string, maxLength: number = 100000): string {
   const originalLength = text.length;
 
   let cleaned = text
@@ -142,22 +142,192 @@ function cleanAndTruncateText(text: string, maxLength: number = 50000): string {
   return cleaned;
 }
 
+// 🆕 POPRAWIONA: Funkcja specjalna dla EUR-Lex z lepszymi selektorami
+function extractEurLexContent(document: Document, url: string): { title: string; content: string; source: string } {
+  console.log('\n🇪🇺 ROZPOCZYNANIE EKSTRAKCJI EUR-LEX:', url);
+
+  let title = '';
+  let content = '';
+  const source = 'EU Law';
+
+  // 🎯 TYTUŁ - najpierw prostsze selektory
+  console.log('🔍 EUR-LEX: Szukanie tytułu...');
+
+  const eurLexTitleSelectors = [
+    'title',
+    'h1',
+    'h2',
+    '.doc-title',
+    '.document-title'
+  ];
+
+  for (const selector of eurLexTitleSelectors) {
+    const titleElement = document.querySelector(selector);
+    if (titleElement) {
+      const titleText = titleElement.textContent || titleElement.getAttribute('content') || '';
+      if (titleText.trim().length > 5) {
+        title = titleText.trim();
+        console.log(`✅ EUR-LEX: Znaleziono tytuł przez "${selector}": ${title}`);
+        break;
+      }
+    }
+  }
+
+  // 🎯 TREŚĆ - NOWE PODEJŚCIE: Najpierw spróbuj body, potem filtruj
+  console.log('🔍 EUR-LEX: Wyciąganie treści z body...');
+
+  const bodyText = document.body?.textContent || '';
+  console.log(`📊 EUR-LEX: Długość całego body: ${bodyText.length} znaków`);
+
+  if (bodyText.length > 5000) {
+    // Znajdź początek głównej treści - szukaj pierwszego artykułu lub rozdziału
+    const contentStartMarkers = [
+      'ROZPORZĄDZENIE',
+      'Artykuł 1',
+      'ROZDZIAŁ I',
+      'Artykuł',
+      'Article 1',
+      'CHAPTER I'
+    ];
+
+    let contentStart = -1;
+    for (const marker of contentStartMarkers) {
+      const markerIndex = bodyText.indexOf(marker);
+      if (markerIndex !== -1) {
+        contentStart = markerIndex;
+        console.log(`✅ EUR-LEX: Znaleziono początek treści przez marker "${marker}" na pozycji ${markerIndex}`);
+        break;
+      }
+    }
+
+    if (contentStart !== -1) {
+      // Wyciągnij treść od początku dokumentu do końca
+      let mainContent = bodyText.substring(contentStart);
+
+      // Wyczyść opcje językowe i nawigację
+      mainContent = mainContent
+        // Usuń typowe kody językowe na początku
+        .replace(/^[A-Z]{2}\s+[A-Z]{2}\s+[A-Z]{2}.*?(?=\n|$)/gi, '')
+        // Usuń pojedyncze kody językowe
+        .replace(/\b(BG|ES|CS|DA|DE|ET|EL|EN|FR|GA|HR|IT|LV|LT|HU|MT|NL|PL|PT|RO|SK|SL|FI|SV)\b\s*/g, '')
+        // Usuń linki nawigacyjne
+        .replace(/Select language.*?(?=\n|$)/gi, '')
+        .replace(/Choose language.*?(?=\n|$)/gi, '')
+        .replace(/Language.*?(?=\n|$)/gi, '')
+        .replace(/Need help\?.*?(?=\n|$)/gi, '')
+        .replace(/This document is an excerpt.*?(?=\n|$)/gi, '')
+        // Normalizuj białe znaki
+        .replace(/\s+/g, ' ')
+        .trim();
+
+      // Sprawdź czy to nie są wciąż opcje językowe
+      const languageCodesCount = (mainContent.match(/\b[A-Z]{2}\b/g) || []).length;
+      const wordsCount = mainContent.split(' ').length;
+      const languageRatio = languageCodesCount / wordsCount;
+
+      console.log(`📊 EUR-LEX: Analiza treści - kody językowe: ${languageCodesCount}, słowa: ${wordsCount}, ratio: ${languageRatio.toFixed(3)}`);
+
+      // Jeśli mniej niż 5% to kody językowe, traktuj jako prawdziwą treść
+      if (languageRatio < 0.05 && mainContent.length > 1000) {
+        content = mainContent;
+        console.log(`✅ EUR-LEX: Użyto głównej treści dokumentu (${content.length} znaków)`);
+      }
+    }
+  }
+
+  // 🆕 FALLBACK 1: Szukaj dużych paragrafów w body
+  if (!content || content.length < 1000) {
+    console.log('🔄 EUR-LEX: Fallback 1 - szukanie dużych sekcji tekstu...');
+
+    // Podziel body na większe sekcje
+    const sections = bodyText.split(/\n\s*\n/);
+    let bestSection = '';
+
+    for (const section of sections) {
+      const cleanSection = section.trim();
+      if (cleanSection.length > 2000 &&
+          // Sprawdź czy to nie nawigacja
+          !cleanSection.includes('Select language') &&
+          !cleanSection.includes('Need help') &&
+          !cleanSection.includes('This document is an excerpt') &&
+          // Sprawdź czy zawiera sensowną treść
+          (cleanSection.includes('Rozporządzenie') ||
+           cleanSection.includes('Artykuł') ||
+           cleanSection.includes('ROZPORZĄDZENIE') ||
+           cleanSection.includes('Article'))) {
+
+        if (cleanSection.length > bestSection.length) {
+          bestSection = cleanSection;
+        }
+      }
+    }
+
+    if (bestSection && bestSection.length > 1000) {
+      content = bestSection.replace(/\s+/g, ' ').trim();
+      console.log(`✅ EUR-LEX: Fallback 1 - użyto najlepszej sekcji (${content.length} znaków)`);
+    }
+  }
+
+  // 🆕 FALLBACK 2: Użyj części body od pierwszego prawdziwego słowa
+  if (!content || content.length < 1000) {
+    console.log('🔄 EUR-LEX: Fallback 2 - część body od pierwszego słowa...');
+
+    // Znajdź pierwsze prawdziwe słowo (nie kod językowy)
+    const words = bodyText.split(/\s+/);
+    let firstWordIndex = -1;
+
+    for (let i = 0; i < words.length; i++) {
+      const word = words[i].trim();
+      if (word.length > 2 &&
+          !/^[A-Z]{2}$/.test(word) && // nie kod językowy
+          !word.includes('Select') &&
+          !word.includes('Language') &&
+          word !== 'Need' &&
+          word !== 'help') {
+        firstWordIndex = i;
+        break;
+      }
+    }
+
+    if (firstWordIndex !== -1 && firstWordIndex < words.length - 100) {
+      // Weź od pierwszego słowa do końca (ale max 10000 słów)
+      const endIndex = Math.min(firstWordIndex + 10000, words.length);
+      content = words.slice(firstWordIndex, endIndex).join(' ').trim();
+      console.log(`✅ EUR-LEX: Fallback 2 - od słowa ${firstWordIndex} (${content.length} znaków)`);
+    }
+  }
+
+  // 🆕 ULTIMATE FALLBACK: Surowy body z podstawowym czyszczeniem
+  if (!content || content.length < 500) {
+    console.log('🚨 EUR-LEX: Ultimate fallback - surowy body...');
+
+    content = bodyText
+      .replace(/Select language.*$/gi, '')
+      .replace(/Need help\?.*$/gi, '')
+      .replace(/This document is an excerpt.*$/gi, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    console.log(`✅ EUR-LEX: Ultimate fallback (${content.length} znaków)`);
+  }
+
+  const result = {
+    title: title || 'Dokument EUR-Lex',
+    content: content,
+    source: source
+  };
+
+  logExtractedContent(url, result);
+  return result;
+}
+
 // 🆕 NOWA: Funkcja do scrapowania z Puppeteer (JavaScript-heavy stron)
 async function scrapeWithPuppeteer(url: string): Promise<{ title: string; content: string; source: string }> {
   console.log('\n🤖 ROZPOCZYNANIE SCRAPINGU Z PUPPETEER:', url);
 
-  // 🚨 SPECJALNE OSTRZEŻENIE DLA SOCIAL MEDIA
-  if (url.includes('instagram.com') || url.includes('facebook.com') || url.includes('twitter.com') || url.includes('tiktok.com')) {
-    console.log('🚨 UWAGA: Wykryto social media - platformy te aktywnie blokują scraping!');
-    console.log('💡 ZALECENIE: Użyj oficjalnego API zamiast scrapingu');
-    if (url.includes('instagram.com')) {
-      console.log('📱 Instagram API: https://developers.facebook.com/docs/instagram-api/');
-    }
-  }
-
   let browser;
   try {
-    // --- POPRAWIONA KONFIGURACJA PUPPETEER (jak w PDF endpoint) ---
+    // --- POPRAWIONA KONFIGURACJA PUPPETEER ---
     let executablePath: string;
     const isProduction = process.env.NODE_ENV === 'production';
 
@@ -199,7 +369,7 @@ async function scrapeWithPuppeteer(url: string): Promise<{ title: string; conten
 
     console.log(`🚀 Final executable path: ${executablePath}`);
 
-    // 🆕 BAZOWE ARGUMENTY + SPECJALNE DLA SOCIAL MEDIA
+    // BAZOWE ARGUMENTY
     let launchArgs = isProduction ? [
       ...chromium.args,
       '--no-sandbox',
@@ -212,32 +382,6 @@ async function scrapeWithPuppeteer(url: string): Promise<{ title: string; conten
       '--disable-default-apps'
     ] : chromium.args;
 
-    // 🆕 DODATKOWE USTAWIENIA DLA SOCIAL MEDIA (anty-detection)
-    const isSocialMedia = url.includes('instagram.com') || url.includes('facebook.com') ||
-                         url.includes('twitter.com') || url.includes('tiktok.com') ||
-                         url.includes('linkedin.com') || url.includes('youtube.com');
-
-    if (isSocialMedia) {
-      console.log('📱 SOCIAL MEDIA: Dodanie specjalnych ustawień anty-detection...');
-
-      // Dodatkowe argumenty anty-detection
-      const antiDetectionArgs = [
-        '--disable-blink-features=AutomationControlled',
-        '--disable-dev-shm-usage',
-        '--disable-accelerated-2d-canvas',
-        '--no-first-run',
-        '--no-zygote',
-        '--disable-gpu',
-        '--disable-background-timer-throttling',
-        '--disable-backgrounding-occluded-windows',
-        '--disable-renderer-backgrounding',
-        '--disable-features=TranslateUI',
-        '--disable-ipc-flooding-protection'
-      ];
-
-      launchArgs = [...launchArgs, ...antiDetectionArgs];
-    }
-
     console.log(`🚀 Launch args: ${launchArgs.join(' ')}`);
 
     console.log('🚀 URUCHAMIANIE PRZEGLĄDARKI...');
@@ -246,68 +390,24 @@ async function scrapeWithPuppeteer(url: string): Promise<{ title: string; conten
       defaultViewport: chromium.defaultViewport,
       executablePath,
       headless: true,
-      ignoreDefaultArgs: isSocialMedia ? ['--enable-automation'] : false, // 🆕 Tylko dla social media
       timeout: 30000
     });
 
     const page = await browser.newPage();
 
-    // 🆕 SPECJALNE USTAWIENIA DLA SOCIAL MEDIA
-    if (isSocialMedia) {
-      console.log('📱 SOCIAL MEDIA: Konfiguracja anty-detection...');
-
-      // Usuń webdriver property
-      await page.evaluateOnNewDocument(() => {
-        Object.defineProperty(navigator, 'webdriver', {
-          get: () => undefined,
-        });
-      });
-
-      // Mockuj permissions
-      await page.evaluateOnNewDocument(() => {
-        const originalQuery = window.navigator.permissions.query;
-        return window.navigator.permissions.query = (parameters: PermissionDescriptor) => (
-          parameters.name === 'notifications' ?
-            Promise.resolve({
-              state: Notification.permission,
-              name: 'notifications',
-              onchange: null,
-              addEventListener: () => {},
-              removeEventListener: () => {},
-              dispatchEvent: () => false
-            } as PermissionStatus) :
-            originalQuery(parameters)
-        );
-      });
-
-      // Mockuj languages
-      await page.evaluateOnNewDocument(() => {
-        Object.defineProperty(navigator, 'languages', {
-          get: () => ['en-US', 'en', 'pl-PL', 'pl'],
-        });
-      });
-    }
-
-    // Ustaw timeouty - ZACHOWANE + zwiększone dla social media
-    const timeoutValue = isSocialMedia ? 90000 : 60000;
+    // Ustaw timeouty
+    const timeoutValue = 60000;
     page.setDefaultTimeout(timeoutValue);
     page.setDefaultNavigationTimeout(timeoutValue);
 
-    // 🆕 SPECJALNY USER AGENT DLA SOCIAL MEDIA - RESZTA ZACHOWANA
-    let userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
-
-    if (isSocialMedia) {
-      // Użyj najnowszego Chrome UA
-      userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
-      console.log('📱 SOCIAL MEDIA: Użyto najnowszego User Agent');
-    }
-
+    // USER AGENT
+    const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
     await page.setUserAgent(userAgent);
 
     // Ustaw viewport
     await page.setViewport({ width: 1920, height: 1080 });
 
-    // 🆕 HEADERS - BAZOWE + SPECJALNE DLA SOCIAL MEDIA
+    // HEADERS
     const headers: Record<string, string> = {
       'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
       'Accept-Language': 'pl-PL,pl;q=0.9,en;q=0.8',
@@ -320,13 +420,6 @@ async function scrapeWithPuppeteer(url: string): Promise<{ title: string; conten
       'Sec-Fetch-User': '?1',
       'DNT': '1'
     };
-
-    if (isSocialMedia) {
-      headers['sec-ch-ua'] = '"Chromium";v="122", "Not(A:Brand";v="24", "Google Chrome";v="122"';
-      headers['sec-ch-ua-mobile'] = '?0';
-      headers['sec-ch-ua-platform'] = '"Windows"';
-      console.log('📱 SOCIAL MEDIA: Dodano Chrome-specific headers');
-    }
 
     await page.setExtraHTTPHeaders(headers);
 
@@ -348,12 +441,8 @@ async function scrapeWithPuppeteer(url: string): Promise<{ title: string; conten
       });
     }
 
-    // 🆕 INTERCEPTION - RÓŻNE STRATEGIE
-    if (isSocialMedia) {
-      console.log('📱 SOCIAL MEDIA: Pozwalam na wszystkie requesty (pełny JS + CSS)');
-      // Dla social media nie blokuj niczego - potrzebują pełnej funkcjonalności
-    } else if (!url.includes('eureka.mf.gov.pl')) {
-      // ZACHOWANE: Standardowa interception dla innych stron
+    // INTERCEPTION - standardowa dla stron które nie są Eureka
+    if (!url.includes('eureka.mf.gov.pl')) {
       await page.setRequestInterception(true);
       page.on('request', (req) => {
         if (req.resourceType() === 'stylesheet' || req.resourceType() === 'font' || req.resourceType() === 'image') {
@@ -375,80 +464,50 @@ async function scrapeWithPuppeteer(url: string): Promise<{ title: string; conten
       console.log(`💰 EUREKA: Spróbuję też prostszego URL: ${baseUrl}`);
     }
 
-    // 🆕 NAWIGACJA - SPECJALNA DLA SOCIAL MEDIA + ZACHOWANA DLA RESZTY
-    if (isSocialMedia) {
-      console.log('📱 SOCIAL MEDIA: Użycie specjalnej strategii nawigacji...');
+    // NAWIGACJA - standardowe strategie
+    try {
+      await page.goto(targetUrl, {
+        waitUntil: 'domcontentloaded',
+        timeout: 45000
+      });
+      console.log('✅ Strategia 1: domcontentloaded - sukces');
+    } catch (error) {
+      console.log('❌ Strategia 1 nie powiodła się, próbuję strategię 2...');
 
       try {
-        // Strategia 1: Powolne ładowanie z długim timeoutem
         await page.goto(targetUrl, {
-          waitUntil: 'networkidle0',
-          timeout: 60000
-        });
-        console.log('✅ SOCIAL MEDIA: Strategia networkidle0 - sukces');
-      } catch (error) {
-        console.log('❌ SOCIAL MEDIA: Strategia 1 nie powiodła się, próbuję prostszą...');
-
-        try {
-          await page.goto(targetUrl, {
-            waitUntil: 'load',
-            timeout: 45000
-          });
-          console.log('✅ SOCIAL MEDIA: Strategia load - sukces');
-        } catch (error2) {
-          await page.goto(targetUrl, {
-            waitUntil: 'domcontentloaded',
-            timeout: 30000
-          });
-          console.log('✅ SOCIAL MEDIA: Strategia domcontentloaded - sukces');
-        }
-      }
-    } else {
-      // ZACHOWANE: Standardowe strategie nawigacji dla innych stron
-      try {
-        await page.goto(targetUrl, {
-          waitUntil: 'domcontentloaded',
+          waitUntil: 'load',
           timeout: 45000
         });
-        console.log('✅ Strategia 1: domcontentloaded - sukces');
-      } catch (error) {
-        console.log('❌ Strategia 1 nie powiodła się, próbuję strategię 2...');
+        console.log('✅ Strategia 2: load - sukces');
+      } catch (error2) {
+        console.log('❌ Strategia 2 nie powiodła się, próbuję strategię 3...');
 
-        try {
-          await page.goto(targetUrl, {
-            waitUntil: 'load',
-            timeout: 45000
-          });
-          console.log('✅ Strategia 2: load - sukces');
-        } catch (error2) {
-          console.log('❌ Strategia 2 nie powiodła się, próbuję strategię 3...');
+        if (url.includes('eureka.mf.gov.pl') && url.includes(';keyWords=')) {
+          // ZACHOWANE: Strategia 3 dla Eureka
+          const simpleUrl = url.split(';')[0];
+          console.log(`💰 EUREKA: Próbuję prostszy URL: ${simpleUrl}`);
 
-          if (url.includes('eureka.mf.gov.pl') && url.includes(';keyWords=')) {
-            // ZACHOWANE: Strategia 3 dla Eureka
-            const simpleUrl = url.split(';')[0];
-            console.log(`💰 EUREKA: Próbuję prostszy URL: ${simpleUrl}`);
-
-            try {
-              await page.goto(simpleUrl, {
-                waitUntil: 'domcontentloaded',
-                timeout: 45000
-              });
-              console.log('✅ Strategia 3: prosty URL - sukces');
-              targetUrl = simpleUrl;
-            } catch (error3) {
-              await page.goto(url, {
-                waitUntil: 'networkidle0',
-                timeout: 60000
-              });
-              console.log('✅ Strategia 4: networkidle0 - sukces');
-            }
-          } else {
-            await page.goto(targetUrl, {
+          try {
+            await page.goto(simpleUrl, {
+              waitUntil: 'domcontentloaded',
+              timeout: 45000
+            });
+            console.log('✅ Strategia 3: prosty URL - sukces');
+            targetUrl = simpleUrl;
+          } catch (error3) {
+            await page.goto(url, {
               waitUntil: 'networkidle0',
               timeout: 60000
             });
-            console.log('✅ Strategia 3: networkidle0 - sukces');
+            console.log('✅ Strategia 4: networkidle0 - sukces');
           }
+        } else {
+          await page.goto(targetUrl, {
+            waitUntil: 'networkidle0',
+            timeout: 60000
+          });
+          console.log('✅ Strategia 3: networkidle0 - sukces');
         }
       }
     }
@@ -459,61 +518,8 @@ async function scrapeWithPuppeteer(url: string): Promise<{ title: string; conten
     try {
       await page.waitForSelector('body', { timeout: 10000 });
 
-      // 🆕 SPECJALNE CZEKANIE DLA INSTAGRAM
-      if (url.includes('instagram.com')) {
-        console.log('📱 INSTAGRAM: Specjalne czekanie na treść...');
-
-        // Czekaj na główne elementy Instagram
-        const instagramSelectors = [
-          'article',
-          '[role="main"]',
-          'main',
-          'section',
-          '[data-testid]',
-          'div[style*="flex"]'
-        ];
-
-        let foundInstagramElement = false;
-        for (const selector of instagramSelectors) {
-          try {
-            await page.waitForSelector(selector, { timeout: 5000 });
-            console.log(`✅ INSTAGRAM: Znaleziono element "${selector}"`);
-            foundInstagramElement = true;
-            break;
-          } catch (e) {
-            console.log(`❌ INSTAGRAM: Brak elementu "${selector}"`);
-          }
-        }
-
-        // Scroll w dół aby załadować lazy content
-        console.log('📱 INSTAGRAM: Scrollowanie dla lazy loading...');
-        await page.evaluate(() => {
-          window.scrollTo(0, document.body.scrollHeight / 2);
-        });
-        await delay(3000);
-
-        await page.evaluate(() => {
-          window.scrollTo(0, 0);
-        });
-        await delay(2000);
-
-        // Długie czekanie na JavaScript
-        console.log('⏳ INSTAGRAM: Czekanie na JavaScript (15s)...');
-        await delay(15000);
-
-        // Sprawdź czy treść się pojawiła
-        const bodyText = await page.evaluate(() => document.body.textContent || '');
-        console.log(`📱 INSTAGRAM: Długość tekstu po oczekiwaniu: ${bodyText.length} znaków`);
-
-        if (bodyText.length > 1000) {
-          console.log('✅ INSTAGRAM: Znaleziono treść po oczekiwaniu!');
-        } else {
-          console.log('⚠️ INSTAGRAM: Wciąż mało treści - może być zablokowane');
-        }
-      }
-
       // ZACHOWANE: Specjalne czekanie dla Eureka
-      else if (url.includes('eureka.mf.gov.pl')) {
+      if (url.includes('eureka.mf.gov.pl')) {
         console.log('💰 EUREKA: Sprawdzanie czy strona się załadowała...');
 
         const currentUrl = page.url();
@@ -592,7 +598,7 @@ async function scrapeWithPuppeteer(url: string): Promise<{ title: string; conten
 
     console.log('📄 WYCIĄGANIE TREŚCI...');
 
-    // 🆕 SPECJALNE WYCIĄGANIE TREŚCI + ZACHOWANE STANDARDOWE
+    // STANDARDOWE WYCIĄGANIE TREŚCI
     const pageData = await page.evaluate((currentUrl) => {
       // Usuń niepotrzebne elementy
       const unwanted = document.querySelectorAll('script, style, nav, header, footer, .menu, .navigation, .cookie, .banner');
@@ -601,139 +607,74 @@ async function scrapeWithPuppeteer(url: string): Promise<{ title: string; conten
       let title = '';
       let content = '';
 
-      // 🆕 SPECJALNE SELEKTORY DLA INSTAGRAM
-      if (currentUrl.includes('instagram.com')) {
-        console.log('📱 INSTAGRAM: Specjalne selektory...');
+      // STANDARDOWE SELEKTORY
+      // Tytuł - ZACHOWANE selektory
+      const titleSelectors = [
+        'h1', 'h2', '.page-title', '.document-title',
+        '.interpretation-title', '.main-title', '.content-title', 'title'
+      ];
 
-        // Tytuł z Instagram
-        const instagramTitleSelectors = [
-          'title',
-          'meta[property="og:title"]',
-          'h1',
-          'h2',
-          '[data-testid*="title"]'
-        ];
-
-        for (const selector of instagramTitleSelectors) {
-          const element = document.querySelector(selector);
-          if (element) {
-            const titleText = element.textContent || element.getAttribute('content') || '';
-            if (titleText.trim().length > 5) {
-              title = titleText.trim();
-              console.log(`Znaleziono tytuł przez: ${selector}`);
-              break;
-            }
-          }
-        }
-
-        // Treść z Instagram - bardzo specyficzne selektory
-        console.log('Próbuję wyciągnąć treść z Instagram...');
-
-        // Zbierz wszystkie teksty ze strony
-        let allText = '';
-        const textElements = document.querySelectorAll('span, div, p, h1, h2, h3, a');
-
-        for (const el of textElements) {
-          if (el.textContent && el.textContent.trim().length > 10) {
-            const text = el.textContent.trim();
-            // Filtruj typowe elementy UI Instagram
-            if (!text.includes('Instagram') &&
-                !text.includes('Log in') &&
-                !text.includes('Sign up') &&
-                !text.includes('Follow') &&
-                !text.includes('Suggested') &&
-                text.length > 15 &&
-                text.length < 500) {
-              allText += text + '\n';
-            }
-          }
-        }
-
-        if (allText.length > 50) {
-          content = allText.trim();
-          console.log(`Instagram: Zebrano treść (${content.length} znaków)`);
-        }
-
-        // Fallback - pobierz meta description
-        if (!content) {
-          const metaDesc = document.querySelector('meta[property="og:description"]');
-          if (metaDesc) {
-            content = metaDesc.getAttribute('content') || '';
-            console.log('Instagram: Użyto meta description');
-          }
+      for (const selector of titleSelectors) {
+        const element = document.querySelector(selector);
+        if (element && element.textContent && element.textContent.trim().length > 5) {
+          title = element.textContent.trim();
+          console.log(`Znaleziono tytuł przez: ${selector}`);
+          break;
         }
       }
 
-      // ZACHOWANE: Standardowe selektory dla innych stron
-      else {
-        // Tytuł - ZACHOWANE selektory
-        const titleSelectors = [
-          'h1', 'h2', '.page-title', '.document-title',
-          '.interpretation-title', '.main-title', '.content-title', 'title'
-        ];
+      // Treść - ZACHOWANE selektory + ulepszone dla Eureka
+      const contentSelectors = [
+        '.content-main', '.document-content', '.interpretation-content',
+        '.main-content', '#content', '.text-content', 'main',
+        '.panel-body', '.card-body', '.article-content', 'article',
+        '.container .row .col'
+      ];
 
-        for (const selector of titleSelectors) {
-          const element = document.querySelector(selector);
-          if (element && element.textContent && element.textContent.trim().length > 5) {
-            title = element.textContent.trim();
-            console.log(`Znaleziono tytuł przez: ${selector}`);
-            break;
-          }
+      for (const selector of contentSelectors) {
+        const element = document.querySelector(selector);
+        if (element && element.textContent && element.textContent.trim().length > 100) {
+          content = element.textContent.trim();
+          console.log(`Znaleziono treść przez: ${selector} (${content.length} znaków)`);
+          break;
         }
+      }
 
-        // Treść - ZACHOWANE selektory + ulepszone dla Eureka
-        const contentSelectors = [
-          '.content-main', '.document-content', '.interpretation-content',
-          '.main-content', '#content', '.text-content', 'main',
-          '.panel-body', '.card-body', '.article-content', 'article',
-          '.container .row .col'
-        ];
+      // ZACHOWANE: Fallback
+      if (!content || content.length < 200) {
+        console.log('Fallback: zbieranie wszystkich elementów tekstowych...');
+        const textElements = document.querySelectorAll('p, div, span, td');
+        let combinedText = '';
 
-        for (const selector of contentSelectors) {
-          const element = document.querySelector(selector);
-          if (element && element.textContent && element.textContent.trim().length > 100) {
-            content = element.textContent.trim();
-            console.log(`Znaleziono treść przez: ${selector} (${content.length} znaków)`);
-            break;
-          }
-        }
-
-        // ZACHOWANE: Fallback
-        if (!content || content.length < 200) {
-          console.log('Fallback: zbieranie wszystkich elementów tekstowych...');
-          const textElements = document.querySelectorAll('p, div, span, td');
-          let combinedText = '';
-
-          for (const el of textElements) {
-            if (el.textContent && el.textContent.trim().length > 30) {
-              const text = el.textContent.trim();
-              if (!text.includes('Menu') &&
-                  !text.includes('Logowanie') &&
-                  !text.includes('©') &&
-                  !text.includes('JavaScript') &&
-                  !text.toLowerCase().includes('cookie') &&
-                  !text.toLowerCase().includes('nawigacja')) {
-                combinedText += text + '\n\n';
-              }
+        for (const el of textElements) {
+          if (el.textContent && el.textContent.trim().length > 30) {
+            const text = el.textContent.trim();
+            if (!text.includes('Menu') &&
+                !text.includes('Logowanie') &&
+                !text.includes('©') &&
+                !text.includes('JavaScript') &&
+                !text.toLowerCase().includes('cookie') &&
+                !text.toLowerCase().includes('nawigacja')) {
+              combinedText += text + '\n\n';
             }
           }
-
-          if (combinedText.length > content.length) {
-            content = combinedText.trim();
-            console.log(`Użyto fallback (${content.length} znaków)`);
-          }
         }
 
-        // ZACHOWANE: Ultimate fallback
-        if (!content || content.length < 100) {
-          const bodyText = document.body?.textContent || '';
-          if (bodyText.includes('INTERPRETACJA') ||
-              bodyText.includes('interpretacja') ||
-              bodyText.includes('UZASADNIENIE') ||
-              bodyText.includes('uzasadnienie')) {
-            content = bodyText;
-            console.log(`Ultimate fallback - użyto body (${content.length} znaków)`);
-          }
+        if (combinedText.length > content.length) {
+          content = combinedText.trim();
+          console.log(`Użyto fallback (${content.length} znaków)`);
+        }
+      }
+
+      // ZACHOWANE: Ultimate fallback
+      if (!content || content.length < 100) {
+        const bodyText = document.body?.textContent || '';
+        if (bodyText.includes('INTERPRETACJA') ||
+            bodyText.includes('interpretacja') ||
+            bodyText.includes('UZASADNIENIE') ||
+            bodyText.includes('uzasadnienie')) {
+          content = bodyText;
+          console.log(`Ultimate fallback - użyto body (${content.length} znaków)`);
         }
       }
 
@@ -751,18 +692,16 @@ async function scrapeWithPuppeteer(url: string): Promise<{ title: string; conten
     console.log(`   📄 Body: ${pageData.bodyLength} znaków`);
     console.log(`   🔗 URL: ${pageData.url}`);
 
-    // Określ źródło + NOWE dla social media
+    // Określ źródło
     let source = 'Web (JS)';
-    if (url.includes('instagram.com')) {
-      source = 'Instagram (JS)';
-    } else if (url.includes('facebook.com')) {
-      source = 'Facebook (JS)';
-    } else if (url.includes('twitter.com')) {
-      source = 'Twitter (JS)';
-    } else if (url.includes('eureka.mf.gov.pl')) {
+    if (url.includes('eureka.mf.gov.pl')) {
       source = 'MF Interpretations (JS)';
     } else if (url.includes('.gov.pl')) {
       source = 'Polish Government (JS)';
+    } else if (url.includes('.gov')) {
+      source = 'Government (JS)';
+    } else if (url.includes('eur-lex.europa.eu')) {
+      source = 'EU Law (JS)';
     }
 
     return {
@@ -785,6 +724,11 @@ async function scrapeWithPuppeteer(url: string): Promise<{ title: string; conten
 // 🔧 ULEPSZONA: Strategia dla stron rządowych z lepszą obsługą różnych typów
 function extractGovernmentContent(document: Document, url: string): { title: string; content: string; source: string } {
   console.log('\n🏛️ ROZPOCZYNANIE EKSTRAKCJI RZĄDOWEJ:', url);
+
+  // 🆕 SPECJALNA OBSŁUGA EUR-LEX
+  if (url.includes('eur-lex.europa.eu')) {
+    return extractEurLexContent(document, url);
+  }
 
   let title = '';
   let content = '';
@@ -996,8 +940,6 @@ function extractGovernmentContent(document: Document, url: string): { title: str
       source = 'Polish Government';
     } else if (url.includes('.gov')) {
       source = 'Government';
-    } else if (url.includes('eur-lex.europa.eu')) {
-      source = 'EU Law';
     }
 
     console.log('🏛️ WYKRYTY TYP ŹRÓDŁA:', source);
@@ -1480,7 +1422,7 @@ function extractScientificContent(document: Document, url: string): { title: str
 
 // 🆕 ULEPSZONA: Funkcja do ogólnego wyciągania treści
 function extractGeneralContent(document: Document, url: string): { title: string; content: string; source: string } {
-  console.log('\n🌍 ROZPOCZYNANIE EKSTRAKCJI OGÓLNEJ:', url);
+  console.log('\n🌐 ROZPOCZYNANIE EKSTRAKCJI OGÓLNEJ:', url);
 
   let title = '';
   let content = '';
@@ -1816,7 +1758,7 @@ async function scrapeUrl(url: string): Promise<ScrapedContent> {
     const result: ScrapedContent = {
       url,
       title: cleanAndTruncateText(extractedData.title, 200),
-      content: cleanAndTruncateText(cleanedContent, 50000),
+      content: cleanAndTruncateText(cleanedContent, 100000),
       source: extractedData.source
     };
 
@@ -1849,7 +1791,7 @@ async function scrapeUrl(url: string): Promise<ScrapedContent> {
         throw new Error('Puppeteer fallback - brak treści (0 znaków)');
       } else if (puppeteerData.content.length < 20) {
         console.log(`⚠️ PUPPETEER FALLBACK: Bardzo krótka treść (${puppeteerData.content.length} znaków)`);
-        console.log(`📝 Treść: "${puppeteerData.content}"`);
+        console.log(`🔍 Treść: "${puppeteerData.content}"`);
         // Kontynuuj mimo krótkiej treści - może to być wszystko co da się wyciągnąć
       }
 
@@ -1857,7 +1799,7 @@ async function scrapeUrl(url: string): Promise<ScrapedContent> {
         console.log('🎉 SUKCES Z PUPPETEER FALLBACK!');
 
         const cleanedTitle = cleanAndTruncateText(puppeteerData.title, 200);
-        const cleanedContent = cleanAndTruncateText(puppeteerData.content, 50000);
+        const cleanedContent = cleanAndTruncateText(puppeteerData.content, 100000);
 
         // 🆕 SPRAWDZENIE CZY CZYSZCZENIE NIE USUNĘŁO CAŁEJ TREŚCI
         if (!cleanedContent || cleanedContent.trim().length === 0) {

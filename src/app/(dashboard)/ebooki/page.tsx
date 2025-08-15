@@ -1272,108 +1272,224 @@ const EbookGenerator = () => {
   };
 
   const generateChaptersContent = async () => {
-    if (tocItems.length === 0) {
-      setError('Brak rozdziałów do wygenerowania treści');
-      return;
-    }
+      // ===== WALIDACJA WSTĘPNA =====
+      if (tocItems.length === 0) {
+        setError('Brak rozdziałów do wygenerowania treści');
+        return;
+      }
 
-    if (!ebookId) {
-      setError('Brak identyfikatora ebooka. Spróbuj odświeżyć stronę i zacząć od początku.');
-      return;
-    }
+      if (!ebookId) {
+        setError('Brak identyfikatora ebooka. Spróbuj odświeżyć stronę i zacząć od początku.');
+        return;
+      }
 
-    setError(null);
-    setIsGeneratingContent(true);
-    setGeneratingChapterIds([]);
-    setCompletedChapterIds([]);
+      // ===== RESET STANÓW =====
+      setError(null);
+      setIsGeneratingContent(true);
+      setGeneratingChapterIds(tocItems.map(item => item.id)); // Wszystkie od razu
+      setCompletedChapterIds([]);
+      setCurrentGeneratingIndex(-1);
 
-    try {
-      const chaptersToGenerate = [...tocItems];
-      const updatedTocItems = [...tocItems];
+      console.log(`🚀 Rozpoczynanie równoległego generowania ${tocItems.length} rozdziałów...`);
 
-      for (let i = 0; i < chaptersToGenerate.length; i++) {
-        const chapter = chaptersToGenerate[i];
+      try {
+        const chaptersToGenerate = [...tocItems];
+        const updatedTocItems = [...tocItems];
 
-        setCurrentGeneratingIndex(i);
-        setGeneratingChapterIds(prev => [...prev, chapter.id]);
-
-        // Wywołanie API z dodatkowymi danymi
-        const response = await fetch('/api/anthropic/generate-single-chapter', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            title,
-            subtitle: subtitle.trim() || undefined,
-            chapter: chapter,
-            allChapters: updatedTocItems,
-            description: description.trim() || undefined,
-            scrapedContent: scrapedContent
-          }),
-        });
-
-        if (!response.ok) {
-          let errorMessage = 'Błąd podczas generowania treści rozdziału';
+        // ===== RÓWNOLEGŁE GENEROWANIE =====
+        const generationPromises = chaptersToGenerate.map(async (chapter, index) => {
           try {
-            const errorData = await response.json();
-            if (errorData && errorData.error) {
-              errorMessage = errorData.error;
-            }
-          } catch (jsonError) {
-            errorMessage = `Błąd serwera (${response.status})`;
-          }
-          throw new Error(errorMessage);
-        }
+            console.log(`📝 [${index + 1}/${chaptersToGenerate.length}] Generowanie: ${chapter.title}`);
 
-        const data = await response.json();
-
-        if (data.chapter && data.chapter.content) {
-          updatedTocItems[i] = {
-            ...updatedTocItems[i],
-            content: data.chapter.content
-          };
-
-          setGeneratingChapterIds(prev => prev.filter(id => id !== chapter.id));
-          await new Promise(resolve => setTimeout(resolve, 10));
-          setTocItems(updatedTocItems);
-          setCompletedChapterIds(prev => [...prev, chapter.id]);
-
-          try {
-            const updateResponse = await fetch(`/api/ebooks/${ebookId}/chapters/${chapter.id}`, {
-              method: 'PUT',
+            const response = await fetch('/api/anthropic/generate-single-chapter', {
+              method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
               },
               body: JSON.stringify({
-                content: data.chapter.content
+                title,
+                subtitle: subtitle.trim() || undefined,
+                chapter: chapter,
+                allChapters: updatedTocItems,
+                description: description.trim() || undefined,
+                scrapedContent: scrapedContent
               }),
             });
 
-            if (!updateResponse.ok) {
-              console.warn(`Nie udało się zapisać treści rozdziału ${chapter.id} w bazie, ale kontynuujemy proces`);
+            if (!response.ok) {
+              let errorMessage = 'Błąd podczas generowania treści rozdziału';
+              try {
+                const errorData = await response.json();
+                if (errorData && errorData.error) {
+                  errorMessage = errorData.error;
+                }
+              } catch (jsonError) {
+                errorMessage = `Błąd serwera (${response.status})`;
+              }
+              throw new Error(errorMessage);
             }
-          } catch (updateError) {
-            console.warn(`Błąd podczas zapisywania treści rozdziału ${chapter.id}:`, updateError);
+
+            const data = await response.json();
+
+            if (data.chapter && data.chapter.content) {
+              // ===== AKTUALIZACJA STANU W CZASIE RZECZYWISTYM =====
+              setTocItems(currentItems =>
+                currentItems.map(item =>
+                  item.id === chapter.id
+                    ? { ...item, content: data.chapter.content }
+                    : item
+                )
+              );
+
+              setGeneratingChapterIds(prev => prev.filter(id => id !== chapter.id));
+              setCompletedChapterIds(prev => [...prev, chapter.id]);
+
+              console.log(`✅ [${index + 1}/${chaptersToGenerate.length}] Ukończono: ${chapter.title}`);
+
+              // ===== ZAPIS W BAZIE DANYCH =====
+              try {
+                const updateResponse = await fetch(`/api/ebooks/${ebookId}/chapters/${chapter.id}`, {
+                  method: 'PUT',
+                  headers: {
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({
+                    content: data.chapter.content
+                  }),
+                });
+
+                if (!updateResponse.ok) {
+                  console.warn(`⚠️ Nie udało się zapisać treści rozdziału ${chapter.id} w bazie, ale kontynuujemy proces`);
+                } else {
+                  console.log(`💾 Zapisano w bazie: ${chapter.title}`);
+                }
+              } catch (updateError) {
+                console.warn(`❌ Błąd podczas zapisywania treści rozdziału ${chapter.id}:`, updateError);
+              }
+
+              return { success: true, chapter, content: data.chapter.content };
+            } else {
+              throw new Error('Otrzymano nieprawidłowy format danych');
+            }
+          } catch (error) {
+            // ===== OBSŁUGA BŁĘDÓW POJEDYNCZEGO ROZDZIAŁU =====
+            setGeneratingChapterIds(prev => prev.filter(id => id !== chapter.id));
+            console.error(`❌ Błąd generowania rozdziału ${chapter.title}:`, error);
+
+            // ✅ POPRAWKA: Bezpieczne wyciągnięcie message z error
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            return { success: false, chapter, error: errorMessage };
           }
+        });
+
+        // ===== CZEKANIE NA WSZYSTKIE WYNIKI =====
+        console.log('⏳ Czekanie na zakończenie wszystkich generowań...');
+        const results = await Promise.allSettled(generationPromises);
+
+        // ===== ZBIERANIE BŁĘDÓW =====
+        // ✅ POPRAWKA: Jawne określenie typu tablicy
+        const errors: string[] = [];
+        let successCount = 0;
+
+        results.forEach((result, index) => {
+          if (result.status === 'rejected') {
+            // Bezpieczne wyciągnięcie reason
+            const rejectionReason = result.reason instanceof Error ? result.reason.message : String(result.reason);
+            errors.push(`${chaptersToGenerate[index].title}: ${rejectionReason}`);
+            console.error(`❌ Promise rejected dla ${chaptersToGenerate[index].title}:`, result.reason);
+          } else if (!result.value.success) {
+            errors.push(`${result.value.chapter.title}: ${result.value.error}`);
+            console.error(`❌ Generowanie nieudane dla ${result.value.chapter.title}:`, result.value.error);
+          } else {
+            successCount++;
+            console.log(`✅ Sukces dla ${result.value.chapter.title}`);
+          }
+        });
+
+        // ===== RAPORTOWANIE BŁĘDÓW =====
+        if (errors.length > 0) {
+          console.warn(`⚠️ Błędy w ${errors.length}/${chaptersToGenerate.length} rozdziałach`);
+          setError(`Błędy podczas generowania niektórych rozdziałów: ${errors.join(', ')}`);
+        } else {
+          console.log(`🎉 Wszystkie ${successCount} rozdziały wygenerowane pomyślnie!`);
         }
-      }
 
-      setContentGenerated(true);
-      setChaptersWithoutContent([]);
+        // ===== WALIDACJA I FINALNE USTAWIENIA =====
+        // Sprawdź aktualny stan tocItems (może być zaktualizowany przez setTocItems w promises)
+        setTocItems(currentTocItems => {
+          const chaptersWithContent = currentTocItems.filter(item =>
+            item.content && item.content.trim().length > 0
+          );
 
-      if (updatedTocItems.length > 0) {
-        setActiveChapterId(updatedTocItems[0].id);
+          console.log(`📊 Status końcowy: ${chaptersWithContent.length}/${currentTocItems.length} rozdziałów ma treść`);
+
+          // Ustaw stan contentGenerated tylko jeśli WSZYSTKIE mają treść
+          if (chaptersWithContent.length === currentTocItems.length) {
+            setContentGenerated(true);
+            setChaptersWithoutContent([]);
+            console.log('🎯 ContentGenerated = true (wszystkie rozdziały mają treść)');
+          } else {
+            const withoutContent = currentTocItems
+              .filter(item => !item.content || item.content.trim() === '')
+              .map(item => item.id);
+            setChaptersWithoutContent(withoutContent);
+            console.log(`📝 Rozdziały bez treści: ${withoutContent.length}`);
+          }
+
+          return currentTocItems; // Zwróć bez zmian
+        });
+
+        // ===== USTAWIENIE AKTYWNEGO ROZDZIAŁU =====
+        if (tocItems.length > 0) {
+          // Pobierz aktualny stan tocItems
+          setTocItems(currentTocItems => {
+            // Priorytet: pierwszy rozdział z treścią
+            const chaptersWithContent = currentTocItems.filter(item =>
+              item.content && item.content.trim().length > 0
+            );
+
+            if (chaptersWithContent.length > 0) {
+              setActiveChapterId(chaptersWithContent[0].id);
+              console.log(`🎯 Ustawiono aktywny rozdział z treścią: ${chaptersWithContent[0].title}`);
+            } else {
+              // Fallback: pierwszy rozdział bez treści
+              const chaptersWithoutContent = currentTocItems.filter(item =>
+                !item.content || item.content.trim() === ''
+              );
+
+              if (chaptersWithoutContent.length > 0) {
+                setActiveChapterId(chaptersWithoutContent[0].id);
+                console.log(`📝 Ustawiono aktywny rozdział bez treści: ${chaptersWithoutContent[0].title}`);
+              } else {
+                // Ostateczny fallback: pierwszy dostępny
+                setActiveChapterId(currentTocItems[0].id);
+                console.log(`🔢 Ustawiono pierwszy dostępny rozdział: ${currentTocItems[0].title}`);
+              }
+            }
+
+            return currentTocItems; // Zwróć bez zmian
+          });
+        }
+
+        // ===== SYNCHRONIZACJA I PRZEJŚCIE =====
+        console.log('🔄 Synchronizacja statusu rozdziałów...');
+        syncChapterStatus();
+
+        console.log('🎉 Przechodzenie do kroku 3...');
+        setStep(3);
+
+        console.log(`✅ Generowanie zakończone: ${successCount}/${chaptersToGenerate.length} sukces`);
+
+      } catch (err) {
+        console.error('❌ Ogólny błąd generowania:', err);
+        handleApiError(err, 'Wystąpił błąd podczas generowania treści. Spróbuj ponownie.');
+      } finally {
+        // ===== CLEANUP =====
+        console.log('🧹 Czyszczenie stanów...');
+        setIsGeneratingContent(false);
+        setCurrentGeneratingIndex(-1);
+        setGeneratingChapterIds([]);
       }
-      syncChapterStatus();
-      setStep(3);
-    } catch (err) {
-      handleApiError(err, 'Wystąpił błąd podczas generowania treści. Spróbuj ponownie.');
-    } finally {
-      setIsGeneratingContent(false);
-      setCurrentGeneratingIndex(-1);
-      setGeneratingChapterIds([]);
-    }
   };
 
   // ✅ NAPRAWIONA FUNKCJA handleGenerateAIImage
@@ -2272,47 +2388,52 @@ const EbookGenerator = () => {
                   )}
                 </div>
               ))}
-              <label className="block text-sm font-medium text-gray-700 mb-3">
-                Źródła PDF:
-                <span className="text-gray-400 font-normal ml-1">(opcjonalnie, max 10MB)</span>
-              </label>
 
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={handleOpenPdfDialog}
-                  disabled={isGeneratingToc || isSaving || isScrapingUrls || isScrapingSingleUrl || isUploadingPdf}
-                  className={`flex items-center px-4 py-2 border border-dashed border-gray-300 rounded-lg transition-colors ${
-                    isGeneratingToc || isSaving || isScrapingUrls || isScrapingSingleUrl || isUploadingPdf
-                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                      : 'bg-white text-gray-700 hover:bg-gray-50 cursor-pointer hover:border-blue-300'
-                  }`}
-                >
-                  {isUploadingPdf ? (
-                    <>
-                      <Loader size={16} className="animate-spin mr-2" />
-                      Przetwarzanie...
-                    </>
-                  ) : (
-                    <>
-                      <Upload size={16} className="mr-2" />
-                      Wybierz plik PDF
-                    </>
-                  )}
-                </button>
+              {/* Linia podziału i sekcja PDF */}
+              <div className="border-t border-gray-200 pt-4 mt-4">
+                <label className="block text-sm font-medium text-gray-700 mb-3">
+                  Źródła PDF:
+                  <span className="text-gray-400 font-normal ml-1">(opcjonalnie, max 10MB)</span>
+                </label>
 
-                <span className="text-xs text-gray-500">
-                  Obsługujemy pliki PDF z tekstem (nie skany)
-                </span>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={handleOpenPdfDialog}
+                    disabled={isGeneratingToc || isSaving || isScrapingUrls || isScrapingSingleUrl || isUploadingPdf}
+                    className={`flex items-center px-4 py-2 border border-dashed border-gray-300 rounded-lg transition-colors ${
+                      isGeneratingToc || isSaving || isScrapingUrls || isScrapingSingleUrl || isUploadingPdf
+                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                        : 'bg-white text-gray-700 hover:bg-gray-50 cursor-pointer hover:border-blue-300'
+                    }`}
+                  >
+                    {isUploadingPdf ? (
+                      <>
+                        <Loader size={16} className="animate-spin mr-2" />
+                        Przetwarzanie...
+                      </>
+                    ) : (
+                      <>
+                        <Upload size={16} className="mr-2" />
+                        Wybierz plik PDF
+                      </>
+                    )}
+                  </button>
+
+                  <span className="text-xs text-gray-500">
+                    Obsługujemy pliki PDF z tekstem (nie skany)
+                  </span>
+                </div>
+
+                <input
+                  type="file"
+                  ref={pdfInputRef}
+                  className="hidden"
+                  accept=".pdf,application/pdf"
+                  onChange={handlePdfUpload}
+                />
               </div>
-
-              <input
-                type="file"
-                ref={pdfInputRef}
-                className="hidden"
-                accept=".pdf,application/pdf"
-                onChange={handlePdfUpload}
-              />
           </div>
+
           {/* Podgląd pobranych treści */}
             {scrapedContent.length > 0 && (
               <div className="mt-4 border-t border-gray-200 pt-6">
