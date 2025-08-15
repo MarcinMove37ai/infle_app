@@ -2,6 +2,7 @@
 
 "use client"
 import React, { useState, useRef, useEffect } from 'react';
+import SourcePreviewModal from '@/components/ebooks/SourcePreviewModal';
 import {
   BookOpen, Edit, Search, Plus, ArrowUp, ArrowDown,
   X, Check, AlertCircle, Loader, ChevronLeft, Save,
@@ -48,19 +49,17 @@ interface EbookCoverData {
 
 // Główny komponent generatora ebooków
 const EbookGenerator = () => {
-
+  const [sourcePreviewModal, setSourcePreviewModal] = useState({
+      isVisible: false,
+      sourceType: null as 'web' | 'pdf' | null,
+      content: null as ScrapedContent | null,
+      status: null as 'success' | 'error' | 'empty' | null,
+      errorDetails: ''
+  });
   // NOWE STANY dla PDF upload
     const [isUploadingPdf, setIsUploadingPdf] = useState(false);
-    const [pdfUploadResult, setPdfUploadResult] = useState<'success' | 'error' | null>(null);
-    const [pdfUploadError, setPdfUploadError] = useState<string>('');
-    const [showPdfUploadPreview, setShowPdfUploadPreview] = useState(false);
-    const [previewPdfContent, setPreviewPdfContent] = useState<ScrapedContent | null>(null);
     // NOWE STANY dla single URL scraping
-  const [scrapingResult, setScrapingResult] = useState<'success' | 'empty' | 'error' | null>(null);
-  const [scrapingErrorDetails, setScrapingErrorDetails] = useState<string>('');
   const [pendingUrl, setPendingUrl] = useState('');
-  const [previewScrapedContent, setPreviewScrapedContent] = useState<ScrapedContent | null>(null);
-  const [showScrapingPreview, setShowScrapingPreview] = useState(false);
   const [isScrapingSingleUrl, setIsScrapingSingleUrl] = useState(false);
   // Istniejące stany aplikacji
   const [isGeneratingAllImages, setIsGeneratingAllImages] = useState(false);
@@ -391,8 +390,6 @@ const EbookGenerator = () => {
 
       setIsScrapingSingleUrl(true);
       setError(null);
-      setScrapingResult(null);
-      setScrapingErrorDetails('');
 
       try {
         const response = await fetch('/api/scrape-urls', {
@@ -409,46 +406,39 @@ const EbookGenerator = () => {
 
         const data = await response.json();
 
-        // ZAWSZE pokazuj modal - niezależnie od wyniku
+       // ZAWSZE pokazuj modal - niezależnie od wyniku
         if (data.scrapedContent && data.scrapedContent.length > 0) {
           // Sukces z treścią
-          setPreviewScrapedContent(data.scrapedContent[0]);
-          setScrapingResult('success');
+          showSourcePreview('web', data.scrapedContent[0], 'success');
         } else if (data.errors && data.errors.length > 0) {
           // Błąd scrapingu
-          setPreviewScrapedContent({
+          const errorContent = {
             url: url,
             title: 'Błąd scrapingu',
             content: ''
-          });
-          setScrapingResult('error');
-          setScrapingErrorDetails(data.errors[0].error || 'Nieznany błąd');
+          };
+          showSourcePreview('web', errorContent, 'error', data.errors[0].error || 'Nieznany błąd');
         } else {
           // Pusta treść
-          setPreviewScrapedContent({
+          const emptyContent = {
             url: url,
             title: 'Brak treści',
             content: ''
-          });
-          setScrapingResult('empty');
-          setScrapingErrorDetails('Nie znaleziono treści na tej stronie lub treść jest za krótka');
+          };
+          showSourcePreview('web', emptyContent, 'empty', 'Nie znaleziono treści na tej stronie lub treść jest za krótka');
         }
 
-        setShowScrapingPreview(true);
-
       } catch (err) {
-        console.error('Błąd scraping single URL:', err);
+          console.error('Błąd scraping single URL:', err);
 
-        // Pokaż modal z błędem
-        setPreviewScrapedContent({
-          url: url,
-          title: 'Błąd połączenia',
-          content: ''
-        });
-        setScrapingResult('error');
-        setScrapingErrorDetails(err instanceof Error ? err.message : 'Nie udało się połączyć z serwerem');
-        setShowScrapingPreview(true);
-      } finally {
+          // Pokaż modal z błędem
+          const errorContent = {
+            url: url,
+            title: 'Błąd połączenia',
+            content: ''
+          };
+          showSourcePreview('web', errorContent, 'error', err instanceof Error ? err.message : 'Nie udało się połączyć z serwerem');
+        } finally {
         setIsScrapingSingleUrl(false);
       }
     };
@@ -459,40 +449,6 @@ const EbookGenerator = () => {
       console.log('🗑️ Usunięto źródło:', urlToRemove);
     };
 
-  // FUNKCJE obsługi modala podglądu treści
-    const handleAcceptScrapedContent = () => {
-      if (previewScrapedContent) {
-        setScrapedContent(prev => [...prev, previewScrapedContent]);
-
-        // Wyczyść input URL, który został zatwierdzony
-        const urlIndex = urlInputs.findIndex(url => url === previewScrapedContent.url);
-        if (urlIndex !== -1) {
-          const newUrls = [...urlInputs];
-          newUrls[urlIndex] = '';
-          setUrlInputs(newUrls);
-        }
-      }
-
-      // Zamknij modal i wyczyść stan
-      setShowScrapingPreview(false);
-      setPreviewScrapedContent(null);
-    };
-
-    const handleRejectScrapedContent = () => {
-      // Wyczyść input URL, który został odrzucony
-      if (previewScrapedContent) {
-        const urlIndex = urlInputs.findIndex(url => url === previewScrapedContent.url);
-        if (urlIndex !== -1) {
-          const newUrls = [...urlInputs];
-          newUrls[urlIndex] = '';
-          setUrlInputs(newUrls);
-        }
-      }
-
-      // Zamknij modal i wyczyść stan
-      setShowScrapingPreview(false);
-      setPreviewScrapedContent(null);
-    };
 
   // NOWE FUNKCJE dla PDF upload
     const handlePdfUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -514,8 +470,6 @@ const EbookGenerator = () => {
 
       setIsUploadingPdf(true);
       setError(null);
-      setPdfUploadResult(null);
-      setPdfUploadError('');
 
       try {
         const formData = new FormData();
@@ -531,26 +485,34 @@ const EbookGenerator = () => {
         if (response.ok && data.success) {
           // Sukces - pokaż preview
           if (data.scrapedContent && data.scrapedContent.length > 0) {
-            setPreviewPdfContent(data.scrapedContent[0]);
-            setPdfUploadResult('success');
-            setShowPdfUploadPreview(true);
+            showSourcePreview('pdf', data.scrapedContent[0], 'success');
           } else {
-            setPdfUploadResult('error');
-            setPdfUploadError('Nie udało się wyodrębnić tekstu z PDF');
-            setShowPdfUploadPreview(true);
+            const errorContent = {
+              url: file.name,
+              title: 'Błąd wyodrębniania',
+              content: ''
+            };
+            showSourcePreview('pdf', errorContent, 'error', 'Nie udało się wyodrębnić tekstu z PDF');
           }
         } else {
           // Błąd
-          setPdfUploadResult('error');
-          setPdfUploadError(data.error || 'Nieznany błąd podczas przetwarzania PDF');
-          setShowPdfUploadPreview(true);
+          const errorContent = {
+            url: file.name,
+            title: 'Błąd przetwarzania',
+            content: ''
+          };
+          showSourcePreview('pdf', errorContent, 'error', data.error || 'Nieznany błąd podczas przetwarzania PDF');
         }
 
       } catch (err) {
-        console.error('Błąd upload PDF:', err);
-        setPdfUploadResult('error');
-        setPdfUploadError('Błąd połączenia z serwerem');
-        setShowPdfUploadPreview(true);
+          console.error('Błąd upload PDF:', err);
+
+          const errorContent = {
+            url: file.name,
+            title: 'Błąd połączenia',
+            content: ''
+          };
+          showSourcePreview('pdf', errorContent, 'error', 'Błąd połączenia z serwerem');
       } finally {
         setIsUploadingPdf(false);
         // Wyczyść input
@@ -560,19 +522,63 @@ const EbookGenerator = () => {
       }
     };
 
-    // FUNKCJE do obsługi PDF preview modal
-    const handleAcceptPdfContent = () => {
-      if (previewPdfContent) {
-        setScrapedContent(prev => [...prev, previewPdfContent]);
-        console.log('📄 Dodano treść z PDF:', previewPdfContent.title);
-      }
-      setShowPdfUploadPreview(false);
-      setPreviewPdfContent(null);
+    const showSourcePreview = (
+      sourceType: 'web' | 'pdf',
+      content: ScrapedContent,
+      status: 'success' | 'error' | 'empty',
+      errorDetails?: string
+    ) => {
+      setSourcePreviewModal({
+        isVisible: true,
+        sourceType,
+        content,
+        status,
+        errorDetails: errorDetails || ''
+      });
     };
 
-    const handleRejectPdfContent = () => {
-      setShowPdfUploadPreview(false);
-      setPreviewPdfContent(null);
+    const handleSourceAccept = (content: ScrapedContent) => {
+      setScrapedContent(prev => [...prev, content]);
+
+      // Wyczyść input URL jeśli to był web scraping
+      if (sourcePreviewModal.sourceType === 'web') {
+        const urlIndex = urlInputs.findIndex(url => url === content.url);
+        if (urlIndex !== -1) {
+          const newUrls = [...urlInputs];
+          newUrls[urlIndex] = '';
+          setUrlInputs(newUrls);
+        }
+      }
+
+      // Zamknij modal
+      setSourcePreviewModal({
+        isVisible: false,
+        sourceType: null,
+        content: null,
+        status: null,
+        errorDetails: ''
+      });
+    };
+
+    const handleSourceReject = () => {
+      // Wyczyść input URL jeśli to był web scraping
+      if (sourcePreviewModal.sourceType === 'web' && sourcePreviewModal.content) {
+        const urlIndex = urlInputs.findIndex(url => url === sourcePreviewModal.content!.url);
+        if (urlIndex !== -1) {
+          const newUrls = [...urlInputs];
+          newUrls[urlIndex] = '';
+          setUrlInputs(newUrls);
+        }
+      }
+
+      // Zamknij modal
+      setSourcePreviewModal({
+        isVisible: false,
+        sourceType: null,
+        content: null,
+        status: null,
+        errorDetails: ''
+      });
     };
 
     const handleOpenPdfDialog = () => {
@@ -742,16 +748,18 @@ const EbookGenerator = () => {
   };
 
   const changeStep = (newStep: number) => {
-    const hasDescriptionChanged = description !== originalDescription;
-    const hasUrlsChanged = JSON.stringify(urlInputs) !== JSON.stringify(originalUrlInputs);
+      const hasDescriptionChanged = description !== originalDescription;
+      const hasUrlsChanged = JSON.stringify(urlInputs) !== JSON.stringify(originalUrlInputs);
+      const hasSourcesChanged = scrapedContent.length > 0; // NOWA LINIA
 
-    if (newStep === 2 && step === 1 && tocGenerated &&
-       (title !== originalTitle ||
-        subtitle !== originalSubtitle ||
-        hasDescriptionChanged ||
-        hasUrlsChanged)) {
-      setShowRegeneratePopup(true);
-    }
+      if (newStep === 2 && step === 1 && tocGenerated &&
+         (title !== originalTitle ||
+          subtitle !== originalSubtitle ||
+          hasDescriptionChanged ||
+          hasUrlsChanged ||
+          hasSourcesChanged)) { // DODANA ZMIANA
+        setShowRegeneratePopup(true);
+      }
     else if (newStep === 3 && step === 2) {
       console.log('🔄 Przechodzenie do kroku 3 - synchronizacja statusu rozdziałów...');
 
@@ -3736,6 +3744,16 @@ const EbookGenerator = () => {
 
       {showRegeneratePopup && renderRegeneratePopup()}
       {showChapterRegeneratePopup && renderChapterRegeneratePopup()}
+      {/* NOWY MODAL - testowy */}
+      <SourcePreviewModal
+        isVisible={sourcePreviewModal.isVisible}
+        sourceType={sourcePreviewModal.sourceType || 'web'}
+        content={sourcePreviewModal.content}
+        status={sourcePreviewModal.status || 'success'}
+        errorDetails={sourcePreviewModal.errorDetails}
+        onAccept={handleSourceAccept}
+        onReject={handleSourceReject}
+      />
 
       {previewImage && (
         <div
@@ -3779,192 +3797,6 @@ const EbookGenerator = () => {
           onClose={() => setShowPromptPreview(null)}
         />
       )}
-
-      {showScrapingPreview && previewScrapedContent && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-            <div className="bg-white rounded-xl shadow-2xl p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto animate-fadeIn">
-              <div className="flex justify-between items-start mb-4">
-                <h3 className="text-xl font-bold text-gray-800">Podgląd pobranej treści</h3>
-                <button
-                  onClick={handleRejectScrapedContent}
-                  className="text-gray-500 hover:text-gray-700 cursor-pointer"
-                >
-                  <X size={24} />
-                </button>
-              </div>
-
-              <div className="mb-6">
-                {/* Status scraping */}
-                {scrapingResult === 'success' && (
-                  <div className="bg-green-50 p-3 rounded-lg border border-green-200 mb-4">
-                    <div className="flex items-center text-green-700">
-                      <Check size={16} className="mr-2" />
-                      <span className="font-medium">Treść pobrana pomyślnie</span>
-                    </div>
-                  </div>
-                )}
-
-                {scrapingResult === 'error' && (
-                  <div className="bg-red-50 p-3 rounded-lg border border-red-200 mb-4">
-                    <div className="flex items-start text-red-700">
-                      <AlertCircle size={16} className="mr-2 mt-0.5 flex-shrink-0" />
-                      <div>
-                        <span className="font-medium block">Błąd podczas pobierania</span>
-                        <span className="text-sm">{scrapingErrorDetails}</span>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {scrapingResult === 'empty' && (
-                  <div className="bg-yellow-50 p-3 rounded-lg border border-yellow-200 mb-4">
-                    <div className="flex items-start text-yellow-700">
-                      <AlertCircle size={16} className="mr-2 mt-0.5 flex-shrink-0" />
-                      <div>
-                        <span className="font-medium block">Brak treści</span>
-                        <span className="text-sm">{scrapingErrorDetails}</span>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                <div className="bg-blue-50 p-4 rounded-lg border border-blue-200 mb-4">
-                  <h4 className="font-medium text-blue-800 mb-2">Tytuł:</h4>
-                  <p className="text-blue-700">{previewScrapedContent.title}</p>
-                </div>
-
-                <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 mb-4">
-                  <h4 className="font-medium text-gray-700 mb-2">URL:</h4>
-                  <p className="text-gray-600 text-sm break-all">{previewScrapedContent.url}</p>
-                </div>
-
-                <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                  <h4 className="font-medium text-gray-700 mb-2">
-                    Treść ({previewScrapedContent.content.length} znaków):
-                  </h4>
-                  {previewScrapedContent.content.length > 0 ? (
-                    <div className="text-gray-600 text-sm max-h-48 overflow-y-auto whitespace-pre-wrap">
-                      {previewScrapedContent.content}
-                    </div>
-                  ) : (
-                    <div className="text-gray-400 text-sm italic">
-                      Brak treści do wyświetlenia
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-3">
-                <button
-                  onClick={handleRejectScrapedContent}
-                  className="px-6 py-2.5 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50 transition-all duration-200 cursor-pointer"
-                >
-                  {scrapingResult === 'success' ? 'Odrzuć' : 'Zamknij'}
-                </button>
-
-                <button
-                  onClick={handleAcceptScrapedContent}
-                  disabled={scrapingResult !== 'success'}
-                  className={`px-6 py-2.5 rounded-lg font-medium transition-all duration-200 ${
-                    scrapingResult === 'success'
-                      ? 'bg-blue-600 text-white hover:bg-blue-700 cursor-pointer'
-                      : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                  }`}
-                  title={scrapingResult !== 'success' ? 'Można dodać tylko źródła z poprawną treścią' : ''}
-                >
-                  {scrapingResult === 'success' ? 'Dodaj do źródeł' : 'Nie można dodać'}
-                </button>
-              </div>
-            </div>
-          </div>
-      )}
-      {/* PDF Upload Preview Modal */}
-        {showPdfUploadPreview && previewPdfContent && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-            <div className="bg-white rounded-xl shadow-2xl p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto animate-fadeIn">
-              <div className="flex justify-between items-start mb-4">
-                <h3 className="text-xl font-bold text-gray-800">Podgląd tekstu z PDF</h3>
-                <button
-                  onClick={handleRejectPdfContent}
-                  className="text-gray-500 hover:text-gray-700 cursor-pointer"
-                >
-                  <X size={24} />
-                </button>
-              </div>
-
-              <div className="mb-6">
-                {/* Status upload */}
-                {pdfUploadResult === 'success' && (
-                  <div className="bg-green-50 p-3 rounded-lg border border-green-200 mb-4">
-                    <div className="flex items-center text-green-700">
-                      <Check size={16} className="mr-2" />
-                      <span className="font-medium">Tekst wyodrębniony pomyślnie</span>
-                    </div>
-                  </div>
-                )}
-
-                {pdfUploadResult === 'error' && (
-                  <div className="bg-red-50 p-3 rounded-lg border border-red-200 mb-4">
-                    <div className="flex items-start text-red-700">
-                      <AlertCircle size={16} className="mr-2 mt-0.5 flex-shrink-0" />
-                      <div>
-                        <span className="font-medium block">Błąd podczas przetwarzania PDF</span>
-                        <span className="text-sm">{pdfUploadError}</span>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                <div className="bg-blue-50 p-4 rounded-lg border border-blue-200 mb-4">
-                  <h4 className="font-medium text-blue-800 mb-2">Tytuł dokumentu:</h4>
-                  <p className="text-blue-700">{previewPdfContent.title}</p>
-                </div>
-
-                <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 mb-4">
-                  <h4 className="font-medium text-gray-700 mb-2">Źródło:</h4>
-                  <p className="text-gray-600 text-sm">{previewPdfContent.url}</p>
-                </div>
-
-                <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                  <h4 className="font-medium text-gray-700 mb-2">
-                    Wyodrębniony tekst ({previewPdfContent.content.length} znaków):
-                  </h4>
-                  {previewPdfContent.content.length > 0 ? (
-                    <div className="text-gray-600 text-sm max-h-48 overflow-y-auto whitespace-pre-wrap">
-                      {previewPdfContent.content}
-                    </div>
-                  ) : (
-                    <div className="text-gray-400 text-sm italic">
-                      Nie udało się wyodrębnić tekstu z tego PDF
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-3">
-                <button
-                  onClick={handleRejectPdfContent}
-                  className="px-6 py-2.5 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50 transition-all duration-200 cursor-pointer"
-                >
-                  {pdfUploadResult === 'success' ? 'Odrzuć' : 'Zamknij'}
-                </button>
-
-                <button
-                  onClick={handleAcceptPdfContent}
-                  disabled={pdfUploadResult !== 'success'}
-                  className={`px-6 py-2.5 rounded-lg font-medium transition-all duration-200 ${
-                    pdfUploadResult === 'success'
-                      ? 'bg-blue-600 text-white hover:bg-blue-700 cursor-pointer'
-                      : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                  }`}
-                  title={pdfUploadResult !== 'success' ? 'Można dodać tylko PDF z poprawnie wyodrębnionym tekstem' : ''}
-                >
-                  {pdfUploadResult === 'success' ? 'Dodaj do źródeł' : 'Nie można dodać'}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
       <style jsx global>{`
         button:not(:disabled),
         .cursor-pointer,
@@ -4032,6 +3864,7 @@ const EbookGenerator = () => {
           color: #333;
         }
       `}</style>
+
     </div>
   );
 };
