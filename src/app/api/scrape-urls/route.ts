@@ -199,11 +199,7 @@ async function scrapeWithPuppeteer(url: string): Promise<{ title: string; conten
 
     console.log(`🚀 Final executable path: ${executablePath}`);
 
-    // 🆕 SPECJALNE USTAWIENIA DLA SOCIAL MEDIA
-    const isSocialMedia = url.includes('instagram.com') || url.includes('facebook.com') ||
-                         url.includes('twitter.com') || url.includes('tiktok.com') ||
-                         url.includes('linkedin.com') || url.includes('youtube.com');
-
+    // 🆕 BAZOWE ARGUMENTY + SPECJALNE DLA SOCIAL MEDIA
     let launchArgs = isProduction ? [
       ...chromium.args,
       '--no-sandbox',
@@ -217,13 +213,12 @@ async function scrapeWithPuppeteer(url: string): Promise<{ title: string; conten
     ] : chromium.args;
 
     // 🆕 DODATKOWE USTAWIENIA DLA SOCIAL MEDIA (anty-detection)
+    const isSocialMedia = url.includes('instagram.com') || url.includes('facebook.com') ||
+                         url.includes('twitter.com') || url.includes('tiktok.com') ||
+                         url.includes('linkedin.com') || url.includes('youtube.com');
+
     if (isSocialMedia) {
       console.log('📱 SOCIAL MEDIA: Dodanie specjalnych ustawień anty-detection...');
-
-      // W development można użyć non-headless dla lepszego efektu
-      if (!isProduction) {
-        console.log('🖥️ DEVELOPMENT: Rozważam non-headless mode dla social media...');
-      }
 
       // Dodatkowe argumenty anty-detection
       const antiDetectionArgs = [
@@ -250,8 +245,8 @@ async function scrapeWithPuppeteer(url: string): Promise<{ title: string; conten
       args: launchArgs,
       defaultViewport: chromium.defaultViewport,
       executablePath,
-      headless: true, // Dla social media można zmienić na false w development
-      ignoreDefaultArgs: ['--enable-automation'],
+      headless: true,
+      ignoreDefaultArgs: isSocialMedia ? ['--enable-automation'] : false, // 🆕 Tylko dla social media
       timeout: 30000
     });
 
@@ -293,11 +288,12 @@ async function scrapeWithPuppeteer(url: string): Promise<{ title: string; conten
       });
     }
 
-    // Ustaw timeouty
-    page.setDefaultTimeout(90000); // Zwiększone dla social media
-    page.setDefaultNavigationTimeout(90000);
+    // Ustaw timeouty - ZACHOWANE + zwiększone dla social media
+    const timeoutValue = isSocialMedia ? 90000 : 60000;
+    page.setDefaultTimeout(timeoutValue);
+    page.setDefaultNavigationTimeout(timeoutValue);
 
-    // 🆕 SPECJALNY USER AGENT DLA SOCIAL MEDIA
+    // 🆕 SPECJALNY USER AGENT DLA SOCIAL MEDIA - RESZTA ZACHOWANA
     let userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
     if (isSocialMedia) {
@@ -311,7 +307,7 @@ async function scrapeWithPuppeteer(url: string): Promise<{ title: string; conten
     // Ustaw viewport
     await page.setViewport({ width: 1920, height: 1080 });
 
-    // 🆕 SPECJALNE HEADERS DLA SOCIAL MEDIA
+    // 🆕 HEADERS - BAZOWE + SPECJALNE DLA SOCIAL MEDIA
     const headers: Record<string, string> = {
       'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
       'Accept-Language': 'pl-PL,pl;q=0.9,en;q=0.8',
@@ -334,13 +330,17 @@ async function scrapeWithPuppeteer(url: string): Promise<{ title: string; conten
 
     await page.setExtraHTTPHeaders(headers);
 
-    // Specjalne ustawienia dla Eureka (zachowane)
+    // ZACHOWANE: Specjalne ustawienia dla Eureka
     if (url.includes('eureka.mf.gov.pl')) {
       console.log('💰 EUREKA: Ustawianie specjalnych headers i cookies...');
+
+      // Dodaj referer
       await page.setExtraHTTPHeaders({
         'Referer': 'https://eureka.mf.gov.pl/',
         'Origin': 'https://eureka.mf.gov.pl'
       });
+
+      // Ustaw podstawowe cookies
       await page.setCookie({
         name: 'language',
         value: 'pl',
@@ -348,11 +348,12 @@ async function scrapeWithPuppeteer(url: string): Promise<{ title: string; conten
       });
     }
 
-    // 🆕 REQUEST INTERCEPTION - różne dla social media
+    // 🆕 INTERCEPTION - RÓŻNE STRATEGIE
     if (isSocialMedia) {
       console.log('📱 SOCIAL MEDIA: Pozwalam na wszystkie requesty (pełny JS + CSS)');
       // Dla social media nie blokuj niczego - potrzebują pełnej funkcjonalności
     } else if (!url.includes('eureka.mf.gov.pl')) {
+      // ZACHOWANE: Standardowa interception dla innych stron
       await page.setRequestInterception(true);
       page.on('request', (req) => {
         if (req.resourceType() === 'stylesheet' || req.resourceType() === 'font' || req.resourceType() === 'image') {
@@ -367,14 +368,14 @@ async function scrapeWithPuppeteer(url: string): Promise<{ title: string; conten
 
     console.log('📡 NAWIGACJA DO STRONY...');
 
-    // Sprawdź czy URL ma dziwne kodowanie (dla Eureka)
+    // ZACHOWANE: Sprawdź czy URL ma dziwne kodowanie (dla Eureka)
     let targetUrl = url;
     if (url.includes('eureka.mf.gov.pl') && url.includes(';keyWords=')) {
       const baseUrl = url.split(';')[0];
       console.log(`💰 EUREKA: Spróbuję też prostszego URL: ${baseUrl}`);
     }
 
-    // 🆕 SPECJALNA STRATEGIA NAWIGACJI DLA SOCIAL MEDIA
+    // 🆕 NAWIGACJA - SPECJALNA DLA SOCIAL MEDIA + ZACHOWANA DLA RESZTY
     if (isSocialMedia) {
       console.log('📱 SOCIAL MEDIA: Użycie specjalnej strategii nawigacji...');
 
@@ -403,7 +404,7 @@ async function scrapeWithPuppeteer(url: string): Promise<{ title: string; conten
         }
       }
     } else {
-      // Standardowa nawigacja dla innych stron (zachowane)
+      // ZACHOWANE: Standardowe strategie nawigacji dla innych stron
       try {
         await page.goto(targetUrl, {
           waitUntil: 'domcontentloaded',
@@ -412,7 +413,7 @@ async function scrapeWithPuppeteer(url: string): Promise<{ title: string; conten
         console.log('✅ Strategia 1: domcontentloaded - sukces');
       } catch (error) {
         console.log('❌ Strategia 1 nie powiodła się, próbuję strategię 2...');
-        // ... reszta strategii zachowana ...
+
         try {
           await page.goto(targetUrl, {
             waitUntil: 'load',
@@ -420,11 +421,34 @@ async function scrapeWithPuppeteer(url: string): Promise<{ title: string; conten
           });
           console.log('✅ Strategia 2: load - sukces');
         } catch (error2) {
-          await page.goto(targetUrl, {
-            waitUntil: 'networkidle0',
-            timeout: 60000
-          });
-          console.log('✅ Strategia 3: networkidle0 - sukces');
+          console.log('❌ Strategia 2 nie powiodła się, próbuję strategię 3...');
+
+          if (url.includes('eureka.mf.gov.pl') && url.includes(';keyWords=')) {
+            // ZACHOWANE: Strategia 3 dla Eureka
+            const simpleUrl = url.split(';')[0];
+            console.log(`💰 EUREKA: Próbuję prostszy URL: ${simpleUrl}`);
+
+            try {
+              await page.goto(simpleUrl, {
+                waitUntil: 'domcontentloaded',
+                timeout: 45000
+              });
+              console.log('✅ Strategia 3: prosty URL - sukces');
+              targetUrl = simpleUrl;
+            } catch (error3) {
+              await page.goto(url, {
+                waitUntil: 'networkidle0',
+                timeout: 60000
+              });
+              console.log('✅ Strategia 4: networkidle0 - sukces');
+            }
+          } else {
+            await page.goto(targetUrl, {
+              waitUntil: 'networkidle0',
+              timeout: 60000
+            });
+            console.log('✅ Strategia 3: networkidle0 - sukces');
+          }
         }
       }
     }
@@ -488,11 +512,77 @@ async function scrapeWithPuppeteer(url: string): Promise<{ title: string; conten
         }
       }
 
-      // Eureka handling (zachowane)
+      // ZACHOWANE: Specjalne czekanie dla Eureka
       else if (url.includes('eureka.mf.gov.pl')) {
-        // ... kod dla Eureka zachowany ...
         console.log('💰 EUREKA: Sprawdzanie czy strona się załadowała...');
-        // ... reszta kodu Eureka ...
+
+        const currentUrl = page.url();
+        console.log(`🔗 EUREKA: Obecny URL: ${currentUrl}`);
+
+        if (currentUrl.includes('eureka.mf.gov.pl') && !currentUrl.includes('podglad')) {
+          console.log('💰 EUREKA: Przekierowano na stronę główną, próbuję nawigacji...');
+
+          try {
+            const searchForm = await page.$('input[type="text"], input[name*="search"], input[id*="search"]');
+            if (searchForm) {
+              console.log('💰 EUREKA: Znaleziono pole wyszukiwania, wpisuję ID...');
+              await searchForm.type('311009');
+
+              const submitBtn = await page.$('button[type="submit"], input[type="submit"], .btn-search');
+              if (submitBtn) {
+                await submitBtn.click();
+                await delay(5000);
+              }
+            }
+          } catch (navError) {
+            const errorMessage = getErrorMessage(navError);
+            console.log('❌ EUREKA: Nie udało się nawigować przez formularz:', errorMessage);
+          }
+        }
+
+        // ZACHOWANE: Eureka selectors
+        const selectors = [
+          '.content-main',
+          '.document-content',
+          '.interpretation-content',
+          'main',
+          '[data-content]',
+          '.panel-body',
+          '.card-body',
+          '.text-content',
+          '.document-text',
+          '.interpretation-text',
+          '.content-wrapper',
+          '[class*="content"]'
+        ];
+
+        let foundElement = false;
+        for (const selector of selectors) {
+          try {
+            await page.waitForSelector(selector, { timeout: 5000 });
+            console.log(`✅ EUREKA: Znaleziono element "${selector}"`);
+            foundElement = true;
+            break;
+          } catch (e) {
+            console.log(`❌ EUREKA: Brak elementu "${selector}"`);
+          }
+        }
+
+        if (!foundElement) {
+          console.log('⚠️ EUREKA: Nie znaleziono żadnych elementów treści, próbuję dłuższe czekanie...');
+        }
+
+        console.log('⏳ EUREKA: Czekanie na JavaScript (10s)...');
+        await delay(10000);
+
+        const bodyText = await page.evaluate(() => document.body.textContent || '');
+        console.log(`💰 EUREKA: Długość tekstu po oczekiwaniu: ${bodyText.length} znaków`);
+
+        if (bodyText.includes('INTERPRETACJA') || bodyText.includes('interpretacja')) {
+          console.log('✅ EUREKA: Znaleziono słowa kluczowe interpretacji!');
+        } else {
+          console.log('⚠️ EUREKA: Brak słów kluczowych interpretacji w treści');
+        }
       }
 
     } catch (error) {
@@ -502,7 +592,7 @@ async function scrapeWithPuppeteer(url: string): Promise<{ title: string; conten
 
     console.log('📄 WYCIĄGANIE TREŚCI...');
 
-    // 🆕 SPECJALNE WYCIĄGANIE TREŚCI DLA SOCIAL MEDIA
+    // 🆕 SPECJALNE WYCIĄGANIE TREŚCI + ZACHOWANE STANDARDOWE
     const pageData = await page.evaluate((currentUrl) => {
       // Usuń niepotrzebne elementy
       const unwanted = document.querySelectorAll('script, style, nav, header, footer, .menu, .navigation, .cookie, .banner');
@@ -537,18 +627,6 @@ async function scrapeWithPuppeteer(url: string): Promise<{ title: string; conten
         }
 
         // Treść z Instagram - bardzo specyficzne selektory
-        const instagramContentSelectors = [
-          'article',
-          '[role="main"]',
-          'main section',
-          'section',
-          'div[style*="flex-direction"]',
-          'div[style*="display: flex"]',
-          '[data-testid]',
-          'span',
-          'div'
-        ];
-
         console.log('Próbuję wyciągnąć treść z Instagram...');
 
         // Zbierz wszystkie teksty ze strony
@@ -586,9 +664,9 @@ async function scrapeWithPuppeteer(url: string): Promise<{ title: string; conten
         }
       }
 
-      // Standardowe selektory dla innych stron (zachowane)
+      // ZACHOWANE: Standardowe selektory dla innych stron
       else {
-        // Znajdź tytuł
+        // Tytuł - ZACHOWANE selektory
         const titleSelectors = [
           'h1', 'h2', '.page-title', '.document-title',
           '.interpretation-title', '.main-title', '.content-title', 'title'
@@ -603,7 +681,7 @@ async function scrapeWithPuppeteer(url: string): Promise<{ title: string; conten
           }
         }
 
-        // Znajdź treść
+        // Treść - ZACHOWANE selektory + ulepszone dla Eureka
         const contentSelectors = [
           '.content-main', '.document-content', '.interpretation-content',
           '.main-content', '#content', '.text-content', 'main',
@@ -620,7 +698,7 @@ async function scrapeWithPuppeteer(url: string): Promise<{ title: string; conten
           }
         }
 
-        // Fallback - zbierz wszystkie paragrafy i div-y z tekstem (zachowane)
+        // ZACHOWANE: Fallback
         if (!content || content.length < 200) {
           console.log('Fallback: zbieranie wszystkich elementów tekstowych...');
           const textElements = document.querySelectorAll('p, div, span, td');
@@ -645,6 +723,18 @@ async function scrapeWithPuppeteer(url: string): Promise<{ title: string; conten
             console.log(`Użyto fallback (${content.length} znaków)`);
           }
         }
+
+        // ZACHOWANE: Ultimate fallback
+        if (!content || content.length < 100) {
+          const bodyText = document.body?.textContent || '';
+          if (bodyText.includes('INTERPRETACJA') ||
+              bodyText.includes('interpretacja') ||
+              bodyText.includes('UZASADNIENIE') ||
+              bodyText.includes('uzasadnienie')) {
+            content = bodyText;
+            console.log(`Ultimate fallback - użyto body (${content.length} znaków)`);
+          }
+        }
       }
 
       return {
@@ -661,7 +751,7 @@ async function scrapeWithPuppeteer(url: string): Promise<{ title: string; conten
     console.log(`   📄 Body: ${pageData.bodyLength} znaków`);
     console.log(`   🔗 URL: ${pageData.url}`);
 
-    // Określ źródło
+    // Określ źródło + NOWE dla social media
     let source = 'Web (JS)';
     if (url.includes('instagram.com')) {
       source = 'Instagram (JS)';
