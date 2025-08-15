@@ -271,9 +271,16 @@ async function scrapeWithPuppeteer(url: string): Promise<{ title: string; conten
       // Mockuj permissions
       await page.evaluateOnNewDocument(() => {
         const originalQuery = window.navigator.permissions.query;
-        return window.navigator.permissions.query = (parameters) => (
+        return window.navigator.permissions.query = (parameters: PermissionDescriptor) => (
           parameters.name === 'notifications' ?
-            Promise.resolve({ state: Notification.permission }) :
+            Promise.resolve({
+              state: Notification.permission,
+              name: 'notifications',
+              onchange: null,
+              addEventListener: () => {},
+              removeEventListener: () => {},
+              dispatchEvent: () => false
+            } as PermissionStatus) :
             originalQuery(parameters)
         );
       });
