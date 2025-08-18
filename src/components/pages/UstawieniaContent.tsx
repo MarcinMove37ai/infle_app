@@ -1,10 +1,11 @@
 // src/components/pages/UstawieniaContent.tsx
 'use client';
 
+import DiskExplorerModal from '@/components/ui/DiskExplorerModal';
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   User, Key, Eye, EyeOff, Save, Trash2, CheckCircle, AlertCircle, Loader2,
-  Palette, Type, ChevronDown, Check, Image as ImageIcon, X, AlertTriangle
+  Palette, Type, ChevronDown, Check, Image as ImageIcon, X, AlertTriangle, FolderOpen
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -174,7 +175,7 @@ export default function UstawieniaContent() {
   });
 
   const [message, setMessage] = useState<{type: 'success' | 'error', text: string} | null>(null);
-
+  const [isDiskExplorerOpen, setIsDiskExplorerOpen] = useState(false);
   // ✅ NOWE: Funkcje do zarządzania kluczami API
   const loadApiKeysStatus = useCallback(async () => {
     if (!user?.id) return;
@@ -465,7 +466,7 @@ export default function UstawieniaContent() {
     }));
   }, []);
 
-  // 🆕 ZAKTUALIZOWANA Obsługa kluczy API - mapowanie provider na klucz
+  // 🆕 POPRAWIONA Obsługa kluczy API - bezpieczna aktualizacja
   const updateApiKey = useCallback((provider: string, value: string) => {
     const providerKeyMap: Record<string, string> = {
       'google': 'google',
@@ -476,7 +477,11 @@ export default function UstawieniaContent() {
 
     setApiKeys(prev => ({
       ...prev,
-      [keyName]: { ...prev[keyName], value, isSaved: false }
+      [keyName]: {
+        value: value,
+        showValue: prev[keyName]?.showValue || false, // Bezpieczny dostęp do poprzedniej wartości
+        isSaved: false
+      }
     }));
   }, []);
 
@@ -488,10 +493,17 @@ export default function UstawieniaContent() {
     };
     const keyName = providerKeyMap[provider] || provider;
 
-    setApiKeys(prev => ({
-      ...prev,
-      [keyName]: { ...prev[keyName], showValue: !prev[keyName].showValue }
-    }));
+    setApiKeys(prev => {
+      const currentKey = prev[keyName];
+      // ✅ Warunek zabezpieczający przed operacją na undefined
+      if (!currentKey) {
+        return prev; // Nie rób nic, jeśli klucz nie istnieje
+      }
+      return {
+        ...prev,
+        [keyName]: { ...currentKey, showValue: !currentKey.showValue }
+      };
+    });
   }, []);
 
   const saveApiKey = useCallback(async (provider: string) => {
@@ -1241,6 +1253,38 @@ export default function UstawieniaContent() {
           </div>
         </div>
       )}
+      {/* Zarządzanie systemem */}
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <div className="flex items-center mb-6">
+            <FolderOpen className="h-5 w-5 text-gray-600 mr-2" />
+            <h2 className="text-xl font-bold text-gray-900">Zarządzanie systemem</h2>
+          </div>
+
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Eksploracja dysku
+              </label>
+              <p className="text-sm text-gray-500 mb-3">
+                Przeglądaj i zarządzaj plikami przechowywanymi na serwerze Railway
+              </p>
+              <button
+                onClick={() => setIsDiskExplorerOpen(true)}
+                className="inline-flex items-center px-4 py-2 bg-gray-600 text-white text-sm font-medium rounded-lg hover:bg-gray-700 transition-colors"
+              >
+                <FolderOpen className="h-4 w-4 mr-2" />
+                Eksploruj dysk
+              </button>
+            </div>
+          </div>
+        </div>
+        {/* Disk Explorer Modal */}
+        {isDiskExplorerOpen && (
+          <DiskExplorerModal
+            isOpen={isDiskExplorerOpen}
+            onClose={() => setIsDiskExplorerOpen(false)}
+          />
+        )}
     </div>
   );
 }
