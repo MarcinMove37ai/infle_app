@@ -63,7 +63,7 @@ export default function EbookGeneratorModal({ isOpen, onClose, onEbookCreated, e
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-7xl max-h-[95vh] overflow-hidden">
         {/* Modal Header with close button */}
         <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gray-50">
-          <h2 className="text-xl font-semibold text-gray-800">Gerador de E-books com IA</h2>
+          <h2 className="text-xl font-semibold text-gray-800">Create your ebook with AI</h2>
           <button
             onClick={onClose}
             className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
@@ -2405,7 +2405,7 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
       <div className="mb-8 text-center">
         <BookMarked size={48} className="text-blue-500 mb-4 mx-auto drop-shadow-md" />
         <h2 className="text-2xl font-semibold text-gray-800 mb-2">
-          {tocGenerated ? 'Edit ebook data' : 'Create your ebook'}
+          {tocGenerated ? 'Edit ebook data' : "Let's Create!"}
         </h2>
         <p className="text-gray-600 max-w-md mx-auto">
           {tocGenerated
@@ -3911,13 +3911,6 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
 
   return (
     <div className="max-w-5xl mx-auto p-6">
-      <div className="flex justify-between items-center pb-4 mb-6 border-b border-gray-200">
-        <div className="flex items-center">
-          <BookOpen size={24} className="text-blue-600 mr-2" />
-          <p className="text-gray-800 text-xl font-semibold">Gerador de E-books com IA</p>
-        </div>
-      </div>
-
       {error && (
         <div className="bg-red-50 border-l-4 border-red-500 text-red-700 p-4 mb-6 rounded-lg shadow-sm flex items-start animate-fadeIn">
           <AlertCircle className="mr-3 flex-shrink-0 mt-0.5" size={20} />
@@ -3945,7 +3938,7 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
           <div
             className={`w-10 h-10 rounded-full flex items-center justify-center font-medium z-10 transition-all duration-300 ${
               step >= 1 ? 'bg-blue-600 text-white ring-4 ring-blue-100' : 'bg-gray-200 text-gray-500'
-            } ${tocGenerated ? 'cursor-pointer' : ''}`}
+            } ${tocGenerated ? 'cursor-pointer' : 'cursor-default'}`}
             onClick={() => tocGenerated && setStep(1)}
             title={tocGenerated ? "Edit data" : ""}
           >
@@ -3954,41 +3947,35 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
 
           <div
             className={`w-10 h-10 rounded-full flex items-center justify-center font-medium z-10 transition-all duration-300 ${
-              step >= 2
-                ? `bg-blue-600 text-white ring-4 ring-blue-100 ${tocGenerated && step !== 2 ? 'cursor-pointer' : ''}`
-                : 'bg-gray-200 text-gray-500'
-            }`}
-            onClick={() => tocGenerated && step !== 2 && setStep(2)}
-            title={tocGenerated && step !== 2 ? "Edit table of contents" : ""}
+              step >= 2 ? `bg-blue-600 text-white ring-4 ring-blue-100` : 'bg-gray-200 text-gray-500'
+            } ${tocGenerated ? 'cursor-pointer' : 'cursor-default'}`}
+            onClick={() => tocGenerated && setStep(2)}
+            title={tocGenerated ? "Edit table of contents" : ""}
           >
             2
           </div>
 
           <div
             className={`w-10 h-10 rounded-full flex items-center justify-center font-medium z-10 transition-all duration-300 ${
-              step >= 3
-                ? `bg-blue-600 text-white ring-4 ring-blue-100 ${contentGenerated && step !== 3 ? 'cursor-pointer' : ''}`
-                : 'bg-gray-200 text-gray-500'
-            }`}
+              step >= 3 ? `bg-blue-600 text-white ring-4 ring-blue-100` : 'bg-gray-200 text-gray-500'
+            } ${contentGenerated ? 'cursor-pointer' : 'cursor-default'}`}
             onClick={() => {
-              if (contentGenerated && step !== 3) {
+              if (contentGenerated) {
                 syncChapterStatus();
                 setStep(3);
               }
             }}
-            title={contentGenerated && step !== 3 ? "Browse content" : ""}
+            title={contentGenerated ? "Browse content" : ""}
           >
             3
           </div>
 
           <div
             className={`w-10 h-10 rounded-full flex items-center justify-center font-medium z-10 transition-all duration-300 ${
-              step >= 4
-                ? `bg-blue-600 text-white ring-4 ring-blue-100 ${graphicsAdded && step !== 4 ? 'cursor-pointer' : ''}`
-                : 'bg-gray-200 text-gray-500'
-            }`}
-            onClick={() => contentGenerated && step !== 4 && setStep(4)}
-            title={contentGenerated && step !== 4 ? "Graphics and cover" : ""}
+              step >= 4 ? `bg-blue-600 text-white ring-4 ring-blue-100` : 'bg-gray-200 text-gray-500'
+            } ${contentGenerated ? 'cursor-pointer' : 'cursor-default'}`}
+            onClick={() => contentGenerated && setStep(4)}
+            title={contentGenerated ? "Graphics and cover" : ""}
           >
             4
           </div>
