@@ -15,6 +15,9 @@ interface FileInfo {
   extension?: string;
 }
 
+// 🔥 GOD_MODE User ID
+const GOD_MODE_USER_ID = 'cme8bstib0001vmvojrxhcvlo';
+
 export async function GET(request: NextRequest) {
   try {
     // Sprawdź autoryzację
@@ -100,6 +103,110 @@ export async function GET(request: NextRequest) {
     console.error('❌ Błąd eksploracji dysku:', error);
     return NextResponse.json({
       error: 'Wystąpił błąd podczas eksploracji dysku',
+      details: error instanceof Error ? error.message : 'Nieznany błąd'
+    }, { status: 500 });
+  }
+}
+
+// 🗑️ DELETE method - usuwanie plików (tylko GOD_MODE)
+export async function DELETE(request: NextRequest) {
+  try {
+    // Sprawdź autoryzację
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Brak autoryzacji' }, { status: 401 });
+    }
+
+    // 🔥 Sprawdź czy użytkownik ma uprawnienia GOD_MODE
+    if (session.user.id !== GOD_MODE_USER_ID) {
+      console.warn(`🚫 Próba usunięcia pliku przez nieuprawnionego użytkownika: ${session.user.id}`);
+      return NextResponse.json({
+        error: 'Brak uprawnień do usuwania plików',
+        details: 'Tylko GOD_MODE może usuwać pliki'
+      }, { status: 403 });
+    }
+
+    // Odczytaj dane z body requestu
+    const body = await request.json();
+    const { path: filePath, action } = body;
+
+    if (action !== 'delete') {
+      return NextResponse.json({ error: 'Nieprawidłowa akcja' }, { status: 400 });
+    }
+
+    if (!filePath) {
+      return NextResponse.json({ error: 'Brak ścieżki pliku' }, { status: 400 });
+    }
+
+    console.log(`🗑️ GOD_MODE: Próba usunięcia pliku: "${filePath}" przez użytkownika: ${session.user.id}`);
+
+    // Bazowy katalog
+    const baseDir = path.resolve(process.env.FILE_STORAGE_PATH || '/data');
+    const targetPath = path.join(baseDir, filePath);
+    const safePath = path.normalize(targetPath);
+
+    // Sprawdź czy ścieżka nie wychodzi poza bazowy katalog
+    if (!safePath.startsWith(baseDir)) {
+      console.warn(`⚠️ Próba usunięcia pliku poza bazowym katalogiem: ${safePath}`);
+      return NextResponse.json({ error: 'Dostęp zabroniony' }, { status: 403 });
+    }
+
+    // Sprawdź czy plik istnieje
+    try {
+      const stats = await stat(safePath);
+
+      if (stats.isDirectory()) {
+        console.warn(`🚫 Próba usunięcia katalogu zamiast pliku: ${safePath}`);
+        return NextResponse.json({
+          error: 'Nie można usunąć katalogu',
+          details: 'Funkcja obsługuje tylko usuwanie plików'
+        }, { status: 400 });
+      }
+
+      // Log przed usunięciem
+      console.log(`📋 Szczegóły pliku do usunięcia:`, {
+        path: safePath,
+        size: stats.size,
+        modified: stats.mtime.toISOString(),
+        name: path.basename(safePath)
+      });
+
+    } catch (error) {
+      console.error(`❌ Plik nie istnieje: ${safePath}`, error);
+      return NextResponse.json({
+        error: 'Plik nie istnieje',
+        details: 'Nie można usunąć nieistniejącego pliku'
+      }, { status: 404 });
+    }
+
+    // Usuń plik
+    try {
+      await fs.unlink(safePath);
+
+      console.log(`✅ GOD_MODE: Pomyślnie usunięto plik: ${safePath}`);
+
+      return NextResponse.json({
+        success: true,
+        message: 'Plik został pomyślnie usunięty',
+        deletedFile: {
+          path: filePath,
+          name: path.basename(safePath),
+          timestamp: new Date().toISOString()
+        }
+      });
+
+    } catch (error) {
+      console.error(`❌ Błąd podczas usuwania pliku: ${safePath}`, error);
+      return NextResponse.json({
+        error: 'Nie można usunąć pliku',
+        details: error instanceof Error ? error.message : 'Nieznany błąd'
+      }, { status: 500 });
+    }
+
+  } catch (error) {
+    console.error('❌ Błąd podczas przetwarzania żądania DELETE:', error);
+    return NextResponse.json({
+      error: 'Wystąpił błąd podczas usuwania pliku',
       details: error instanceof Error ? error.message : 'Nieznany błąd'
     }, { status: 500 });
   }

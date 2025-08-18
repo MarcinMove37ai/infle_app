@@ -791,7 +791,7 @@ export async function POST(
 
     await fs.mkdir(uploadsDir, { recursive: true });
 
-    const fileName = `EB${ebookIdNum}_COVER.png`;
+    const fileName = `${session.user.id}_EB${ebookIdNum}_COVER.png`;
     const filePath = path.join(uploadsDir, fileName);
 
     console.log(`💾 Zapisywanie okładki jako ${fileName} w Railway storage`);

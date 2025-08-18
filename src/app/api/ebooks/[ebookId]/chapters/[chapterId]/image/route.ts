@@ -161,7 +161,7 @@ export async function POST(
     await fs.mkdir(uploadsDir, { recursive: true });
 
     // Generowanie nazwy pliku zgodnie z konwencją
-    const fileName = `EB${ebookId}_CH${chapterId}.${fileExtension}`;
+    const fileName = `${session.user.id}_EB${ebookId}_CH${chapterId}.${fileExtension}`;
     const filePath = path.join(uploadsDir, fileName);
 
     console.log(`💾 Zapisywanie obrazu jako ${fileName} w Railway storage`);

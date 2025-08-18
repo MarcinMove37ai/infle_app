@@ -661,7 +661,7 @@ export async function POST(
     const storageBasePath = process.env.FILE_STORAGE_PATH || '/data';
     const uploadsDir = path.join(storageBasePath, 'uploads');
     await fs.mkdir(uploadsDir, { recursive: true });
-    const fileName = `EB${ebookIdNum}_CH${chapterIdNum}_${Date.now()}.png`;
+    const fileName = `${session.user.id}_EB${ebookIdNum}_CH${chapterIdNum}.png`;
     const filePath = path.join(uploadsDir, fileName);
     await fs.writeFile(filePath, processedImageBuffer);
 

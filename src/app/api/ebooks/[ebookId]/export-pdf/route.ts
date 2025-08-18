@@ -171,6 +171,17 @@ export async function POST(
 
     await browser.close();
 
+    // Aktualizuj status ebooka na 'completed'
+    await prisma.ebooks.update({
+      where: {
+        id: ebookIdNum,
+        userId: session.user.id // Zabezpieczenie - tylko własne ebooki
+      },
+      data: {
+        status: 'completed'
+      }
+    });
+
     let fileName = title.replace(/[^a-z0-9]/gi, '_').toLowerCase();
     if (subtitle && subtitle.trim()) {
       fileName += '_' + subtitle.replace(/[^a-z0-9]/gi, '_').toLowerCase();

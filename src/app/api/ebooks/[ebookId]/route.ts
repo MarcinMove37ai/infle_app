@@ -5,6 +5,7 @@ import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { Prisma } from '@prisma/client';
+import { ebookEvents } from '@/lib/ebookEvents';
 
 /**
  * Pobieranie szczegółów jednego ebooka (GET)
@@ -79,7 +80,8 @@ export async function PUT(
 
     // 3. Pobranie danych z żądania
     const body = await request.json();
-    const { title, subtitle } = body;
+    // ✅ POPRAWKA: Odczytaj również pole 'description'
+    const { title, subtitle, description } = body;
 
     if (!title || title.trim() === '') {
       return NextResponse.json({ error: 'Tytuł jest wymagany' }, { status: 400 });
@@ -106,8 +108,18 @@ export async function PUT(
       data: {
         title: title.trim(),
         subtitle: subtitle || null,
+        // ✅ POPRAWKA: Dodaj 'description' do aktualizowanych danych
+        description: description || null,
         updated_at: new Date(),
       },
+    });
+
+    // Ta część jest kluczowa dla odświeżania listy w czasie rzeczywistym
+    ebookEvents.emitEbookChange({
+      type: 'updated',
+      userId: userId,
+      ebookId: updatedEbook.id,
+      timestamp: new Date()
     });
 
     return NextResponse.json({ success: true, ebook: updatedEbook });

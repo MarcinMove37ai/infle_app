@@ -10,7 +10,7 @@ import {
   ChevronRight, Upload, Image, Palette, Eye
 } from 'lucide-react';
 
-// Interfejs dla pozycji w spisie treści, rozszerzony o treść i obraz
+// Interface for table of contents items, extended with content and image
 interface TocItem {
   id: string;
   title: string;
@@ -19,21 +19,21 @@ interface TocItem {
   image_url?: string;
 }
 
-// Interfejs dla pobranych treści z URL-ów
+// Interface for content scraped from URLs
 interface ScrapedContent {
   url: string;
   title: string;
   content: string;
 }
 
-// Interfejs dla statusu okładki
+// Interface for cover status
 interface CoverStatus {
   prompt_ready: boolean;
   image_ready: boolean;
   complete: boolean;
 }
 
-// Interfejs dla danych okładki
+// Interface for cover data
 interface EbookCoverData {
   ebook_id: number;
   title: string;
@@ -50,18 +50,20 @@ interface EbookCoverData {
 interface EbookGeneratorModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onEbookCreated?: () => void;
+  ebookId?: number | null;
 }
 
-// Główny komponent generatora ebooków
-export default function EbookGeneratorModal({ isOpen, onClose }: EbookGeneratorModalProps) {
+// Main component for the ebook generator
+export default function EbookGeneratorModal({ isOpen, onClose, onEbookCreated, ebookId }: EbookGeneratorModalProps) {
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-7xl max-h-[95vh] overflow-hidden">
-        {/* Header modala z przyciskiem zamknięcia */}
+        {/* Modal Header with close button */}
         <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gray-50">
-          <h2 className="text-xl font-semibold text-gray-800">Generator E-booków AI</h2>
+          <h2 className="text-xl font-semibold text-gray-800">Gerador de E-books com IA</h2>
           <button
             onClick={onClose}
             className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
@@ -70,16 +72,16 @@ export default function EbookGeneratorModal({ isOpen, onClose }: EbookGeneratorM
           </button>
         </div>
 
-        {/* Zawartość modala - scrollowalna */}
+        {/* Modal Content - scrollable */}
         <div className="overflow-y-auto max-h-[calc(95vh-80px)]">
-          <EbookGeneratorContent />
+          <EbookGeneratorContent isOpen={isOpen} ebookId={ebookId} onEbookCreated={onEbookCreated} onClose={onClose} />
         </div>
       </div>
     </div>
   );
 }
 
-function EbookGeneratorContent() {
+function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { isOpen: boolean, ebookId?: number | null, onEbookCreated?: () => void, onClose: () => void }) {
   const [sourcePreviewModal, setSourcePreviewModal] = useState({
       isVisible: false,
       sourceType: null as 'web' | 'pdf' | null,
@@ -87,12 +89,12 @@ function EbookGeneratorContent() {
       status: null as 'success' | 'error' | 'empty' | null,
       errorDetails: ''
   });
-  // NOWE STANY dla PDF upload
+  // NEW STATES for PDF upload
     const [isUploadingPdf, setIsUploadingPdf] = useState(false);
-    // NOWE STANY dla single URL scraping
+    // NEW STATES for single URL scraping
   const [pendingUrl, setPendingUrl] = useState('');
   const [isScrapingSingleUrl, setIsScrapingSingleUrl] = useState(false);
-  // Istniejące stany aplikacji
+  // Existing application states
   const [isGeneratingAllImages, setIsGeneratingAllImages] = useState(false);
   const [generatedImagesCount, setGeneratedImagesCount] = useState(0);
   const [totalImagesToGenerate, setTotalImagesToGenerate] = useState(0);
@@ -109,14 +111,14 @@ function EbookGeneratorContent() {
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [editingItemTitle, setEditingItemTitle] = useState('');
 
-  // NOWE STANY dla dodatkowych funkcjonalności
+  // NEW STATES for additional functionalities
   const [description, setDescription] = useState('');
   const [urlInputs, setUrlInputs] = useState<string[]>(['']);
   const [isScrapingUrls, setIsScrapingUrls] = useState(false);
   const [scrapedContent, setScrapedContent] = useState<ScrapedContent[]>([]);
 
-  // Pozostałe istniejące stany
-  const [ebookId, setEbookId] = useState<number | null>(null);
+  // Other existing states
+  const [currentEbookId, setCurrentEbookId] = useState<number | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isGeneratingContent, setIsGeneratingContent] = useState(false);
   const [activeChapterId, setActiveChapterId] = useState<string | null>(null);
@@ -146,16 +148,16 @@ function EbookGeneratorContent() {
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [uploadingCoverImage, setUploadingCoverImage] = useState(false);
 
-  // STANY dla okładki (przeniesione z kroku 5)
+  // STATES for cover (moved from step 5)
   const [coverData, setCoverData] = useState<EbookCoverData | null>(null);
   const [isGeneratingCover, setIsGeneratingCover] = useState(false);
   const [showCoverPrompt, setShowCoverPrompt] = useState(false);
   const [coverGenerated, setCoverGenerated] = useState(false);
 
-  // ✅ NOWY STATE dla cache-busting
+  // ✅ NEW STATE for cache-busting
   const [imageRefreshTimestamp, setImageRefreshTimestamp] = useState(0);
 
-  // Referencje do elementów
+  // Element references
   const pdfInputRef = useRef<HTMLInputElement>(null);
   const newItemInputRef = useRef<HTMLInputElement>(null);
   const editItemInputRef = useRef<HTMLInputElement>(null);
@@ -165,7 +167,114 @@ function EbookGeneratorContent() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const descriptionInputRef = useRef<HTMLTextAreaElement>(null);
 
-  // Istniejące useEffects
+  // =================================================================
+  // NEW, CENTRAL LOGIC - LOADING FOR EDIT / RESETTING FOR CREATE
+  // =================================================================
+  useEffect(() => {
+    // Function to reset the state to initial values (for "create" mode)
+    const resetStateForCreate = () => {
+      console.log('🔄 Resetting state for new ebook...');
+      setStep(1);
+      setTitle('');
+      setSubtitle('');
+      setDescription('');
+      setUrlInputs(['']);
+      setScrapedContent([]);
+      setTocItems([]);
+      setCurrentEbookId(null); // Use internal ebookId state from `useState`
+      setError(null);
+      setTocGenerated(false);
+      setContentGenerated(false);
+      setGraphicsAdded(false);
+      setCoverData(null);
+      setCoverGenerated(false);
+      setOriginalTitle('');
+      setOriginalSubtitle('');
+      setOriginalDescription('');
+      // Reset all other states that might hold data
+      setCompletedChapterIds([]);
+      setChaptersWithoutContent([]);
+    };
+
+    // Function to load ebook data from the API (for "edit" mode)
+    const loadEbookForEditing = async (id: number) => {
+      console.log(`🚀 Loading data for ebook with ID: ${id}`);
+      try {
+        const response = await fetch(`/api/ebooks?id=${id}`);
+        if (!response.ok) {
+          throw new Error('Failed to fetch ebook data for editing.');
+        }
+        const data = await response.json();
+        console.log('✅ Received data from API:', data);
+
+        // Krok 1: Wypełnij dane podstawowe
+        setTitle(data.title || '');
+        setSubtitle(data.subtitle || '');
+        setDescription(data.description || '');
+        setCurrentEbookId(data.id); // Ustaw wewnętrzny stan ID
+
+        setOriginalTitle(data.title || '');
+        setOriginalSubtitle(data.subtitle || '');
+        setOriginalDescription(data.description || '');
+
+        // =================================================================
+        // KROK 2: NOWA, NIEZAWODNA LOGIKA USTAWIANIA STANU POSTĘPU
+        // =================================================================
+        if (data.chapters && data.chapters.length > 0) {
+          const chapters = data.chapters as TocItem[];
+
+          // Ustawiamy rozdziały
+          setTocItems(chapters);
+          setTocGenerated(true);
+
+          // Bezpośrednio obliczamy wszystkie statusy na podstawie świeżych danych `chapters`,
+          // a nie na podstawie stanu `tocItems`, który może jeszcze nie być zaktualizowany.
+
+          const anyContentExists = chapters.some(ch => ch.content && ch.content.trim() !== '');
+          const anyGraphicsExist = chapters.some(ch => ch.image_url);
+
+          const chaptersWithContentIds = chapters
+            .filter(ch => ch.content && ch.content.trim() !== '')
+            .map(ch => ch.id);
+
+          const chaptersWithoutContentIds = chapters
+            .filter(ch => !ch.content || ch.content.trim() === '')
+            .map(ch => ch.id);
+
+          // Jawnie ustawiamy wszystkie flagi i stany zależne
+          setContentGenerated(anyContentExists);
+          setGraphicsAdded(anyGraphicsExist);
+          setCompletedChapterIds(chaptersWithContentIds);
+          setChaptersWithoutContent(chaptersWithoutContentIds);
+
+          console.log(`✅ Status edycji załadowany: contentGenerated=${anyContentExists}`);
+        }
+        // =================================================================
+        // KONIEC NOWEJ LOGIKI
+        // =================================================================
+
+        // Zawsze zaczynaj od kroku 1, zgodnie z wymaganiem
+        setStep(1);
+
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'An unknown error occurred');
+        resetStateForCreate(); // W razie błędu, wróć do czystego stanu
+      }
+    };
+
+    // Main logic switch
+    if (isOpen) {
+      if (ebookId) {
+        // We have an ID from props -> EDIT Mode
+        loadEbookForEditing(ebookId);
+      } else {
+        // No ID -> CREATE Mode
+        resetStateForCreate();
+      }
+    }
+  }, [isOpen, ebookId]); // This hook will run when the modal is opened or the ID changes
+
+  // Existing useEffects
   useEffect(() => {
     if (editingItemId && editItemInputRef.current) {
       editItemInputRef.current.focus();
@@ -204,22 +313,22 @@ function EbookGeneratorContent() {
     };
   }, []);
 
-  // useEffect dla pobierania danych okładki w kroku 4
+  // useEffect for fetching cover data in step 4
   useEffect(() => {
-    if (ebookId && step === 4) {
-      // ✅ DEFENSYWNE pobieranie statusu okładki
+    if (currentEbookId && step === 4) {
+      // ✅ DEFENSIVE fetching of cover status
       const loadCoverStatus = async () => {
         try {
           await fetchCoverStatus();
         } catch (error) {
-          console.warn('⚠️ Nie udało się pobrać statusu okładki przy wejściu do kroku 4:', error);
-          // Nie pokazuj błędu użytkownikowi - to normalne przy pierwszym wejściu
+          console.warn('⚠️ Failed to fetch cover status upon entering step 4:', error);
+          // Do not show error to the user - this is normal on first entry
         }
       };
 
       loadCoverStatus();
 
-      // Odśwież co 5 sekund jeśli okładka jest w trakcie generowania
+      // Refresh every 5 seconds if cover is being generated
       const interval = setInterval(() => {
         if (isGeneratingCover) {
           loadCoverStatus();
@@ -228,15 +337,15 @@ function EbookGeneratorContent() {
 
       return () => clearInterval(interval);
     }
-  }, [ebookId, step, isGeneratingCover]);
+  }, [currentEbookId, step, isGeneratingCover]);
 
-  // ✅ NAPRAWIONA FUNKCJA fetchCoverStatus
+  // ✅ FIXED fetchCoverStatus FUNCTION
   const fetchCoverStatus = async () => {
-    if (!ebookId) return;
+    if (!currentEbookId) return;
 
     try {
       const timestamp = new Date().getTime();
-      const response = await fetch(`/api/ebooks/${ebookId}/generate-cover-complete?_t=${timestamp}`, {
+      const response = await fetch(`/api/ebooks/${currentEbookId}/generate-cover-complete?_t=${timestamp}`, {
         method: 'GET',
         headers: {
           'Cache-Control': 'no-cache',
@@ -244,12 +353,12 @@ function EbookGeneratorContent() {
         }
       });
 
-      // ✅ OBSŁUGA PRZYPADKU GDY OKŁADKA JESZCZE NIE ISTNIEJE
+      // ✅ HANDLE CASE WHERE COVER DOES NOT YET EXIST
       if (response.status === 404) {
-        console.log('📋 Okładka jeszcze nie została wygenerowana');
-        // Ustaw pusty stan okładki
+        console.log('📋 Cover has not been generated yet');
+        // Set empty cover state
         setCoverData({
-          ebook_id: ebookId,
+          ebook_id: currentEbookId,
           title: title,
           subtitle: subtitle,
           has_cover_prompt: false,
@@ -269,19 +378,19 @@ function EbookGeneratorContent() {
       }
 
       if (!response.ok) {
-        // Jeśli to nie 404, ale inny błąd, sprawdź czy to HTML
+        // If it's not a 404, but another error, check if it's HTML
         const errorText = await response.text();
         if (errorText.trim().startsWith('<')) {
-          console.warn('⚠️ Otrzymano stronę HTML zamiast JSON - prawdopodobnie błąd serwera');
-          return; // Nie pokazuj błędu użytkownikowi
+          console.warn('⚠️ Received HTML page instead of JSON - likely a server error');
+          return; // Do not show error to the user
         }
-        throw new Error(`Błąd serwera (${response.status})`);
+        throw new Error(`Server error (${response.status})`);
       }
 
       const data = await response.json();
-      console.log('📥 Pobrano dane okładki z API:', data);
+      console.log('📥 Fetched cover data from API:', data);
 
-      // Mapowanie danych z API
+      // Mapping data from the API
       const mappedData = {
         ebook_id: data.ebook_id,
         title: data.title,
@@ -299,28 +408,28 @@ function EbookGeneratorContent() {
         }
       };
 
-      // ✅ UPROSZCZONA logika URL - zawsze dodaj timestamp jeśli istnieje URL
+      // ✅ SIMPLIFIED URL logic - always add timestamp if URL exists
       if (mappedData.cover_url) {
-        const baseUrl = mappedData.cover_url.split('?')[0]; // Usuń istniejące parametry
+        const baseUrl = mappedData.cover_url.split('?')[0]; // Remove existing parameters
         mappedData.cover_url = `${baseUrl}?t=${timestamp}`;
-        console.log('🔄 URL okładki z cache-bust:', mappedData.cover_url);
+        console.log('🔄 Cover URL with cache-bust:', mappedData.cover_url);
       }
 
       setCoverData(mappedData);
 
       if (mappedData.cover_status.complete && mappedData.cover_url) {
         setCoverGenerated(true);
-        console.log('✅ Okładka oznaczona jako gotowa');
+        console.log('✅ Cover marked as ready');
       }
 
     } catch (err: any) {
-      console.warn('⚠️ Problem z pobieraniem statusu okładki:', err.message);
-      // Nie ustawiaj error dla użytkownika - okładka po prostu jeszcze nie istnieje
+      console.warn('⚠️ Problem fetching cover status:', err.message);
+      // Do not set error for the user - the cover simply doesn't exist yet
 
-      // Ustaw domyślny stan okładki
+      // Set default cover state
       if (!coverData) {
         setCoverData({
-          ebook_id: ebookId,
+          ebook_id: currentEbookId,
           title: title,
           subtitle: subtitle,
           has_cover_prompt: false,
@@ -339,19 +448,19 @@ function EbookGeneratorContent() {
     }
   };
 
-  // ✅ NAPRAWIONA FUNKCJA generateCover
+  // ✅ FIXED generateCover FUNCTION
   const generateCover = async (forceRegenerate = false, generatePdf = false) => {
-    if (!ebookId) {
-      setError('Brak identyfikatora ebooka');
+    if (!currentEbookId) {
+      setError('Missing ebook identifier');
       return false;
     }
 
     setIsGeneratingCover(true);
     setError(null);
-    console.log('🎨 Rozpoczynam generowanie okładki...', { forceRegenerate, generatePdf });
+    console.log('🎨 Starting cover generation...', { forceRegenerate, generatePdf });
 
     try {
-      const response = await fetch(`/api/ebooks/${ebookId}/generate-cover-complete`, {
+      const response = await fetch(`/api/ebooks/${currentEbookId}/generate-cover-complete`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -362,60 +471,60 @@ function EbookGeneratorContent() {
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('❌ Błąd odpowiedzi API:', response.status, errorText);
+        console.error('❌ API response error:', response.status, errorText);
 
-        // Sprawdź czy to HTML (błąd serwera)
+        // Check if it's HTML (server error)
         if (errorText.trim().startsWith('<')) {
-          throw new Error('Błąd serwera - otrzymano stronę HTML zamiast JSON');
+          throw new Error('Server error - received HTML page instead of JSON');
         }
 
         try {
           const errorData = JSON.parse(errorText);
-          throw new Error(errorData.error || errorData.message || 'Błąd generowania okładki');
+          throw new Error(errorData.error || errorData.message || 'Error generating cover');
         } catch (parseError) {
-          throw new Error(`Błąd serwera (${response.status}): ${errorText.substring(0, 100)}...`);
+          throw new Error(`Server error (${response.status}): ${errorText.substring(0, 100)}...`);
         }
       }
 
       const data = await response.json();
-      console.log('📥 Odpowiedź z API generowania okładki:', data);
+      console.log('📥 Response from cover generation API:', data);
 
       if (!data.success) {
-        throw new Error(data.error || data.message || 'Błąd generowania okładki');
+        throw new Error(data.error || data.message || 'Error generating cover');
       }
 
-      console.log('✅ Okładka wygenerowana pomyślnie');
+      console.log('✅ Cover generated successfully');
 
-      // ✅ KRÓTSZE opóźnienie i jednorazowe odświeżenie
+      // ✅ SHORTER delay and one-time refresh
       await new Promise(resolve => setTimeout(resolve, 500));
 
-      // Wymyśl nowy timestamp dla cache-bust
+      // Create a new timestamp for cache-bust
       setImageRefreshTimestamp(Date.now());
 
-      // Odśwież status okładki
+      // Refresh cover status
       await fetchCoverStatus();
 
       setCoverGenerated(true);
-      console.log('🔄 Status okładki odświeżony');
+      console.log('🔄 Cover status refreshed');
 
       return true;
 
     } catch (err: any) {
-      console.error('❌ Błąd generowania okładki:', err);
+      console.error('❌ Error generating cover:', err);
       setError(err.message);
       return false;
     } finally {
       setIsGeneratingCover(false);
     }
   };
-    // NOWA FUNKCJA pobierania treści z pojedynczego URL
+    // NEW FUNCTION for fetching content from a single URL
     const scrapeSingleUrl = async (url: string) => {
       if (!url.trim()) return;
 
       try {
-        new URL(url); // Walidacja URL
+        new URL(url); // URL validation
       } catch {
-        setError('Nieprawidłowy format URL');
+        setError('Invalid URL format');
         return;
       }
 
@@ -432,70 +541,70 @@ function EbookGeneratorContent() {
         });
 
         if (!response.ok) {
-          throw new Error('Błąd podczas pobierania treści z linku');
+          throw new Error('Error fetching content from the link');
         }
 
         const data = await response.json();
 
-       // ZAWSZE pokazuj modal - niezależnie od wyniku
+       // ALWAYS show the modal - regardless of the result
         if (data.scrapedContent && data.scrapedContent.length > 0) {
-          // Sukces z treścią
+          // Success with content
           showSourcePreview('web', data.scrapedContent[0], 'success');
         } else if (data.errors && data.errors.length > 0) {
-          // Błąd scrapingu
+          // Scraping error
           const errorContent = {
             url: url,
-            title: 'Błąd scrapingu',
+            title: 'Scraping error',
             content: ''
           };
-          showSourcePreview('web', errorContent, 'error', data.errors[0].error || 'Nieznany błąd');
+          showSourcePreview('web', errorContent, 'error', data.errors[0].error || 'Unknown error');
         } else {
-          // Pusta treść
+          // Empty content
           const emptyContent = {
             url: url,
-            title: 'Brak treści',
+            title: 'No content',
             content: ''
           };
-          showSourcePreview('web', emptyContent, 'empty', 'Nie znaleziono treści na tej stronie lub treść jest za krótka');
+          showSourcePreview('web', emptyContent, 'empty', 'No content found on this page or the content is too short');
         }
 
       } catch (err) {
-          console.error('Błąd scraping single URL:', err);
+          console.error('Error scraping single URL:', err);
 
-          // Pokaż modal z błędem
+          // Show modal with an error
           const errorContent = {
             url: url,
-            title: 'Błąd połączenia',
+            title: 'Connection error',
             content: ''
           };
-          showSourcePreview('web', errorContent, 'error', err instanceof Error ? err.message : 'Nie udało się połączyć z serwerem');
+          showSourcePreview('web', errorContent, 'error', err instanceof Error ? err.message : 'Failed to connect to the server');
         } finally {
         setIsScrapingSingleUrl(false);
       }
     };
 
-    // FUNKCJA do usuwania źródła z listy
+    // FUNCTION to remove a source from the list
     const handleRemoveScrapedContent = (urlToRemove: string) => {
       setScrapedContent(prev => prev.filter(item => item.url !== urlToRemove));
-      console.log('🗑️ Usunięto źródło:', urlToRemove);
+      console.log('🗑️ Removed source:', urlToRemove);
     };
 
 
-  // NOWE FUNKCJE dla PDF upload
+  // NEW FUNCTIONS for PDF upload
     const handlePdfUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
       if (!file) return;
 
-      // Walidacja pliku
+      // File validation
       if (!file.type.includes('pdf') && !file.name.toLowerCase().endsWith('.pdf')) {
-        setError('Wybrany plik nie jest plikiem PDF');
+        setError('The selected file is not a PDF file');
         return;
       }
 
-      // Sprawdź rozmiar (max 10MB)
+      // Check size (max 10MB)
       const maxSize = 10 * 1024 * 1024;
       if (file.size > maxSize) {
-        setError('Plik PDF jest za duży. Maksymalny rozmiar to 10MB');
+        setError('The PDF file is too large. The maximum size is 10MB');
         return;
       }
 
@@ -514,39 +623,39 @@ function EbookGeneratorContent() {
         const data = await response.json();
 
         if (response.ok && data.success) {
-          // Sukces - pokaż preview
+          // Success - show preview
           if (data.scrapedContent && data.scrapedContent.length > 0) {
             showSourcePreview('pdf', data.scrapedContent[0], 'success');
           } else {
             const errorContent = {
               url: file.name,
-              title: 'Błąd wyodrębniania',
+              title: 'Extraction error',
               content: ''
             };
-            showSourcePreview('pdf', errorContent, 'error', 'Nie udało się wyodrębnić tekstu z PDF');
+            showSourcePreview('pdf', errorContent, 'error', 'Failed to extract text from PDF');
           }
         } else {
-          // Błąd
+          // Error
           const errorContent = {
             url: file.name,
-            title: 'Błąd przetwarzania',
+            title: 'Processing error',
             content: ''
           };
-          showSourcePreview('pdf', errorContent, 'error', data.error || 'Nieznany błąd podczas przetwarzania PDF');
+          showSourcePreview('pdf', errorContent, 'error', data.error || 'Unknown error while processing PDF');
         }
 
       } catch (err) {
-          console.error('Błąd upload PDF:', err);
+          console.error('Error uploading PDF:', err);
 
           const errorContent = {
             url: file.name,
-            title: 'Błąd połączenia',
+            title: 'Connection error',
             content: ''
           };
-          showSourcePreview('pdf', errorContent, 'error', 'Błąd połączenia z serwerem');
+          showSourcePreview('pdf', errorContent, 'error', 'Error connecting to the server');
       } finally {
         setIsUploadingPdf(false);
-        // Wyczyść input
+        // Clear input
         if (event.target) {
           event.target.value = '';
         }
@@ -571,7 +680,7 @@ function EbookGeneratorContent() {
     const handleSourceAccept = (content: ScrapedContent) => {
       setScrapedContent(prev => [...prev, content]);
 
-      // Wyczyść input URL jeśli to był web scraping
+      // Clear the URL input if it was a web scrape
       if (sourcePreviewModal.sourceType === 'web') {
         const urlIndex = urlInputs.findIndex(url => url === content.url);
         if (urlIndex !== -1) {
@@ -581,7 +690,7 @@ function EbookGeneratorContent() {
         }
       }
 
-      // Zamknij modal
+      // Close the modal
       setSourcePreviewModal({
         isVisible: false,
         sourceType: null,
@@ -592,7 +701,7 @@ function EbookGeneratorContent() {
     };
 
     const handleSourceReject = () => {
-      // Wyczyść input URL jeśli to był web scraping
+      // Clear the URL input if it was a web scrape
       if (sourcePreviewModal.sourceType === 'web' && sourcePreviewModal.content) {
         const urlIndex = urlInputs.findIndex(url => url === sourcePreviewModal.content!.url);
         if (urlIndex !== -1) {
@@ -602,7 +711,7 @@ function EbookGeneratorContent() {
         }
       }
 
-      // Zamknij modal
+      // Close the modal
       setSourcePreviewModal({
         isVisible: false,
         sourceType: null,
@@ -618,7 +727,7 @@ function EbookGeneratorContent() {
       }
     };
 
-  // NOWE FUNKCJE obsługi URL-ów
+  // NEW FUNCTIONS for handling URLs
   const handleUrlChange = (index: number, value: string) => {
     const newUrls = [...urlInputs];
     newUrls[index] = value;
@@ -635,14 +744,14 @@ function EbookGeneratorContent() {
     const newUrls = urlInputs.filter((_, i) => i !== index);
     setUrlInputs(newUrls.length === 0 ? [''] : newUrls);
 
-    // Usuń odpowiadającą treść ze scrapedContent jeśli istnieje
+    // Remove corresponding content from scrapedContent if it exists
     const urlToRemove = urlInputs[index];
     if (urlToRemove) {
       setScrapedContent(prev => prev.filter(item => item.url !== urlToRemove));
     }
   };
 
-  // NOWA FUNKCJA pobierania treści z URL-ów
+  // NEW FUNCTION for fetching content from URLs
   const scrapeUrls = async () => {
     const validUrls = urlInputs.filter(url => {
       try {
@@ -670,30 +779,30 @@ function EbookGeneratorContent() {
       });
 
       if (!response.ok) {
-        throw new Error('Błąd podczas pobierania treści z linków');
+        throw new Error('Error fetching content from links');
       }
 
       const data = await response.json();
       setScrapedContent(prev => [...prev, ...(data.scrapedContent || [])]);
       return data.scrapedContent || [];
     } catch (err) {
-      console.error('Błąd scraping URLs:', err);
-      setError('Nie udało się pobrać treści z niektórych linków. Kontynuujemy bez nich.');
+      console.error('Error scraping URLs:', err);
+      setError('Failed to fetch content from some links. Continuing without them.');
       return [];
     } finally {
       setIsScrapingUrls(false);
     }
   };
 
-  // ✅ NAPRAWIONA FUNKCJA refreshImagesStatus
+  // ✅ FIXED refreshImagesStatus FUNCTION
   const refreshImagesStatus = async () => {
-    if (!ebookId) return;
+    if (!currentEbookId) return;
 
-    console.log('🔄 Odświeżanie statusu grafik...');
+    console.log('🔄 Refreshing graphics status...');
 
     try {
       const timestamp = Date.now();
-      const response = await fetch(`/api/ebooks/${ebookId}/chapters?_t=${timestamp}`, {
+      const response = await fetch(`/api/ebooks/${currentEbookId}/chapters?_t=${timestamp}`, {
         method: 'GET',
         headers: {
           'Cache-Control': 'no-cache',
@@ -703,18 +812,18 @@ function EbookGeneratorContent() {
       });
 
       if (!response.ok) {
-        throw new Error('Błąd pobierania rozdziałów');
+        throw new Error('Error fetching chapters');
       }
 
       const data = await response.json();
       if (!data.chapters || !Array.isArray(data.chapters)) {
-        console.warn('Nieprawidłowe dane rozdziałów:', data);
+        console.warn('Invalid chapter data:', data);
         return;
       }
 
-      console.log(`📊 Pobrano ${data.chapters.length} rozdziałów z serwera`);
+      console.log(`📊 Fetched ${data.chapters.length} chapters from the server`);
 
-      // ✅ POPRAWIONA aktualizacja stanu
+      // ✅ IMPROVED state update
       setTocItems(currentTocItems => {
         const updatedItems = currentTocItems.map(item => {
           const serverChapter = data.chapters.find((ch: any) => ch.id.toString() === item.id);
@@ -724,7 +833,7 @@ function EbookGeneratorContent() {
             const newImageUrl = `${baseUrl}?t=${timestamp}`;
 
             if (item.image_url !== newImageUrl) {
-              console.log(`🔄 Odświeżono grafikę dla "${item.title}": ${newImageUrl}`);
+              console.log(`🔄 Refreshed graphic for "${item.title}": ${newImageUrl}`);
               return { ...item, image_url: newImageUrl };
             }
           }
@@ -735,16 +844,16 @@ function EbookGeneratorContent() {
         return updatedItems;
       });
 
-      // Wymyśl nowy timestamp dla wymuszenia re-render
+      // Create a new timestamp to force a re-render
       setImageRefreshTimestamp(timestamp);
-      console.log('✅ Status grafik odświeżony');
+      console.log('✅ Graphics status refreshed');
 
     } catch (error) {
-      console.error('❌ Błąd podczas odświeżania statusu grafik:', error);
+      console.error('❌ Error while refreshing graphics status:', error);
     }
   };
 
-  // Istniejące funkcje pomocnicze
+  // Existing helper functions
   const handleApiError = (err: any, defaultMessage: string) => {
     console.error(defaultMessage, err);
     let errorMessage = defaultMessage;
@@ -765,9 +874,9 @@ function EbookGeneratorContent() {
       .filter(item => !item.content || item.content.trim() === '')
       .map(item => item.id);
 
-    console.log('🔄 Synchronizacja statusu rozdziałów:');
-    console.log(`- Rozdziały z treścią (${chaptersWithContent.length}):`, chaptersWithContent);
-    console.log(`- Rozdziały bez treści (${chaptersWithoutContentList.length}):`, chaptersWithoutContentList);
+    console.log('🔄 Synchronizing chapter status:');
+    console.log(`- Chapters with content (${chaptersWithContent.length}):`, chaptersWithContent);
+    console.log(`- Chapters without content (${chaptersWithoutContentList.length}):`, chaptersWithoutContentList);
 
     setCompletedChapterIds(chaptersWithContent);
     setChaptersWithoutContent(chaptersWithoutContentList);
@@ -775,24 +884,24 @@ function EbookGeneratorContent() {
     const hasAnyContent = chaptersWithContent.length > 0;
     setContentGenerated(hasAnyContent);
 
-    console.log(`✅ Status zsynchronizowany: contentGenerated=${hasAnyContent}`);
+    console.log(`✅ Status synchronized: contentGenerated=${hasAnyContent}`);
   };
 
   const changeStep = (newStep: number) => {
       const hasDescriptionChanged = description !== originalDescription;
       const hasUrlsChanged = JSON.stringify(urlInputs) !== JSON.stringify(originalUrlInputs);
-      const hasSourcesChanged = scrapedContent.length > 0; // NOWA LINIA
+      const hasSourcesChanged = scrapedContent.length > 0; // NEW LINE
 
       if (newStep === 2 && step === 1 && tocGenerated &&
          (title !== originalTitle ||
           subtitle !== originalSubtitle ||
           hasDescriptionChanged ||
           hasUrlsChanged ||
-          hasSourcesChanged)) { // DODANA ZMIANA
+          hasSourcesChanged)) { // ADDED CHANGE
         setShowRegeneratePopup(true);
       }
     else if (newStep === 3 && step === 2) {
-      console.log('🔄 Przechodzenie do kroku 3 - synchronizacja statusu rozdziałów...');
+      console.log('🔄 Moving to step 3 - synchronizing chapter status...');
 
       syncChapterStatus();
 
@@ -800,35 +909,35 @@ function EbookGeneratorContent() {
         .filter(item => !item.content || item.content.trim() === '')
         .map(item => item.id);
 
-      console.log(`📊 Znaleziono ${chaptersWithNoContent.length} rozdziałów bez treści:`, chaptersWithNoContent);
+      console.log(`📊 Found ${chaptersWithNoContent.length} chapters without content:`, chaptersWithNoContent);
 
       if (chaptersWithNoContent.length > 0) {
         if (!activeChapterId || !tocItems.find(item => item.id === activeChapterId)) {
           setActiveChapterId(chaptersWithNoContent[0]);
-          console.log(`🎯 Ustawiono aktywny rozdział: ${chaptersWithNoContent[0]}`);
+          console.log(`🎯 Set active chapter: ${chaptersWithNoContent[0]}`);
         }
       } else {
         if (!activeChapterId || !tocItems.find(item => item.id === activeChapterId)) {
           const firstChapterId = tocItems.length > 0 ? tocItems[0].id : null;
           setActiveChapterId(firstChapterId);
-          console.log(`🎯 Ustawiono aktywny rozdział (pierwszy): ${firstChapterId}`);
+          console.log(`🎯 Set active chapter (first): ${firstChapterId}`);
         }
       }
 
       setStep(newStep);
-      console.log('✅ Przejście do kroku 3 zakończone');
+      console.log('✅ Move to step 3 completed');
     }
     else if (newStep === 4 && step === 3) {
-      console.log('🔄 Przechodzenie do kroku 4 - grafiki i okładka...');
+      console.log('🔄 Moving to step 4 - graphics and cover...');
       syncChapterStatus();
       setStep(newStep);
 
-      // ✅ DEFENSYWNA inicjalizacja okładki przy wejściu do kroku 4
-      if (ebookId && !coverData) {
-        console.log('📋 Inicjalizacja domyślnego stanu okładki (jeszcze nie wygenerowana)');
-        // Ustaw domyślny stan okładki, zanim jeszcze zostanie pobrana z API
+      // ✅ DEFENSIVE initialization of cover upon entering step 4
+      if (currentEbookId && !coverData) {
+        console.log('📋 Initializing default cover state (not yet generated)');
+        // Set default cover state before it's fetched from the API
         setCoverData({
-          ebook_id: ebookId,
+          ebook_id: currentEbookId,
           title: title,
           subtitle: subtitle,
           has_cover_prompt: false,
@@ -844,7 +953,7 @@ function EbookGeneratorContent() {
           }
         });
       }
-      console.log('✅ Przejście do kroku 4 zakończone');
+      console.log('✅ Move to step 4 completed');
     }
     else {
       setStep(newStep);
@@ -879,7 +988,7 @@ function EbookGeneratorContent() {
 
   const generateTableOfContents = async () => {
     if (!title.trim()) {
-      setError('Proszę wprowadzić tytuł e-booka');
+      setError('Please enter a title for the ebook');
       return;
     }
 
@@ -888,11 +997,11 @@ function EbookGeneratorContent() {
 
     try {
 
-      let currentEbookId = ebookId;
+      let tempEbookId = currentEbookId;
 
-      // 2. Utwórz lub zaktualizuj ebook
-      if (!currentEbookId) {
-        // Tworzenie nowego ebooka...
+      // 2. Create or update the ebook
+      if (!tempEbookId) {
+        // Creating a new ebook...
         const createEbookResponse = await fetch('/api/ebooks', {
           method: 'POST',
           headers: getUserHeaders(),
@@ -904,21 +1013,21 @@ function EbookGeneratorContent() {
         });
 
         if (!createEbookResponse.ok) {
-          throw new Error('Błąd podczas tworzenia ebooka w bazie danych');
+          throw new Error('Error creating the ebook in the database');
         }
 
         const ebookData = await createEbookResponse.json();
         if (!ebookData.success || !ebookData.ebookId) {
-          throw new Error('Nieprawidłowa odpowiedź z API tworzenia ebooka');
+          throw new Error('Invalid response from the ebook creation API');
         }
 
-        currentEbookId = ebookData.ebookId;
-        setEbookId(currentEbookId);
-        console.log(`Utworzono ebook w bazie danych z ID: ${currentEbookId}`);
+        tempEbookId = ebookData.ebookId;
+        setCurrentEbookId(tempEbookId);
+        console.log(`Created ebook in the database with ID: ${tempEbookId}`);
 
       } else {
-        // Reset stanów przed regeneracją
-        console.log('🔄 Resetowanie stanów rozdziałów przed regeneracją...');
+        // Reset states before regeneration
+        console.log('🔄 Resetting chapter states before regeneration...');
 
         setCompletedChapterIds([]);
         setGeneratingChapterIds([]);
@@ -940,10 +1049,10 @@ function EbookGeneratorContent() {
         setGeneratedImagesCount(0);
         setTotalImagesToGenerate(0);
 
-        console.log('✅ Stany rozdziałów zostały zresetowane');
+        console.log('✅ Chapter states have been reset');
 
-        // Aktualizuj dane ebooka
-        const updateEbookResponse = await fetch(`/api/ebooks/${currentEbookId}`, {
+        // Update ebook data
+        const updateEbookResponse = await fetch(`/api/ebooks/${tempEbookId}`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
@@ -956,30 +1065,30 @@ function EbookGeneratorContent() {
         });
 
         if (!updateEbookResponse.ok) {
-          throw new Error('Błąd podczas aktualizacji tytułu ebooka');
+          throw new Error('Error updating the ebook title');
         }
 
-        // Usuń stare rozdziały
+        // Delete old chapters
         try {
-          console.log(`🗑️ Usuwanie wszystkich rozdziałów dla ebooka o ID: ${currentEbookId}`);
-          const deleteChaptersResponse = await fetch(`/api/ebooks/${currentEbookId}/chapters`, {
+          console.log(`🗑️ Deleting all chapters for ebook with ID: ${tempEbookId}`);
+          const deleteChaptersResponse = await fetch(`/api/ebooks/${tempEbookId}/chapters`, {
             method: 'DELETE',
           });
 
           if (deleteChaptersResponse.ok) {
             const deleteData = await deleteChaptersResponse.json();
-            console.log(`✅ Usunięto ${deleteData.deletedCount} rozdziałów`);
+            console.log(`✅ Deleted ${deleteData.deletedCount} chapters`);
           }
 
           setTocItems([]);
           await new Promise(resolve => setTimeout(resolve, 300));
 
         } catch (error) {
-          console.warn('Błąd podczas usuwania rozdziałów:', error);
+          console.warn('Error while deleting chapters:', error);
         }
       }
 
-      // 3. Wygeneruj nowy spis treści
+      // 3. Generate a new table of contents
       const response = await fetch('/api/anthropic/generate-toc', {
         method: 'POST',
         headers: {
@@ -994,14 +1103,14 @@ function EbookGeneratorContent() {
       });
 
       if (!response.ok) {
-        let errorMessage = 'Błąd podczas generowania spisu treści';
+        let errorMessage = 'Error generating the table of contents';
         try {
           const errorData = await response.json();
           if (errorData && errorData.error) {
             errorMessage = errorData.error;
           }
         } catch (jsonError) {
-          errorMessage = `Błąd serwera (${response.status})`;
+          errorMessage = `Server error (${response.status})`;
         }
         throw new Error(errorMessage);
       }
@@ -1016,9 +1125,9 @@ function EbookGeneratorContent() {
         setOriginalDescription(description);
         setOriginalUrlInputs([...urlInputs]);
 
-        // 4. Zapisz nowe rozdziały w bazie danych
+        // 4. Save the new chapters in the database
         try {
-          const chaptersResponse = await fetch(`/api/ebooks/${currentEbookId}/chapters`, {
+          const chaptersResponse = await fetch(`/api/ebooks/${tempEbookId}/chapters`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -1027,10 +1136,10 @@ function EbookGeneratorContent() {
           });
 
           if (!chaptersResponse.ok) {
-            console.warn('Nie udało się zapisać rozdziałów w bazie, ale kontynuujemy proces');
+            console.warn('Failed to save chapters in the database, but continuing the process');
           } else {
             const chaptersData = await chaptersResponse.json();
-            console.log(`💾 Zapisano ${chaptersData.chapters.length} rozdziałów w bazie danych`);
+            console.log(`💾 Saved ${chaptersData.chapters.length} chapters in the database`);
 
             if (chaptersData.chapters && Array.isArray(chaptersData.chapters)) {
               const updatedTocItems = data.tocItems.map((item: TocItem, index: number) => {
@@ -1042,37 +1151,37 @@ function EbookGeneratorContent() {
               });
               setTocItems(updatedTocItems);
 
-              // Ustaw nowe ID jako wymagające treści
+              // Set new IDs as requiring content
               const newChapterIds = updatedTocItems.map((item: TocItem) => item.id);
               setChaptersWithoutContent(newChapterIds);
-              console.log(`📝 Ustawiono ${newChapterIds.length} rozdziałów jako wymagające treści`);
+              console.log(`📝 Set ${newChapterIds.length} chapters as requiring content`);
             }
           }
         } catch (chaptersError) {
-          console.warn('Błąd podczas zapisywania rozdziałów:', chaptersError);
+          console.warn('Error while saving chapters:', chaptersError);
         }
 
         setStep(2);
         setShowRegeneratePopup(false);
       } else {
-        throw new Error('Otrzymano nieprawidłowy format danych');
+        throw new Error('Received invalid data format');
       }
     } catch (err: any) {
-      handleApiError(err, 'Wystąpił błąd podczas generowania spisu treści. Spróbuj ponownie.');
+      handleApiError(err, 'An error occurred while generating the table of contents. Please try again.');
     } finally {
       setIsGeneratingToc(false);
     }
   };
 
   const generateSingleChapterContent = async (chapterId: string) => {
-    if (!ebookId) {
-      setError('Brak identyfikatora ebooka');
+    if (!currentEbookId) {
+      setError('Missing ebook identifier');
       return;
     }
 
     const chapter = tocItems.find(item => item.id === chapterId);
     if (!chapter) {
-      setError('Nie znaleziono rozdziału');
+      setError('Chapter not found');
       return;
     }
 
@@ -1080,7 +1189,7 @@ function EbookGeneratorContent() {
     setIsGeneratingSingleChapter(true);
 
     try {
-      // Wywołanie API z dodatkowymi danymi kontekstowymi
+      // API call with additional context data
       const response = await fetch('/api/anthropic/generate-single-chapter', {
         method: 'POST',
         headers: {
@@ -1097,14 +1206,14 @@ function EbookGeneratorContent() {
       });
 
       if (!response.ok) {
-        let errorMessage = 'Błąd podczas generowania treści rozdziału';
+        let errorMessage = 'Error generating chapter content';
         try {
           const errorData = await response.json();
           if (errorData && errorData.error) {
             errorMessage = errorData.error;
           }
         } catch (jsonError) {
-          errorMessage = `Błąd serwera (${response.status})`;
+          errorMessage = `Server error (${response.status})`;
         }
         throw new Error(errorMessage);
       }
@@ -1120,35 +1229,35 @@ function EbookGeneratorContent() {
 
         setTocItems(updatedTocItems);
 
-        // Lepsze zarządzanie stanami
+        // Better state management
         setCompletedChapterIds(prev => {
           const newCompleted = [...prev];
           if (!newCompleted.includes(chapterId)) {
             newCompleted.push(chapterId);
           }
-          console.log(`✅ Dodano rozdział ${chapterId} do completed:`, newCompleted);
+          console.log(`✅ Added chapter ${chapterId} to completed:`, newCompleted);
           return newCompleted;
         });
 
         setChaptersWithoutContent(prev => {
           const filtered = prev.filter(id => id !== chapterId);
-          console.log(`🗑️ Usunięto rozdział ${chapterId} z chaptersWithoutContent:`, filtered);
+          console.log(`🗑️ Removed chapter ${chapterId} from chaptersWithoutContent:`, filtered);
           return filtered;
         });
 
-        // Sprawdź czy wszystkie rozdziały mają treść
+        // Check if all chapters have content
         const allChaptersWithContent = updatedTocItems.every(item =>
           item.content && item.content.trim().length > 0
         );
 
         if (allChaptersWithContent && !contentGenerated) {
           setContentGenerated(true);
-          console.log('🎉 Wszystkie rozdziały mają treść - ustawiono contentGenerated=true');
+          console.log('🎉 All chapters have content - set contentGenerated=true');
         }
 
-        // Zapisz w bazie danych
+        // Save in the database
         try {
-          const updateResponse = await fetch(`/api/ebooks/${ebookId}/chapters/${chapterId}`, {
+          const updateResponse = await fetch(`/api/ebooks/${currentEbookId}/chapters/${chapterId}`, {
             method: 'PUT',
             headers: {
               'Content-Type': 'application/json',
@@ -1159,18 +1268,18 @@ function EbookGeneratorContent() {
           });
 
           if (updateResponse.ok) {
-            console.log(`💾 Zaktualizowano treść rozdziału ID=${chapterId}`);
+            console.log(`💾 Updated content of chapter ID=${chapterId}`);
           }
         } catch (updateError) {
-          console.warn('Błąd podczas zapisywania:', updateError);
+          console.warn('Error while saving:', updateError);
         }
 
       } else {
-        throw new Error('Otrzymano nieprawidłowy format danych');
+        throw new Error('Received invalid data format');
       }
 
     } catch (err) {
-      handleApiError(err, 'Wystąpił błąd podczas generowania treści rozdziału');
+      handleApiError(err, 'An error occurred while generating chapter content');
     } finally {
       setIsGeneratingSingleChapter(false);
       setShowChapterRegeneratePopup(false);
@@ -1186,12 +1295,12 @@ function EbookGeneratorContent() {
                      !hasDescriptionChanged &&
                      !hasUrlsChanged;
 
-    if (!ebookId || !title.trim() || noChanges) {
+    if (!currentEbookId || !title.trim() || noChanges) {
       if (noChanges) {
         changeStep(2);
         return;
       }
-      setError('Nie można zaktualizować tytułu');
+      setError('Cannot update the title');
       return;
     }
 
@@ -1199,14 +1308,14 @@ function EbookGeneratorContent() {
     setIsSaving(true);
 
     try {
-      // 1. Najpierw zeskrapuj URL-e jeśli się zmieniły
+      // 1. First, scrape URLs if they have changed
       if (hasUrlsChanged) {
-        setScrapedContent([]); // Wyczyść stare treści
-        await scrapeUrls(); // Pobierz nowe
+        setScrapedContent([]); // Clear old content
+        await scrapeUrls(); // Fetch new ones
       }
 
-      // 2. Zaktualizuj dane ebooka
-      const response = await fetch(`/api/ebooks/${ebookId}`, {
+      // 2. Update ebook data
+      const response = await fetch(`/api/ebooks/${currentEbookId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -1219,14 +1328,14 @@ function EbookGeneratorContent() {
       });
 
       if (!response.ok) {
-        let errorMessage = 'Błąd podczas aktualizacji tytułu';
+        let errorMessage = 'Error updating the title';
         try {
           const errorData = await response.json();
           if (errorData && errorData.error) {
             errorMessage = errorData.error;
           }
         } catch (jsonError) {
-          errorMessage = `Błąd serwera (${response.status})`;
+          errorMessage = `Server error (${response.status})`;
         }
         throw new Error(errorMessage);
       }
@@ -1234,17 +1343,17 @@ function EbookGeneratorContent() {
       const data = await response.json();
 
       if (data.success) {
-        console.log(`Tytuł ebooka zaktualizowany (ID=${ebookId}): ${title}`);
+        console.log(`Ebook title updated (ID=${currentEbookId}): ${title}`);
         setOriginalTitle(title);
         setOriginalSubtitle(subtitle);
         setOriginalDescription(description);
         setOriginalUrlInputs([...urlInputs]);
         changeStep(2);
       } else {
-        throw new Error('Nieprawidłowa odpowiedź z API aktualizacji tytułu');
+        throw new Error('Invalid response from the title update API');
       }
     } catch (err) {
-      handleApiError(err, 'Wystąpił błąd podczas aktualizacji tytułu');
+      handleApiError(err, 'An error occurred while updating the title');
     } finally {
       setIsSaving(false);
     }
@@ -1291,11 +1400,11 @@ function EbookGeneratorContent() {
       }
 
       setChaptersWithoutContent([]);
-      console.log('Wygenerowano treść dla wszystkich brakujących rozdziałów.');
+      console.log('Generated content for all missing chapters.');
       setContentGenerated(true);
 
     } catch (err) {
-      handleApiError(err, 'Wystąpił błąd podczas generowania brakującej treści');
+      handleApiError(err, 'An error occurred while generating missing content');
     } finally {
       setGeneratingChapterIds([]);
       setIsGeneratingMissingContent(false);
@@ -1303,34 +1412,34 @@ function EbookGeneratorContent() {
   };
 
   const generateChaptersContent = async () => {
-      // ===== WALIDACJA WSTĘPNA =====
+      // ===== PRELIMINARY VALIDATION =====
       if (tocItems.length === 0) {
-        setError('Brak rozdziałów do wygenerowania treści');
+        setError('No chapters to generate content for');
         return;
       }
 
-      if (!ebookId) {
-        setError('Brak identyfikatora ebooka. Spróbuj odświeżyć stronę i zacząć od początku.');
+      if (!currentEbookId) {
+        setError('Missing ebook identifier. Try refreshing the page and starting over.');
         return;
       }
 
-      // ===== RESET STANÓW =====
+      // ===== RESET STATES =====
       setError(null);
       setIsGeneratingContent(true);
-      setGeneratingChapterIds(tocItems.map(item => item.id)); // Wszystkie od razu
+      setGeneratingChapterIds(tocItems.map(item => item.id)); // All at once
       setCompletedChapterIds([]);
       setCurrentGeneratingIndex(-1);
 
-      console.log(`🚀 Rozpoczynanie równoległego generowania ${tocItems.length} rozdziałów...`);
+      console.log(`🚀 Starting parallel generation of ${tocItems.length} chapters...`);
 
       try {
         const chaptersToGenerate = [...tocItems];
         const updatedTocItems = [...tocItems];
 
-        // ===== RÓWNOLEGŁE GENEROWANIE =====
+        // ===== PARALLEL GENERATION =====
         const generationPromises = chaptersToGenerate.map(async (chapter, index) => {
           try {
-            console.log(`📝 [${index + 1}/${chaptersToGenerate.length}] Generowanie: ${chapter.title}`);
+            console.log(`📝 [${index + 1}/${chaptersToGenerate.length}] Generating: ${chapter.title}`);
 
             const response = await fetch('/api/anthropic/generate-single-chapter', {
               method: 'POST',
@@ -1348,14 +1457,14 @@ function EbookGeneratorContent() {
             });
 
             if (!response.ok) {
-              let errorMessage = 'Błąd podczas generowania treści rozdziału';
+              let errorMessage = 'Error generating chapter content';
               try {
                 const errorData = await response.json();
                 if (errorData && errorData.error) {
                   errorMessage = errorData.error;
                 }
               } catch (jsonError) {
-                errorMessage = `Błąd serwera (${response.status})`;
+                errorMessage = `Server error (${response.status})`;
               }
               throw new Error(errorMessage);
             }
@@ -1363,7 +1472,7 @@ function EbookGeneratorContent() {
             const data = await response.json();
 
             if (data.chapter && data.chapter.content) {
-              // ===== AKTUALIZACJA STANU W CZASIE RZECZYWISTYM =====
+              // ===== REAL-TIME STATE UPDATE =====
               setTocItems(currentItems =>
                 currentItems.map(item =>
                   item.id === chapter.id
@@ -1375,11 +1484,11 @@ function EbookGeneratorContent() {
               setGeneratingChapterIds(prev => prev.filter(id => id !== chapter.id));
               setCompletedChapterIds(prev => [...prev, chapter.id]);
 
-              console.log(`✅ [${index + 1}/${chaptersToGenerate.length}] Ukończono: ${chapter.title}`);
+              console.log(`✅ [${index + 1}/${chaptersToGenerate.length}] Completed: ${chapter.title}`);
 
-              // ===== ZAPIS W BAZIE DANYCH =====
+              // ===== DATABASE SAVE =====
               try {
-                const updateResponse = await fetch(`/api/ebooks/${ebookId}/chapters/${chapter.id}`, {
+                const updateResponse = await fetch(`/api/ebooks/${currentEbookId}/chapters/${chapter.id}`, {
                   method: 'PUT',
                   headers: {
                     'Content-Type': 'application/json',
@@ -1390,144 +1499,144 @@ function EbookGeneratorContent() {
                 });
 
                 if (!updateResponse.ok) {
-                  console.warn(`⚠️ Nie udało się zapisać treści rozdziału ${chapter.id} w bazie, ale kontynuujemy proces`);
+                  console.warn(`⚠️ Failed to save content of chapter ${chapter.id} in the database, but continuing the process`);
                 } else {
-                  console.log(`💾 Zapisano w bazie: ${chapter.title}`);
+                  console.log(`💾 Saved in the database: ${chapter.title}`);
                 }
               } catch (updateError) {
-                console.warn(`❌ Błąd podczas zapisywania treści rozdziału ${chapter.id}:`, updateError);
+                console.warn(`❌ Error while saving content of chapter ${chapter.id}:`, updateError);
               }
 
               return { success: true, chapter, content: data.chapter.content };
             } else {
-              throw new Error('Otrzymano nieprawidłowy format danych');
+              throw new Error('Received invalid data format');
             }
           } catch (error) {
-            // ===== OBSŁUGA BŁĘDÓW POJEDYNCZEGO ROZDZIAŁU =====
+            // ===== SINGLE CHAPTER ERROR HANDLING =====
             setGeneratingChapterIds(prev => prev.filter(id => id !== chapter.id));
-            console.error(`❌ Błąd generowania rozdziału ${chapter.title}:`, error);
+            console.error(`❌ Error generating chapter ${chapter.title}:`, error);
 
-            // ✅ POPRAWKA: Bezpieczne wyciągnięcie message z error
+            // ✅ FIX: Safely extract message from error
             const errorMessage = error instanceof Error ? error.message : String(error);
             return { success: false, chapter, error: errorMessage };
           }
         });
 
-        // ===== CZEKANIE NA WSZYSTKIE WYNIKI =====
-        console.log('⏳ Czekanie na zakończenie wszystkich generowań...');
+        // ===== WAITING FOR ALL RESULTS =====
+        console.log('⏳ Waiting for all generations to finish...');
         const results = await Promise.allSettled(generationPromises);
 
-        // ===== ZBIERANIE BŁĘDÓW =====
-        // ✅ POPRAWKA: Jawne określenie typu tablicy
+        // ===== COLLECTING ERRORS =====
+        // ✅ FIX: Explicitly specify the array type
         const errors: string[] = [];
         let successCount = 0;
 
         results.forEach((result, index) => {
           if (result.status === 'rejected') {
-            // Bezpieczne wyciągnięcie reason
+            // Safely extract reason
             const rejectionReason = result.reason instanceof Error ? result.reason.message : String(result.reason);
             errors.push(`${chaptersToGenerate[index].title}: ${rejectionReason}`);
-            console.error(`❌ Promise rejected dla ${chaptersToGenerate[index].title}:`, result.reason);
+            console.error(`❌ Promise rejected for ${chaptersToGenerate[index].title}:`, result.reason);
           } else if (!result.value.success) {
             errors.push(`${result.value.chapter.title}: ${result.value.error}`);
-            console.error(`❌ Generowanie nieudane dla ${result.value.chapter.title}:`, result.value.error);
+            console.error(`❌ Generation failed for ${result.value.chapter.title}:`, result.value.error);
           } else {
             successCount++;
-            console.log(`✅ Sukces dla ${result.value.chapter.title}`);
+            console.log(`✅ Success for ${result.value.chapter.title}`);
           }
         });
 
-        // ===== RAPORTOWANIE BŁĘDÓW =====
+        // ===== ERROR REPORTING =====
         if (errors.length > 0) {
-          console.warn(`⚠️ Błędy w ${errors.length}/${chaptersToGenerate.length} rozdziałach`);
-          setError(`Błędy podczas generowania niektórych rozdziałów: ${errors.join(', ')}`);
+          console.warn(`⚠️ Errors in ${errors.length}/${chaptersToGenerate.length} chapters`);
+          setError(`Errors while generating some chapters: ${errors.join(', ')}`);
         } else {
-          console.log(`🎉 Wszystkie ${successCount} rozdziały wygenerowane pomyślnie!`);
+          console.log(`🎉 All ${successCount} chapters generated successfully!`);
         }
 
-        // ===== WALIDACJA I FINALNE USTAWIENIA =====
-        // Sprawdź aktualny stan tocItems (może być zaktualizowany przez setTocItems w promises)
+        // ===== VALIDATION AND FINAL SETTINGS =====
+        // Check the current state of tocItems (may be updated by setTocItems in promises)
         setTocItems(currentTocItems => {
           const chaptersWithContent = currentTocItems.filter(item =>
             item.content && item.content.trim().length > 0
           );
 
-          console.log(`📊 Status końcowy: ${chaptersWithContent.length}/${currentTocItems.length} rozdziałów ma treść`);
+          console.log(`📊 Final status: ${chaptersWithContent.length}/${currentTocItems.length} chapters have content`);
 
-          // Ustaw stan contentGenerated tylko jeśli WSZYSTKIE mają treść
+          // Set contentGenerated state only if ALL have content
           if (chaptersWithContent.length === currentTocItems.length) {
             setContentGenerated(true);
             setChaptersWithoutContent([]);
-            console.log('🎯 ContentGenerated = true (wszystkie rozdziały mają treść)');
+            console.log('🎯 ContentGenerated = true (all chapters have content)');
           } else {
             const withoutContent = currentTocItems
               .filter(item => !item.content || item.content.trim() === '')
               .map(item => item.id);
             setChaptersWithoutContent(withoutContent);
-            console.log(`📝 Rozdziały bez treści: ${withoutContent.length}`);
+            console.log(`📝 Chapters without content: ${withoutContent.length}`);
           }
 
-          return currentTocItems; // Zwróć bez zmian
+          return currentTocItems; // Return without changes
         });
 
-        // ===== USTAWIENIE AKTYWNEGO ROZDZIAŁU =====
+        // ===== SETTING THE ACTIVE CHAPTER =====
         if (tocItems.length > 0) {
-          // Pobierz aktualny stan tocItems
+          // Get the current state of tocItems
           setTocItems(currentTocItems => {
-            // Priorytet: pierwszy rozdział z treścią
+            // Priority: first chapter with content
             const chaptersWithContent = currentTocItems.filter(item =>
               item.content && item.content.trim().length > 0
             );
 
             if (chaptersWithContent.length > 0) {
               setActiveChapterId(chaptersWithContent[0].id);
-              console.log(`🎯 Ustawiono aktywny rozdział z treścią: ${chaptersWithContent[0].title}`);
+              console.log(`🎯 Set active chapter with content: ${chaptersWithContent[0].title}`);
             } else {
-              // Fallback: pierwszy rozdział bez treści
+              // Fallback: first chapter without content
               const chaptersWithoutContent = currentTocItems.filter(item =>
                 !item.content || item.content.trim() === ''
               );
 
               if (chaptersWithoutContent.length > 0) {
                 setActiveChapterId(chaptersWithoutContent[0].id);
-                console.log(`📝 Ustawiono aktywny rozdział bez treści: ${chaptersWithoutContent[0].title}`);
+                console.log(`📝 Set active chapter without content: ${chaptersWithoutContent[0].title}`);
               } else {
-                // Ostateczny fallback: pierwszy dostępny
+                // Final fallback: first available
                 setActiveChapterId(currentTocItems[0].id);
-                console.log(`🔢 Ustawiono pierwszy dostępny rozdział: ${currentTocItems[0].title}`);
+                console.log(`🔢 Set first available chapter: ${currentTocItems[0].title}`);
               }
             }
 
-            return currentTocItems; // Zwróć bez zmian
+            return currentTocItems; // Return without changes
           });
         }
 
-        // ===== SYNCHRONIZACJA I PRZEJŚCIE =====
-        console.log('🔄 Synchronizacja statusu rozdziałów...');
+        // ===== SYNCHRONIZATION AND TRANSITION =====
+        console.log('🔄 Synchronizing chapter status...');
         syncChapterStatus();
 
-        console.log('🎉 Przechodzenie do kroku 3...');
+        console.log('🎉 Moving to step 3...');
         setStep(3);
 
-        console.log(`✅ Generowanie zakończone: ${successCount}/${chaptersToGenerate.length} sukces`);
+        console.log(`✅ Generation finished: ${successCount}/${chaptersToGenerate.length} success`);
 
       } catch (err) {
-        console.error('❌ Ogólny błąd generowania:', err);
-        handleApiError(err, 'Wystąpił błąd podczas generowania treści. Spróbuj ponownie.');
+        console.error('❌ General generation error:', err);
+        handleApiError(err, 'An error occurred while generating content. Please try again.');
       } finally {
         // ===== CLEANUP =====
-        console.log('🧹 Czyszczenie stanów...');
+        console.log('🧹 Cleaning up states...');
         setIsGeneratingContent(false);
         setCurrentGeneratingIndex(-1);
         setGeneratingChapterIds([]);
       }
   };
 
-  // ✅ NAPRAWIONA FUNKCJA handleGenerateAIImage
+  // ✅ FIXED handleGenerateAIImage FUNCTION
   const handleGenerateAIImage = async (chapterId: string, forceRegenerate = false) => {
     const chapter = tocItems.find(item => item.id === chapterId);
-    if (!chapter || !chapter.content || !ebookId) {
-      setError('Rozdział nie ma treści do wygenerowania grafiki');
+    if (!chapter || !chapter.content || !currentEbookId) {
+      setError('Chapter has no content to generate a graphic from');
       return;
     }
 
@@ -1536,10 +1645,10 @@ function EbookGeneratorContent() {
     setAiImageGenerationError(null);
     setError(null);
 
-    console.log(`🎨 Rozpoczynam generowanie grafiki dla rozdziału: ${chapter.title}`);
+    console.log(`🎨 Starting graphic generation for chapter: ${chapter.title}`);
 
     try {
-      const response = await fetch(`/api/ebooks/${ebookId}/chapters/${chapterId}/generate-image`, {
+      const response = await fetch(`/api/ebooks/${currentEbookId}/chapters/${chapterId}/generate-image`, {
         method: 'POST',
         headers: getUserHeaders(),
         body: JSON.stringify({
@@ -1551,14 +1660,14 @@ function EbookGeneratorContent() {
       setAiImageGenerationProgress(60);
 
       if (!response.ok) {
-        let errorMessage = 'Błąd podczas generowania grafiki AI';
+        let errorMessage = 'Error generating AI graphic';
         try {
           const errorData = await response.json();
           if (errorData && errorData.error) {
             errorMessage = errorData.error;
           }
         } catch (jsonError) {
-          errorMessage = `Błąd serwera (${response.status})`;
+          errorMessage = `Server error (${response.status})`;
         }
         throw new Error(errorMessage);
       }
@@ -1567,12 +1676,12 @@ function EbookGeneratorContent() {
       const data = await response.json();
 
       if (!data.success || !data.image_url) {
-        throw new Error('Nieprawidłowa odpowiedź z serwera');
+        throw new Error('Invalid response from the server');
       }
 
-      console.log(`✅ Grafika AI wygenerowana dla rozdziału ${chapter.title}: ${data.image_url}`);
+      console.log(`✅ AI graphic generated for chapter ${chapter.title}: ${data.image_url}`);
 
-      // ✅ NAPRAWIONA aktualizacja stanu z cache-bust
+      // ✅ FIXED state update with cache-bust
       const timestamp = Date.now();
       const baseUrl = data.image_url.split('?')[0];
       const newImageUrl = `${baseUrl}?t=${timestamp}`;
@@ -1592,16 +1701,16 @@ function EbookGeneratorContent() {
       }
 
       setAiImageGenerationProgress(100);
-      console.log(`✅ Zaktualizowano stan grafiki dla rozdziału ${chapterId}`);
+      console.log(`✅ Updated graphic state for chapter ${chapterId}`);
 
       if (data.prompt_was_generated) {
-        console.log(`Wygenerowano nowy prompt dla rozdziału "${chapter.title}": ${data.prompt_used}`);
+        console.log(`Generated new prompt for chapter "${chapter.title}": ${data.prompt_used}`);
       }
 
     } catch (err) {
-      console.error(`❌ Błąd generowania grafiki dla rozdziału ${chapter.title}:`, err);
-      setAiImageGenerationError(err instanceof Error ? err.message : 'Nieznany błąd');
-      handleApiError(err, 'Wystąpił błąd podczas generowania grafiki AI');
+      console.error(`❌ Error generating graphic for chapter ${chapter.title}:`, err);
+      setAiImageGenerationError(err instanceof Error ? err.message : 'Unknown error');
+      handleApiError(err, 'An error occurred while generating AI graphic');
     } finally {
       setTimeout(() => {
         setGeneratingAIImageForChapter(null);
@@ -1615,10 +1724,10 @@ function EbookGeneratorContent() {
   };
 
   const fetchChapterPrompt = async (chapterId: string) => {
-    if (!ebookId) return;
+    if (!currentEbookId) return;
 
     try {
-      const response = await fetch(`/api/ebooks/${ebookId}/chapters/${chapterId}`, {
+      const response = await fetch(`/api/ebooks/${currentEbookId}/chapters/${chapterId}`, {
         method: 'GET',
         headers: getUserHeaders(),
       });
@@ -1633,22 +1742,22 @@ function EbookGeneratorContent() {
         }
       }
     } catch (error) {
-      console.warn('Błąd podczas pobierania promptu:', error);
+      console.warn('Error fetching prompt:', error);
     }
   };
 
-  // ✅ CAŁKOWICIE PRZEPISANA FUNKCJA handleGenerateAllImages
+  // ✅ COMPLETELY REWRITTEN handleGenerateAllImages FUNCTION
   const handleGenerateAllImages = async () => {
     const chaptersWithContent = tocItems.filter(
       item => (item.content && item.content.trim().length > 0) && !item.image_url
     );
 
     if (chaptersWithContent.length === 0) {
-      setError('Brak rozdziałów z treścią bez grafik do wygenerowania');
+      setError('No chapters with content without graphics to generate');
       return;
     }
 
-    console.log(`🎨 Rozpoczynam masowe generowanie ${chaptersWithContent.length} grafik...`);
+    console.log(`🎨 Starting bulk generation of ${chaptersWithContent.length} graphics...`);
 
     setIsGeneratingAllImages(true);
     setGeneratedImagesCount(0);
@@ -1662,20 +1771,20 @@ function EbookGeneratorContent() {
       for (let i = 0; i < chaptersWithContent.length; i++) {
         const chapter = chaptersWithContent[i];
 
-        console.log(`🎨 [${i + 1}/${chaptersWithContent.length}] Generuję grafikę dla: ${chapter.title}`);
+        console.log(`🎨 [${i + 1}/${chaptersWithContent.length}] Generating graphic for: ${chapter.title}`);
 
         setGeneratingAIImageForChapter(chapter.id);
         setAiImageGenerationProgress(10);
         setAiImageGenerationError(null);
 
         try {
-          if (!chapter.content || !ebookId) {
-            console.warn(`⚠️ Pominięto rozdział ${chapter.id} - brak treści lub ebookId`);
+          if (!chapter.content || !currentEbookId) {
+            console.warn(`⚠️ Skipped chapter ${chapter.id} - no content or ebookId`);
             chaptersWithErrors.push(chapter.id);
             continue;
           }
 
-          const response = await fetch(`/api/ebooks/${ebookId}/chapters/${chapter.id}/generate-image`, {
+          const response = await fetch(`/api/ebooks/${currentEbookId}/chapters/${chapter.id}/generate-image`, {
             method: 'POST',
             headers: getUserHeaders(),
             body: JSON.stringify({
@@ -1687,17 +1796,17 @@ function EbookGeneratorContent() {
           setAiImageGenerationProgress(60);
 
           if (!response.ok) {
-            let errorMessage = 'Błąd podczas generowania grafiki AI';
+            let errorMessage = 'Error generating AI graphic';
             try {
               const errorData = await response.json();
               if (errorData && errorData.error) {
                 errorMessage = errorData.error;
               }
             } catch (jsonError) {
-              errorMessage = `Błąd serwera (${response.status})`;
+              errorMessage = `Server error (${response.status})`;
             }
 
-            console.warn(`❌ Błąd dla rozdziału ${chapter.title}: ${errorMessage}`);
+            console.warn(`❌ Error for chapter ${chapter.title}: ${errorMessage}`);
             chaptersWithErrors.push(chapter.id);
             continue;
           }
@@ -1706,17 +1815,17 @@ function EbookGeneratorContent() {
           const data = await response.json();
 
           if (!data.success || !data.image_url) {
-            console.warn(`⚠️ Nieprawidłowa odpowiedź z serwera dla rozdziału ${chapter.title}`);
+            console.warn(`⚠️ Invalid response from the server for chapter ${chapter.title}`);
             chaptersWithErrors.push(chapter.id);
             continue;
           }
 
-          // ✅ STABILNA aktualizacja stanu
+          // ✅ STABLE state update
           const timestamp = Date.now();
           const baseUrl = data.image_url.split('?')[0];
           const newImageUrl = `${baseUrl}?t=${timestamp}`;
 
-          // Użyj callback w setTocItems dla stabilności
+          // Use callback in setTocItems for stability
           setTocItems(currentTocItems => {
             const updatedItems = currentTocItems.map(item =>
               item.id === chapter.id
@@ -1724,7 +1833,7 @@ function EbookGeneratorContent() {
                 : item
             );
 
-            console.log(`✅ [${i + 1}/${chaptersWithContent.length}] Zaktualizowano stan dla: ${chapter.title}`);
+            console.log(`✅ [${i + 1}/${chaptersWithContent.length}] Updated state for: ${chapter.title}`);
             return updatedItems;
           });
 
@@ -1735,29 +1844,29 @@ function EbookGeneratorContent() {
           setAiImageGenerationProgress(100);
           setGeneratedImagesCount(prev => prev + 1);
 
-          console.log(`✅ [${i + 1}/${chaptersWithContent.length}] Grafika wygenerowana dla: ${chapter.title}`);
+          console.log(`✅ [${i + 1}/${chaptersWithContent.length}] Graphic generated for: ${chapter.title}`);
 
         } catch (err) {
-          console.error(`❌ Ogólny błąd dla rozdziału ${chapter.title}:`, err);
+          console.error(`❌ General error for chapter ${chapter.title}:`, err);
           chaptersWithErrors.push(chapter.id);
         }
 
-        // Wyczyść stan generowania dla tego rozdziału
+        // Clear generation state for this chapter
         setGeneratingAIImageForChapter(null);
         setAiImageGenerationProgress(0);
 
-        // Opóźnienie między generowaniami (ważne dla API)
+        // Delay between generations (important for the API)
         if (i < chaptersWithContent.length - 1) {
           await new Promise(resolve => setTimeout(resolve, 2000));
         }
       }
 
     } catch (err) {
-      console.error('❌ Ogólny błąd masowego generowania:', err);
-      setError('Wystąpił błąd podczas masowego generowania grafik');
+      console.error('❌ General bulk generation error:', err);
+      setError('An error occurred during bulk graphic generation');
     }
 
-    // ✅ KOŃCOWE czyszczenie i podsumowanie
+    // ✅ FINAL cleanup and summary
     setIsGeneratingAllImages(false);
     setGeneratingAIImageForChapter(null);
     setAiImageGenerationProgress(0);
@@ -1766,37 +1875,37 @@ function EbookGeneratorContent() {
     const duration = Math.round((endTime - startTime) / 1000);
     const successCount = chaptersWithContent.length - chaptersWithErrors.length;
 
-    console.log(`🏁 Masowe generowanie zakończone w ${duration}s:`);
-    console.log(`✅ Pomyślnie: ${successCount}/${chaptersWithContent.length}`);
-    console.log(`❌ Błędy: ${chaptersWithErrors.length}`);
+    console.log(`🏁 Bulk generation finished in ${duration}s:`);
+    console.log(`✅ Successful: ${successCount}/${chaptersWithContent.length}`);
+    console.log(`❌ Errors: ${chaptersWithErrors.length}`);
 
-    // Automatycznie odśwież status po kilku sekundach
+    // Automatically refresh status after a few seconds
     setTimeout(() => {
-      console.log('🔄 Automatyczne odświeżanie statusu grafik...');
+      console.log('🔄 Automatically refreshing graphics status...');
       refreshImagesStatus();
     }, 3000);
 
-    // Pokaż błędy jeśli wystąpiły
+    // Show errors if they occurred
     if (chaptersWithErrors.length > 0) {
       const errorChapterTitles = chaptersWithErrors.map(id => {
         const chapter = tocItems.find(item => item.id === id);
-        return chapter ? chapter.title : `Rozdział ${id}`;
+        return chapter ? chapter.title : `Chapter ${id}`;
       });
 
       if (chaptersWithErrors.length === chaptersWithContent.length) {
-        setError(`Nie udało się wygenerować żadnej grafiki. Spróbuj ponownie później.`);
+        setError(`Failed to generate any graphics. Please try again later.`);
       } else {
-        setError(`Nie udało się wygenerować grafik dla ${chaptersWithErrors.length} rozdziałów: ${errorChapterTitles.join(', ')}. Możesz spróbować wygenerować te grafiki pojedynczo.`);
+        setError(`Failed to generate graphics for ${chaptersWithErrors.length} chapters: ${errorChapterTitles.join(', ')}. You can try generating these graphics individually.`);
       }
     } else if (successCount > 0) {
       setError(null);
-      console.log('🎉 Wszystkie grafiki wygenerowane pomyślnie');
+      console.log('🎉 All graphics generated successfully');
     }
   };
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (!file || (!uploadingImageForChapter && !uploadingCoverImage) || !ebookId) {
+    if (!file || (!uploadingImageForChapter && !uploadingCoverImage) || !currentEbookId) {
       return;
     }
 
@@ -1805,7 +1914,7 @@ function EbookGeneratorContent() {
 
     const fileType = file.type;
     if (!fileType.startsWith('image/')) {
-      setError('Wybrany plik nie jest obrazem.');
+      setError('The selected file is not an image.');
       setIsSaving(false);
       return;
     }
@@ -1819,32 +1928,32 @@ function EbookGeneratorContent() {
       let response;
 
       if (uploadingCoverImage) {
-        // Przesyłanie okładki
-        response = await fetch(`/api/ebooks/${ebookId}/cover-image`, {
+        // Uploading cover
+        response = await fetch(`/api/ebooks/${currentEbookId}/cover-image`, {
           method: 'POST',
           headers: headers,
           body: formData
         });
       } else if (uploadingImageForChapter) {
-        // Przesyłanie grafiki rozdziału
-        response = await fetch(`/api/ebooks/${ebookId}/chapters/${uploadingImageForChapter}/image`, {
+        // Uploading chapter graphic
+        response = await fetch(`/api/ebooks/${currentEbookId}/chapters/${uploadingImageForChapter}/image`, {
           method: 'POST',
           headers: headers,
           body: formData
         });
       } else {
-        throw new Error('Nieznany typ przesyłania obrazu');
+        throw new Error('Unknown image upload type');
       }
 
       if (!response.ok) {
-        let errorMessage = 'Błąd podczas przesyłania obrazu';
+        let errorMessage = 'Error uploading image';
         try {
           const errorData = await response.json();
           if (errorData && errorData.error) {
             errorMessage = errorData.error;
           }
         } catch (jsonError) {
-          errorMessage = `Błąd serwera (${response.status})`;
+          errorMessage = `Server error (${response.status})`;
         }
         throw new Error(errorMessage);
       }
@@ -1857,7 +1966,7 @@ function EbookGeneratorContent() {
         const newImageUrl = `${baseUrl}?t=${timestamp}`;
 
         if (uploadingCoverImage) {
-          // Aktualizuj dane okładki
+          // Update cover data
           setCoverData(prev => prev ? {
             ...prev,
             cover_url: newImageUrl,
@@ -1870,9 +1979,9 @@ function EbookGeneratorContent() {
           } : null);
 
           setCoverGenerated(true);
-          console.log(`✅ Okładka została pomyślnie przesłana: ${newImageUrl}`);
+          console.log(`✅ Cover has been successfully uploaded: ${newImageUrl}`);
         } else if (uploadingImageForChapter) {
-          // Aktualizuj grafikę rozdziału
+          // Update chapter graphic
           setTocItems(prevItems => prevItems.map(item =>
             item.id === uploadingImageForChapter
               ? { ...item, image_url: newImageUrl }
@@ -1883,7 +1992,7 @@ function EbookGeneratorContent() {
             setPreviewImage(newImageUrl);
           }
 
-          console.log(`✅ Obraz został pomyślnie przesłany dla rozdziału ID=${uploadingImageForChapter}: ${newImageUrl}`);
+          console.log(`✅ Image has been successfully uploaded for chapter ID=${uploadingImageForChapter}: ${newImageUrl}`);
         }
 
         setImageRefreshTimestamp(timestamp);
@@ -1892,10 +2001,10 @@ function EbookGeneratorContent() {
           setGraphicsAdded(true);
         }
       } else {
-        throw new Error('Nieprawidłowa odpowiedź z serwera');
+        throw new Error('Invalid response from the server');
       }
     } catch (err) {
-      handleApiError(err, 'Wystąpił błąd podczas przesyłania obrazu');
+      handleApiError(err, 'An error occurred while uploading the image');
     } finally {
       setIsSaving(false);
       setUploadingImageForChapter(null);
@@ -1915,7 +2024,7 @@ function EbookGeneratorContent() {
 
   const handleOpenCoverFileDialog = () => {
     setUploadingCoverImage(true);
-    setUploadingImageForChapter(null); // Wyczyść stan rozdziału
+    setUploadingImageForChapter(null); // Clear chapter state
     if (fileInputRef.current) {
       fileInputRef.current.click();
     }
@@ -1923,15 +2032,15 @@ function EbookGeneratorContent() {
 
   const handleAddItem = async () => {
     if (!newItemTitle.trim()) return;
-    if (!ebookId) {
-      setError('Brak identyfikatora ebooka. Spróbuj odświeżyć stronę i zacząć od początku.');
+    if (!currentEbookId) {
+      setError('Missing ebook identifier. Try refreshing the page and starting over.');
       return;
     }
 
     setIsSaving(true);
 
     try {
-      const response = await fetch(`/api/ebooks/${ebookId}/chapters`, {
+      const response = await fetch(`/api/ebooks/${currentEbookId}/chapters`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1942,7 +2051,7 @@ function EbookGeneratorContent() {
       });
 
       if (!response.ok) {
-        throw new Error('Błąd podczas dodawania rozdziału');
+        throw new Error('Error adding chapter');
       }
 
       const data = await response.json();
@@ -1963,30 +2072,30 @@ function EbookGeneratorContent() {
           newItemInputRef.current.focus();
         }
       } else {
-        throw new Error('Nieprawidłowa odpowiedź z API dodawania rozdziału');
+        throw new Error('Invalid response from the chapter addition API');
       }
     } catch (err) {
-      handleApiError(err, 'Wystąpił błąd podczas dodawania rozdziału');
+      handleApiError(err, 'An error occurred while adding the chapter');
     } finally {
       setIsSaving(false);
     }
   };
 
   const handleRemoveItem = async (id: string) => {
-    if (!ebookId) {
-      setError('Brak identyfikatora ebooka');
+    if (!currentEbookId) {
+      setError('Missing ebook identifier');
       return;
     }
 
     setIsSaving(true);
 
     try {
-      const response = await fetch(`/api/ebooks/${ebookId}/chapters/${id}`, {
+      const response = await fetch(`/api/ebooks/${currentEbookId}/chapters/${id}`, {
         method: 'DELETE',
       });
 
       if (!response.ok) {
-        throw new Error('Błąd podczas usuwania rozdziału');
+        throw new Error('Error deleting chapter');
       }
 
       setTocItems(tocItems.filter(item => item.id !== id));
@@ -1996,15 +2105,15 @@ function EbookGeneratorContent() {
         setChaptersWithoutContent(chaptersWithoutContent.filter(chapterId => chapterId !== id));
       }
     } catch (err) {
-      handleApiError(err, 'Wystąpił błąd podczas usuwania rozdziału');
+      handleApiError(err, 'An error occurred while deleting the chapter');
     } finally {
       setIsSaving(false);
     }
   };
 
   const handleMoveItem = async (id: string, direction: 'up' | 'down') => {
-    if (!ebookId) {
-      setError('Brak identyfikatora ebooka');
+    if (!currentEbookId) {
+      setError('Missing ebook identifier');
       return;
     }
 
@@ -2027,7 +2136,7 @@ function EbookGeneratorContent() {
         [newItems[index], newItems[index + 1]] = [newItems[index + 1], newItems[index]];
       }
 
-      const response = await fetch(`/api/ebooks/${ebookId}/chapters`, {
+      const response = await fetch(`/api/ebooks/${currentEbookId}/chapters`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -2041,7 +2150,7 @@ function EbookGeneratorContent() {
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || 'Błąd podczas aktualizacji pozycji rozdziałów');
+        throw new Error(errorData.error || 'Error updating chapter positions');
       }
 
       const updatedItems = newItems.map((item, idx) => ({
@@ -2052,7 +2161,7 @@ function EbookGeneratorContent() {
       setTocItems(updatedItems);
       setContextMenuVisible(null);
     } catch (err) {
-      handleApiError(err, 'Wystąpił błąd podczas zmiany kolejności rozdziałów');
+      handleApiError(err, 'An error occurred while reordering chapters');
     } finally {
       setIsSaving(false);
     }
@@ -2066,12 +2175,12 @@ function EbookGeneratorContent() {
   };
 
   const handleSaveEdit = async () => {
-    if (!editingItemId || !ebookId) return;
+    if (!editingItemId || !currentEbookId) return;
 
     setIsSaving(true);
 
     try {
-      const response = await fetch(`/api/ebooks/${ebookId}/chapters/${editingItemId}`, {
+      const response = await fetch(`/api/ebooks/${currentEbookId}/chapters/${editingItemId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -2082,7 +2191,7 @@ function EbookGeneratorContent() {
       });
 
       if (!response.ok) {
-        throw new Error('Błąd podczas aktualizacji tytułu rozdziału');
+        throw new Error('Error updating chapter title');
       }
 
       setTocItems(tocItems.map(item =>
@@ -2105,7 +2214,7 @@ function EbookGeneratorContent() {
       setEditingItemId(null);
       setEditingItemTitle('');
     } catch (err) {
-      handleApiError(err, 'Wystąpił błąd podczas zapisywania zmian');
+      handleApiError(err, 'An error occurred while saving changes');
     } finally {
       setIsSaving(false);
     }
@@ -2129,12 +2238,12 @@ function EbookGeneratorContent() {
   };
 
   const handleSaveEditedContent = async () => {
-    if (!activeChapterId || !ebookId) return;
+    if (!activeChapterId || !currentEbookId) return;
 
     setIsSaving(true);
 
     try {
-      const response = await fetch(`/api/ebooks/${ebookId}/chapters/${activeChapterId}`, {
+      const response = await fetch(`/api/ebooks/${currentEbookId}/chapters/${activeChapterId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -2145,7 +2254,7 @@ function EbookGeneratorContent() {
       });
 
       if (!response.ok) {
-        throw new Error('Błąd podczas aktualizacji treści rozdziału');
+        throw new Error('Error updating chapter content');
       }
 
       setTocItems(tocItems.map(item =>
@@ -2161,7 +2270,7 @@ function EbookGeneratorContent() {
       setEditingContent(false);
       setEditingChapterContent('');
     } catch (err) {
-      handleApiError(err, 'Wystąpił błąd podczas zapisywania treści rozdziału');
+      handleApiError(err, 'An error occurred while saving chapter content');
     } finally {
       setIsSaving(false);
     }
@@ -2201,8 +2310,8 @@ function EbookGeneratorContent() {
   };
 
   const handleExportEbook = async () => {
-    if (!ebookId) {
-      setError('Brak identyfikatora ebooka');
+    if (!currentEbookId) {
+      setError('Missing ebook identifier');
       return;
     }
 
@@ -2210,39 +2319,39 @@ function EbookGeneratorContent() {
     setError(null);
 
     try {
-      // ✅ LEPSZE sprawdzenie czy okładka jest gotowa
+      // ✅ BETTER check if cover is ready
       const needsCover = !coverData?.cover_status?.complete || !coverData?.cover_url;
 
       if (needsCover) {
-        console.log('🎨 Okładka nie jest gotowa - generuję automatycznie...');
-        // Najpierw wygeneruj okładkę
+        console.log('🎨 Cover is not ready - generating automatically...');
+        // First, generate the cover
         const coverGenerated = await generateCover(false, false);
         if (!coverGenerated) {
-          setError('Nie udało się automatycznie wygenerować okładki. Proszę wygenerować okładkę ręcznie przed eksportem.');
+          setError('Failed to automatically generate the cover. Please generate the cover manually before exporting.');
           setIsSaving(false);
           return;
         }
 
-        // Poczekaj chwilę na synchronizację
+        // Wait a moment for synchronization
         await new Promise(resolve => setTimeout(resolve, 1000));
       }
 
-      console.log('📄 Rozpoczynam eksport PDF...');
-      // Teraz eksportuj PDF
-      const response = await fetch(`/api/ebooks/${ebookId}/export-pdf`, {
+      console.log('📄 Starting PDF export...');
+      // Now, export the PDF
+      const response = await fetch(`/api/ebooks/${currentEbookId}/export-pdf`, {
         method: 'POST',
         headers: getUserHeaders(),
       });
 
       if (!response.ok) {
-        let errorMessage = 'Błąd podczas generowania PDF';
+        let errorMessage = 'Error generating PDF';
         try {
           const errorData = await response.json();
           if (errorData && errorData.error) {
             errorMessage = errorData.error;
           }
         } catch (jsonError) {
-          errorMessage = `Błąd serwera (${response.status})`;
+          errorMessage = `Server error (${response.status})`;
         }
         throw new Error(errorMessage);
       }
@@ -2256,7 +2365,13 @@ function EbookGeneratorContent() {
       document.body.appendChild(a);
       a.click();
 
-      console.log('✅ PDF został pomyślnie pobrany');
+      if (onEbookCreated) {
+        onEbookCreated();
+      }
+
+      onClose();
+
+      console.log('✅ PDF has been successfully downloaded');
 
       setTimeout(() => {
         window.URL.revokeObjectURL(url);
@@ -2264,19 +2379,19 @@ function EbookGeneratorContent() {
       }, 100);
 
     } catch (err) {
-      handleApiError(err, 'Wystąpił błąd podczas eksportu ebooka');
+      handleApiError(err, 'An error occurred while exporting the ebook');
     } finally {
       setIsSaving(false);
     }
   };
 
   const handleImagePreview = (imageUrl: string | undefined) => {
-    console.log('handleImagePreview wywołany z URL:', imageUrl);
+    console.log('handleImagePreview called with URL:', imageUrl);
     if (imageUrl && imageUrl.trim()) {
-      console.log('Ustawiam previewImage na:', imageUrl);
+      console.log('Setting previewImage to:', imageUrl);
       setPreviewImage(imageUrl);
     } else {
-      console.warn('Nie można wyświetlić podglądu - pusty URL:', imageUrl);
+      console.warn('Cannot display preview - empty URL:', imageUrl);
     }
   };
 
@@ -2284,65 +2399,65 @@ function EbookGeneratorContent() {
     setPreviewImage(null);
   };
 
-  // ROZSZERZONE renderStep1 z nowymi polami
+  // EXTENDED renderStep1 with new fields
   const renderStep1 = () => (
     <div className="bg-gradient-to-br from-white to-blue-50 rounded-xl border border-blue-100 shadow-lg p-8 transition-all duration-300">
       <div className="mb-8 text-center">
         <BookMarked size={48} className="text-blue-500 mb-4 mx-auto drop-shadow-md" />
         <h2 className="text-2xl font-semibold text-gray-800 mb-2">
-          {tocGenerated ? 'Edytuj dane e-book`a' : 'Utwórz swój e-book'}
+          {tocGenerated ? 'Edit ebook data' : 'Create your ebook'}
         </h2>
         <p className="text-gray-600 max-w-md mx-auto">
           {tocGenerated
-            ? 'Wprowadź zmiany w danych Twojego e-booka.'
-            : 'Wprowadź dane, na podstawie których wygenerujemy spis treści dla Twojego e-booka.'}
+            ? 'Make changes to your ebook data.'
+            : 'Enter the data based on which we will generate the table of contents for your ebook.'}
         </p>
       </div>
 
       <div className="mb-6 max-w-2xl mx-auto space-y-6">
-        {/* Sekcja tytułu */}
+        {/* Title section */}
         <div className="bg-white p-4 rounded-lg border border-blue-100">
           <label className="block text-sm font-medium text-gray-700 mb-3">
-            Tytuł e-book'a *
+            Ebook Title *
           </label>
           <input
             type="text"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder="Np. Kompletny przewodnik po zarządzaniu czasem"
+            placeholder="E.g. The Complete Guide to Time Management"
             className="w-full px-4 py-3 border border-blue-200 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-700 bg-white transition-all duration-200"
             disabled={isGeneratingToc || isSaving || isScrapingUrls}
             ref={titleInputRef}
           />
         </div>
 
-        {/* Sekcja podtytułu */}
+        {/* Subtitle section */}
         <div className="bg-white p-4 rounded-lg border border-blue-100">
           <label className="block text-sm font-medium text-gray-700 mb-3">
-            Podtytuł:
-            <span className="text-gray-400 font-normal ml-1">(opcjonalnie)</span>
+            Subtitle:
+            <span className="text-gray-400 font-normal ml-1">(optional)</span>
           </label>
           <input
             type="text"
             value={subtitle}
             onChange={(e) => setSubtitle(e.target.value)}
-            placeholder="Np. Praktyczne metody i narzędzia"
+            placeholder="E.g. Practical Methods and Tools"
             className="w-full px-4 py-3 border border-blue-200 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-700 bg-white transition-all duration-200"
             disabled={isGeneratingToc || isSaving || isScrapingUrls}
             ref={subtitleInputRef}
           />
         </div>
 
-        {/* NOWA Sekcja opisu */}
+        {/* NEW Description section */}
         <div className="bg-white p-4 rounded-lg border border-blue-100">
           <label className="block text-sm font-medium text-gray-700 mb-3">
-            Opis i preferencje:
-            <span className="text-gray-400 font-normal ml-1">(opcjonalnie)</span>
+            Description and preferences:
+            <span className="text-gray-400 font-normal ml-1">(optional)</span>
           </label>
           <textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="Opisz swoje preferencje dotyczące treści ebooka, grupy docelowej, stylu pisania, głównych tematów które chcesz uwzględnić..."
+            placeholder="Describe your preferences for the ebook content, target audience, writing style, main topics you want to include..."
             className="w-full px-4 py-3 border border-blue-200 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-700 bg-white transition-all duration-200 resize-none"
             rows={4}
             disabled={isGeneratingToc || isSaving || isScrapingUrls}
@@ -2350,20 +2465,20 @@ function EbookGeneratorContent() {
             ref={descriptionInputRef}
           />
           <div className="text-xs text-gray-400 mt-1">
-            {description.length}/1000 znaków
+            {description.length}/1000 characters
           </div>
         </div>
 
-        {/* NOWA Sekcja linków */}
+        {/* NEW Links section */}
         <div className="bg-white p-4 rounded-lg border border-blue-100 text-gray-700">
           <div className="flex justify-between items-center mb-3">
             <label className="text-sm font-medium text-gray-700">
-              Źródła WWW:
-              <span className="text-gray-400 font-normal ml-1">(opcjonalnie, max 5)</span>
+              WWW Sources:
+              <span className="text-gray-400 font-normal ml-1">(optional, max 5)</span>
             </label>
             {scrapedContent.length > 0 && (
               <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full">
-                Pobrano {scrapedContent.length} źródeł
+                Fetched {scrapedContent.length} sources
               </span>
             )}
           </div>
@@ -2396,7 +2511,7 @@ function EbookGeneratorContent() {
 
                           </>
                         ) : (
-                          'Zatwierdź'
+                          'Approve'
                         )}
                       </button>
                     )}
@@ -2404,7 +2519,7 @@ function EbookGeneratorContent() {
                     {url.trim() && scrapedContent.find(item => item.url === url) && (
                       <span className="px-3 py-2 text-sm bg-green-100 text-green-700 rounded-lg border border-green-200 flex items-center">
                         <Check size={14} className="mr-1" />
-                        Już dodane
+                        Already added
                       </span>
                   )}
 
@@ -2420,11 +2535,11 @@ function EbookGeneratorContent() {
                 </div>
               ))}
 
-              {/* Linia podziału i sekcja PDF */}
+              {/* Divider line and PDF section */}
               <div className="border-t border-gray-200 pt-4 mt-4">
                 <label className="block text-sm font-medium text-gray-700 mb-3">
-                  Źródła PDF:
-                  <span className="text-gray-400 font-normal ml-1">(opcjonalnie, max 10MB)</span>
+                  PDF Sources:
+                  <span className="text-gray-400 font-normal ml-1">(optional, max 10MB)</span>
                 </label>
 
                 <div className="flex items-center gap-3">
@@ -2440,18 +2555,18 @@ function EbookGeneratorContent() {
                     {isUploadingPdf ? (
                       <>
                         <Loader size={16} className="animate-spin mr-2" />
-                        Przetwarzanie...
+                        Processing...
                       </>
                     ) : (
                       <>
                         <Upload size={16} className="mr-2" />
-                        Wybierz plik PDF
+                        Choose PDF file
                       </>
                     )}
                   </button>
 
                   <span className="text-xs text-gray-500">
-                    Obsługujemy pliki PDF z tekstem (nie skany)
+                    We support PDF files with text (not scans)
                   </span>
                 </div>
 
@@ -2465,17 +2580,17 @@ function EbookGeneratorContent() {
               </div>
           </div>
 
-          {/* Podgląd pobranych treści */}
+          {/* Preview of fetched content */}
             {scrapedContent.length > 0 && (
               <div className="mt-4 border-t border-gray-200 pt-6">
-                <h4 className="text-sm font-medium text-gray-700 mb-2">Pobrane źródła:</h4>
+                <h4 className="text-sm font-medium text-gray-700 mb-2">Fetched sources:</h4>
                 <div className="space-y-2 max-h-128 overflow-y-auto">
                   {scrapedContent.map((item, index) => (
                     <div key={index} className="text-xs bg-gray-50 p-2 rounded border relative">
                       <button
                         onClick={() => handleRemoveScrapedContent(item.url)}
                         className="absolute top-1 right-1 text-red-500 hover:text-red-700 hover:bg-red-100 rounded-full p-1 transition-colors cursor-pointer"
-                        title="Usuń źródło"
+                        title="Remove source"
                       >
                         <X size={12} />
                       </button>
@@ -2497,7 +2612,7 @@ function EbookGeneratorContent() {
             className="flex items-center justify-center px-6 py-3 rounded-lg text-gray-700 font-medium border border-gray-300 shadow-sm hover:bg-gray-50 transition-all duration-200 cursor-pointer"
             disabled={isSaving}
           >
-            Anuluj
+            Cancel
           </button>
         )}
 
@@ -2513,22 +2628,22 @@ function EbookGeneratorContent() {
           {isGeneratingToc ? (
             <>
               <Loader size={20} className="animate-spin mr-3" />
-              Generowanie...
+              Generating...
             </>
           ) : isScrapingUrls ? (
             <>
               <Loader size={20} className="animate-spin mr-3" />
-              Pobieranie źródeł...
+              Fetching sources...
             </>
           ) : tocGenerated ? (
             <>
               <Save size={20} className="mr-3" />
-              Zapisz zmiany
+              Save changes
             </>
           ) : (
             <>
               <Sparkles size={20} className="mr-3" />
-              Wygeneruj spis treści
+              Generate table of contents
             </>
           )}
         </button>
@@ -2541,12 +2656,12 @@ function EbookGeneratorContent() {
       <div className="bg-white rounded-xl shadow-2xl p-6 max-w-md w-full animate-fadeIn">
         <div className="text-center mb-6">
           <AlertCircle size={40} className="text-blue-500 mx-auto mb-4" />
-          <h3 className="text-xl font-bold text-gray-800 mb-2">Zmiana tytułu e-booka</h3>
+          <h3 className="text-xl font-bold text-gray-800 mb-2">Change of ebook title</h3>
           <p className="text-gray-600">
             {subtitle !== originalSubtitle
-              ? 'Tytuł lub podtytuł e-booka zostały zmienione, co może wpłynąć na jego zawartość.'
-              : 'Podstawowe dane e-booka zostały zmienione co może wpłynąć na jego zawartość.'}
-            Czy chcesz wygenerować nową propozycję rozdziałów?
+              ? 'The title or subtitle of the ebook has been changed, which may affect its content.'
+              : 'The basic data of the ebook has been changed, which may affect its content.'}
+            Do you want to generate a new proposal for the chapters?
           </p>
         </div>
 
@@ -2556,7 +2671,7 @@ function EbookGeneratorContent() {
             className="px-6 py-2.5 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50 transition-all duration-200 cursor-pointer"
             disabled={isGeneratingToc}
           >
-            NIE
+            NO
           </button>
           <button
             onClick={() => handleRegenerateResponse(true)}
@@ -2566,10 +2681,10 @@ function EbookGeneratorContent() {
             {isGeneratingToc ? (
               <>
                 <Loader size={16} className="animate-spin mr-2 inline-block" />
-                Generowanie...
+                Generating...
               </>
             ) : (
-              'TAK'
+              'YES'
             )}
           </button>
         </div>
@@ -2586,10 +2701,10 @@ function EbookGeneratorContent() {
         <div className="bg-white rounded-xl shadow-2xl p-6 max-w-md w-full animate-fadeIn">
           <div className="text-center mb-6">
             <AlertCircle size={40} className="text-blue-500 mx-auto mb-4" />
-            <h3 className="text-xl font-bold text-gray-800 mb-2">Zmiana tytułu rozdziału</h3>
+            <h3 className="text-xl font-bold text-gray-800 mb-2">Change of chapter title</h3>
             <p className="text-gray-600">
-              Tytuł rozdziału został zmieniony z "{originalChapterTitle}" na "{chapter.title}".
-              Czy chcesz wygenerować nową treść dla tego rozdziału?
+              The chapter title has been changed from "{originalChapterTitle}" to "{chapter.title}".
+              Do you want to generate new content for this chapter?
             </p>
           </div>
 
@@ -2599,7 +2714,7 @@ function EbookGeneratorContent() {
               className="px-6 py-2.5 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50 transition-all duration-200 cursor-pointer"
               disabled={isGeneratingSingleChapter}
             >
-              NIE
+              NO
             </button>
             <button
               onClick={() => handleChapterRegenerateResponse(true)}
@@ -2609,10 +2724,10 @@ function EbookGeneratorContent() {
               {isGeneratingSingleChapter ? (
                 <>
                   <Loader size={16} className="animate-spin mr-2 inline-block" />
-                  Generowanie...
+                  Generating...
                 </>
               ) : (
-                'TAK'
+                'YES'
               )}
             </button>
           </div>
@@ -2631,7 +2746,7 @@ function EbookGeneratorContent() {
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
         <div className="bg-white rounded-xl shadow-2xl p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto">
           <div className="flex justify-between items-start mb-4">
-            <h3 className="text-xl font-bold text-gray-800">Prompt dla obrazu</h3>
+            <h3 className="text-xl font-bold text-gray-800">Prompt for the image</h3>
             <button
               onClick={onClose}
               className="text-gray-500 hover:text-gray-700 cursor-pointer"
@@ -2641,18 +2756,18 @@ function EbookGeneratorContent() {
           </div>
 
           <div className="mb-4">
-            <h4 className="font-medium text-gray-700 mb-2">Rozdział: {chapter.title}</h4>
+            <h4 className="font-medium text-gray-700 mb-2">Chapter: {chapter.title}</h4>
             {prompt ? (
               <div className="bg-gray-50 p-4 rounded-lg border">
                 <p className="text-sm text-gray-800 whitespace-pre-wrap">{prompt}</p>
                 <div className="mt-2 text-xs text-gray-500">
-                  Długość: {prompt.length}/400 znaków
+                  Length: {prompt.length}/400 characters
                 </div>
               </div>
             ) : (
               <div className="bg-amber-50 p-4 rounded-lg border border-amber-200">
                 <p className="text-sm text-amber-700">
-                  Prompt nie został jeszcze wygenerowany. Zostanie utworzony podczas pierwszego generowania obrazu.
+                  The prompt has not been generated yet. It will be created during the first image generation.
                 </p>
               </div>
             )}
@@ -2663,7 +2778,7 @@ function EbookGeneratorContent() {
               onClick={onClose}
               className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 cursor-pointer"
             >
-              Zamknij
+              Close
             </button>
             {prompt && (
               <button
@@ -2674,7 +2789,7 @@ function EbookGeneratorContent() {
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 cursor-pointer"
                 disabled={generatingAIImageForChapter === chapterId || isGeneratingAllImages}
               >
-                Regeneruj z nowym promptem
+                Regenerate with a new prompt
               </button>
             )}
           </div>
@@ -2688,7 +2803,7 @@ function EbookGeneratorContent() {
       <div className="bg-gradient-to-r from-blue-500 to-blue-600 p-4 sm:p-6 text-white">
         <div className="flex flex-col justify-between">
           <div>
-            <h2 className="text-xl font-medium pb-2 border-b border-blue-300 mb-3">Dostosuj strukturę e-book'a</h2>
+            <h2 className="text-xl font-medium pb-2 border-b border-blue-300 mb-3">Customize the ebook structure</h2>
             <p className="text-xl sm:text-2xl text-white mt-1 font-bold max-w-2xl line-clamp-3">
               {title}
             </p>
@@ -2705,14 +2820,14 @@ function EbookGeneratorContent() {
         <div className="mb-6">
           <div className="text-sm font-semibold text-gray-800 mb-3 flex items-center">
             <FileText size={16} className="mr-2 text-blue-500" />
-            Rozdziały ({tocItems.length})
+            Chapters ({tocItems.length})
           </div>
 
           <div className="space-y-2 mb-4 max-h-[380px] overflow-y-auto pr-2 custom-scrollbar">
             {tocItems.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-10 text-gray-500 border border-dashed border-gray-300 rounded-lg bg-gray-50">
                 <BookOpen size={36} className="text-gray-400 mb-2" />
-                <p>Brak rozdziałów. Dodaj pierwszy rozdział poniżej.</p>
+                <p>No chapters. Add the first chapter below.</p>
               </div>
             ) : (
               tocItems.map((item, index) => (
@@ -2753,18 +2868,18 @@ function EbookGeneratorContent() {
                           {generatingChapterIds.includes(item.id) ? (
                             <span className="text-blue-600 flex items-center">
                               <Loader size={14} className="animate-spin mr-1 sm:mr-1" />
-                              <span className="text-xs whitespace-nowrap hidden sm:inline">Generowanie...</span>
+                              <span className="text-xs whitespace-nowrap hidden sm:inline">Generating...</span>
                             </span>
                           ) :
                           completedChapterIds.includes(item.id) || (item.content && item.content.trim().length > 0) ? (
                             <span className="text-green-600 flex items-center">
                               <Check size={14} className="mr-0 sm:mr-1" />
-                              <span className="text-xs whitespace-nowrap hidden sm:inline">Gotowe</span>
+                              <span className="text-xs whitespace-nowrap hidden sm:inline">Ready</span>
                             </span>
                           ) :
                           currentGeneratingIndex < index && !completedChapterIds.includes(item.id) ? (
                             <span className="text-gray-500 hidden sm:flex items-center">
-                              <span className="text-xs whitespace-nowrap">Czeka w kolejce...</span>
+                              <span className="text-xs whitespace-nowrap">Waiting in queue...</span>
                             </span>
                           ) : null}
                         </>
@@ -2773,7 +2888,7 @@ function EbookGeneratorContent() {
                       {!isGeneratingContent && (completedChapterIds.includes(item.id) || (item.content && item.content.trim().length > 0)) && (
                         <span className="text-green-600 flex items-center">
                           <Check size={14} className="mr-0 sm:mr-1" />
-                          <span className="text-xs whitespace-nowrap hidden sm:inline">Treść dodana</span>
+                          <span className="text-xs whitespace-nowrap hidden sm:inline">Content added</span>
                         </span>
                       )}
                     </div>
@@ -2785,7 +2900,7 @@ function EbookGeneratorContent() {
                         <button
                           onClick={handleSaveEdit}
                           className="p-1.5 text-green-600 hover:text-green-700 hover:bg-green-100 rounded-lg transition-colors cursor-pointer"
-                          title="Zapisz"
+                          title="Save"
                           disabled={isSaving}
                         >
                           <Check size={18} />
@@ -2793,7 +2908,7 @@ function EbookGeneratorContent() {
                         <button
                           onClick={handleCancelEdit}
                           className="p-1.5 text-red-600 hover:text-red-700 hover:bg-red-100 rounded-lg transition-colors cursor-pointer"
-                          title="Anuluj"
+                          title="Cancel"
                           disabled={isSaving}
                         >
                           <X size={18} />
@@ -2821,7 +2936,7 @@ function EbookGeneratorContent() {
                               } transition-colors`}
                             >
                               <ArrowUp size={14} className="mr-2" />
-                              Przesuń wyżej
+                              Move up
                             </button>
                             <button
                               onClick={() => handleMoveItem(item.id, 'down')}
@@ -2833,7 +2948,7 @@ function EbookGeneratorContent() {
                               } transition-colors`}
                             >
                               <ArrowDown size={14} className="mr-2" />
-                              Przesuń niżej
+                              Move down
                             </button>
                             <button
                               onClick={() => handleStartEditing(item)}
@@ -2843,7 +2958,7 @@ function EbookGeneratorContent() {
                               } transition-colors`}
                             >
                               <Edit size={14} className="mr-2" />
-                              Edytuj
+                              Edit
                             </button>
                             <button
                               onClick={() => handleRemoveItem(item.id)}
@@ -2853,7 +2968,7 @@ function EbookGeneratorContent() {
                               } transition-colors rounded-b-lg`}
                             >
                               <X size={14} className="mr-2" />
-                              Usuń
+                              Remove
                             </button>
                           </div>
                         )}
@@ -2871,7 +2986,7 @@ function EbookGeneratorContent() {
                 type="text"
                 value={newItemTitle}
                 onChange={(e) => setNewItemTitle(e.target.value)}
-                placeholder="Tytuł nowego rozdziału"
+                placeholder="New chapter title"
                 className="flex-grow px-4 py-3 text-gray-700 border-0 focus:ring-0 focus:outline-none"
                 onKeyDown={(e) => handleKeyDown(e, handleAddItem)}
                 ref={newItemInputRef}
@@ -2891,7 +3006,7 @@ function EbookGeneratorContent() {
                 ) : (
                   <Plus size={18} className="mr-1" />
                 )}
-                Dodaj
+                Add
               </button>
             </div>
           </div>
@@ -2902,7 +3017,7 @@ function EbookGeneratorContent() {
             <div className="flex items-center justify-between mb-3">
               <h3 className="font-medium text-blue-800 flex items-center">
                 <Loader size={16} className="mr-2 animate-spin text-blue-600" />
-                Generowanie treści
+                Generating content
               </h3>
               <span className="text-sm text-blue-600 font-medium">
                 {completedChapterIds.length}/{tocItems.length}
@@ -2918,7 +3033,7 @@ function EbookGeneratorContent() {
 
             <p className="text-xs text-blue-700 mt-2 truncate">
               {generatingChapterIds.length > 0 &&
-                `Aktualnie generowany: ${tocItems.find(item => generatingChapterIds.includes(item.id))?.title || 'rozdział'}`
+                `Currently generating: ${tocItems.find(item => generatingChapterIds.includes(item.id))?.title || 'chapter'}`
               }
             </p>
           </div>
@@ -2931,7 +3046,7 @@ function EbookGeneratorContent() {
             disabled={isSaving}
           >
             <Edit size={16} className="mr-1" />
-            Zmień dane
+            Change data
           </button>
 
           <div className="flex items-center gap-3 w-full sm:w-auto">
@@ -2942,7 +3057,7 @@ function EbookGeneratorContent() {
                 disabled={isSaving}
               >
                 <BookOpen size={18} className="mr-2" />
-                Przejdź do treści
+                Go to content
                 <ChevronRight size={16} className="ml-1" />
               </button>
             ) : (
@@ -2950,7 +3065,7 @@ function EbookGeneratorContent() {
                 {tocItems.length < 3 && (
                   <div className="text-amber-600 text-sm flex items-center bg-amber-50 px-3 py-1.5 rounded-lg w-full sm:w-auto mb-2 sm:mb-0">
                     <AlertCircle size={14} className="mr-1.5 flex-shrink-0" />
-                    <span>E-book powinien zawierać co najmniej 3 rozdziały</span>
+                    <span>The ebook should contain at least 3 chapters</span>
                   </div>
                 )}
 
@@ -2966,14 +3081,14 @@ function EbookGeneratorContent() {
                   {isGeneratingContent ? (
                     <>
                       <Loader size={18} className="mr-2 animate-spin" />
-                      Generowanie...
+                      Generating...
                     </>
                   ) : (
                     <>
                       <Sparkles size={18} className="mr-2" />
                       {tocItems.length < 3
-                        ? 'Dodaj min. 3 rozdziały'
-                        : 'Generuj treść'}
+                        ? 'Add min. 3 chapters'
+                        : 'Generate content'}
                     </>
                   )}
                 </button>
@@ -2999,11 +3114,11 @@ function EbookGeneratorContent() {
                 <div>
                   <p className="text-yellow-800 font-medium">
                     {chaptersWithoutContent.length === 1
-                      ? 'Wykryto nowy rozdział bez treści'
-                      : `Wykryto ${chaptersWithoutContent.length} rozdziały bez treści`}
+                      ? 'A new chapter without content has been detected'
+                      : `Detected ${chaptersWithoutContent.length} chapters without content`}
                   </p>
                   <p className="text-yellow-700 text-sm">
-                    Czy chcesz wygenerować treść dla {chaptersWithoutContent.length === 1 ? 'tego rozdziału' : 'tych rozdziałów'}?
+                    Do you want to generate content for {chaptersWithoutContent.length === 1 ? 'this chapter' : 'these chapters'}?
                   </p>
                 </div>
               </div>
@@ -3013,7 +3128,7 @@ function EbookGeneratorContent() {
                   className="px-3 py-1.5 text-sm bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer"
                   disabled={isGeneratingMissingContent}
                 >
-                  Nie teraz
+                  Not now
                 </button>
                 <button
                   onClick={generateMissingContent}
@@ -3023,12 +3138,12 @@ function EbookGeneratorContent() {
                   {isGeneratingMissingContent ? (
                     <>
                       <Loader size={14} className="mr-1.5 animate-spin" />
-                      Generowanie...
+                      Generating...
                     </>
                   ) : (
                     <>
                       <Sparkles size={14} className="mr-1.5" />
-                      Wygeneruj treść
+                      Generate content
                     </>
                   )}
                 </button>
@@ -3040,7 +3155,7 @@ function EbookGeneratorContent() {
         <div className="bg-gradient-to-r from-blue-500 to-blue-600 p-4 sm:p-6 text-white">
           <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center">
             <div>
-              <h2 className="text-xl font-medium pb-2 border-b border-blue-300 mb-3">Dostosuj treść ebook'a</h2>
+              <h2 className="text-xl font-medium pb-2 border-b border-blue-300 mb-3">Customize the ebook content</h2>
               <p className="text-xl sm:text-2xl text-white mt-1 font-bold max-w-2xl line-clamp-2">
                 {title}
               </p>
@@ -3058,7 +3173,7 @@ function EbookGeneratorContent() {
             <div className="flex items-center">
               <FileText size={16} className="mr-2 text-blue-500" />
               <span className="text-sm font-medium text-gray-700">
-                Rozdział {tocItems.findIndex(item => item.id === activeChapterId) + 1} z {tocItems.length}
+                Chapter {tocItems.findIndex(item => item.id === activeChapterId) + 1} of {tocItems.length}
               </span>
             </div>
 
@@ -3079,12 +3194,12 @@ function EbookGeneratorContent() {
                     {isGeneratingSingleChapter && chapterToRegenerate === activeChapterId ? (
                       <>
                         <Loader size={12} className="animate-spin mr-1.5" />
-                        Generuję...
+                        Generating...
                       </>
                     ) : (
                       <>
                         <Sparkles size={12} className="mr-1.5" />
-                        Wygeneruj
+                        Generate
                       </>
                     )}
                   </button>
@@ -3095,7 +3210,7 @@ function EbookGeneratorContent() {
                     disabled={isSaving || isGeneratingSingleChapter}
                   >
                     <Edit size={12} className="mr-1.5" />
-                    Edytuj
+                    Edit
                   </button>
                 )}
               </div>
@@ -3120,7 +3235,7 @@ function EbookGeneratorContent() {
                 ) : (
                   <Save size={12} className="mr-1.5" />
                 )}
-                Zapisz
+                Save
               </button>
               <button
                 onClick={handleCancelEditContent}
@@ -3128,7 +3243,7 @@ function EbookGeneratorContent() {
                 disabled={isSaving}
               >
                 <X size={12} className="mr-1.5" />
-                Anuluj
+                Cancel
               </button>
             </div>
           )}
@@ -3211,7 +3326,7 @@ function EbookGeneratorContent() {
             <div className="p-3 bg-blue-50 font-medium border-b border-gray-200 text-gray-700 flex items-center justify-between">
               <div className="flex items-center">
                 <FileText size={16} className="mr-2 text-blue-500" />
-                Spis treści
+                Table of contents
               </div>
             </div>
             <div className="flex-1 overflow-y-auto custom-scrollbar">
@@ -3236,22 +3351,22 @@ function EbookGeneratorContent() {
                     {(completedChapterIds.includes(item.id) || (item.content && item.content.trim().length > 0)) ? (
                       <span className="text-xs text-green-600 flex items-center">
                         <Check size={12} className="mr-1" />
-                        Treść gotowa
+                        Content ready
                       </span>
                     ) : isGeneratingContent && generatingChapterIds.includes(item.id) ? (
                       <span className="text-xs text-blue-600 flex items-center">
                         <Loader size={12} className="mr-1 animate-spin" />
-                        Generowanie...
+                        Generating...
                       </span>
                     ) : isGeneratingContent && currentGeneratingIndex < index && !completedChapterIds.includes(item.id) ? (
                       <span className="text-xs text-gray-600 flex items-center">
                         <span className="w-2 h-2 bg-gray-300 rounded-full mr-1"></span>
-                        Czeka w kolejce
+                        Waiting in queue
                       </span>
                     ) : (
                       <span className="text-xs text-amber-600 flex items-center">
                         <AlertCircle size={12} className="mr-1" />
-                        Brak treści
+                        No content
                       </span>
                     )}
                   </div>
@@ -3280,12 +3395,12 @@ function EbookGeneratorContent() {
                             {isGeneratingSingleChapter && chapterToRegenerate === activeChapterId ? (
                               <>
                                 <Loader size={14} className="animate-spin mr-1.5" />
-                                Generuję...
+                                Generating...
                               </>
                             ) : (
                               <>
                                 <Sparkles size={14} className="mr-1.5" />
-                                Wygeneruj treść
+                                Generate content
                               </>
                             )}
                           </button>
@@ -3297,7 +3412,7 @@ function EbookGeneratorContent() {
                             disabled={isSaving || isGeneratingSingleChapter}
                           >
                             <Edit size={14} className="mr-1.5" />
-                            Edytuj
+                            Edit
                           </button>
                         )}
                       </>
@@ -3313,7 +3428,7 @@ function EbookGeneratorContent() {
                           ) : (
                             <Save size={14} className="mr-1.5" />
                           )}
-                          Zapisz
+                          Save
                         </button>
                         <button
                           onClick={handleCancelEditContent}
@@ -3321,7 +3436,7 @@ function EbookGeneratorContent() {
                           disabled={isSaving}
                         >
                           <X size={14} className="mr-1.5" />
-                          Anuluj
+                          Cancel
                         </button>
                       </>
                     )}
@@ -3334,7 +3449,7 @@ function EbookGeneratorContent() {
                       value={editingChapterContent}
                       onChange={(e) => setEditingChapterContent(e.target.value)}
                       className="w-full h-full p-4 border border-gray-300 rounded-lg text-gray-700 focus:ring-2 focus:ring-blue-500 focus:border-transparent cursor-text"
-                      placeholder="Wprowadź treść rozdziału..."
+                      placeholder="Enter the chapter content..."
                       ref={contentEditRef}
                       disabled={isSaving}
                     />
@@ -3344,9 +3459,9 @@ function EbookGeneratorContent() {
                         <div className="flex flex-col items-center justify-center h-64">
                           <Loader size={48} className="text-blue-500 animate-spin mb-4" />
                           <p className="text-center text-gray-600">
-                            Generowanie treści dla rozdziału...
+                            Generating content for the chapter...
                             <br />
-                            To może potrwać kilka chwil.
+                            This may take a few moments.
                           </p>
                         </div>
                       ) : activeChapter.content ? (
@@ -3357,9 +3472,9 @@ function EbookGeneratorContent() {
                         <div className="flex flex-col items-center justify-center h-64 text-gray-500">
                           <BookOpen size={48} className="mb-4 text-gray-300" />
                           <p className="text-center">
-                            Ten rozdział nie ma jeszcze treści.
+                            This chapter does not have content yet.
                             <br />
-                            Użyj przycisku "Wygeneruj treść" aby dodać treść.
+                            Use the "Generate content" button to add content.
                           </p>
                         </div>
                       )}
@@ -3369,7 +3484,7 @@ function EbookGeneratorContent() {
               </>
             ) : (
               <div className="flex items-center justify-center h-full text-gray-500">
-                <p>Wybierz rozdział z listy.</p>
+                <p>Select a chapter from the list.</p>
               </div>
             )}
           </div>
@@ -3384,10 +3499,10 @@ function EbookGeneratorContent() {
                 : 'text-gray-700 hover:bg-gray-50 cursor-pointer'
             }`}
             disabled={isSaving || editingContent}
-            title={editingContent ? "Zakończ edycję treści, aby przejść do spisu treści" : ""}
+            title={editingContent ? "Finish editing content to go to the table of contents" : ""}
           >
             <ChevronLeft size={16} className="mr-1" />
-            Spis treści
+            Table of contents
           </button>
 
           <button
@@ -3398,10 +3513,10 @@ function EbookGeneratorContent() {
                 : 'bg-blue-600 text-white hover:bg-blue-700 hover:shadow-md cursor-pointer'
             }`}
             disabled={isSaving || editingContent}
-            title={editingContent ? "Zakończ edycję treści, aby przejść do grafik i okładki" : ""}
+            title={editingContent ? "Finish editing content to go to graphics and cover" : ""}
           >
             <Image size={16} className="mr-2" />
-            Grafiki i okładka
+            Graphics and cover
           </button>
         </div>
 
@@ -3418,14 +3533,14 @@ function EbookGeneratorContent() {
     );
   };
 
-  // ZMODYFIKOWANY renderStep4 z okładką jako pierwszą grafiką
+  // MODIFIED renderStep4 with the cover as the first graphic
   const renderStep4 = () => {
     return (
       <div className="bg-white rounded-xl border border-gray-200 shadow-lg overflow-hidden transition-all duration-300">
         <div className="bg-gradient-to-r from-blue-500 to-blue-600 p-6 text-white">
           <div className="flex justify-between items-center">
             <div>
-              <h2 className="text-xl font-medium pb-2 border-b border-blue-300 mb-3">Grafiki i okładka ebooka</h2>
+              <h2 className="text-xl font-medium pb-2 border-b border-blue-300 mb-3">Graphics and cover of the ebook</h2>
               <p className="text-2xl text-white mt-1 font-bold max-w-2xl">
                 {title}
               </p>
@@ -3451,11 +3566,11 @@ function EbookGeneratorContent() {
             <div className="flex items-center justify-between mb-4">
               <div className="text-sm font-semibold text-gray-800 flex items-center">
                 <FileText size={16} className="mr-2 text-blue-500" />
-                Grafiki ({tocItems.filter(item => item.image_url).length + (coverData?.cover_url ? 1 : 0)}/{tocItems.length + 1})
+                Graphics ({tocItems.filter(item => item.image_url).length + (coverData?.cover_url ? 1 : 0)}/{tocItems.length + 1})
               </div>
 
               <div className="bg-blue-50 px-3 py-1 rounded-full text-xs text-blue-700">
-                {Math.round(((tocItems.filter(item => item.image_url).length + (coverData?.cover_url ? 1 : 0)) / (tocItems.length + 1)) * 100)}% ukończono
+                {Math.round(((tocItems.filter(item => item.image_url).length + (coverData?.cover_url ? 1 : 0)) / (tocItems.length + 1)) * 100)}% completed
               </div>
             </div>
 
@@ -3468,12 +3583,12 @@ function EbookGeneratorContent() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-            {/* OKŁADKA JAKO PIERWSZY ELEMENT Z WYRÓŻNIENIEM */}
+            {/* COVER AS THE FIRST ELEMENT WITH HIGHLIGHT */}
             <div className="border-2 border-dashed border-gray-400 rounded-lg shadow-sm bg-gray-100 overflow-hidden h-full flex flex-col">
               <div className="bg-gray-200 p-3 border-b border-gray-300 flex flex-col">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium">
-                    📖 OKŁADKA
+                    📖 COVER
                   </span>
 
                   <span className={`text-xs px-2 py-0.5 rounded-full ${
@@ -3482,8 +3597,8 @@ function EbookGeneratorContent() {
                       : 'bg-gray-300 text-gray-700'
                   }`}>
                     {coverData?.cover_url
-                      ? 'Gotowa ✓'
-                      : 'Brak okładki'}
+                      ? 'Ready ✓'
+                      : 'No cover'}
                   </span>
                 </div>
 
@@ -3493,7 +3608,7 @@ function EbookGeneratorContent() {
                   <div className="mr-2 min-w-6 h-6 w-6 bg-gray-600 rounded-full flex items-center justify-center text-white font-semibold shadow-sm text-xs flex-shrink-0" style={{transform: 'translateY(-1px)'}}>
                     📖
                   </div>
-                  <h3 className="font-medium text-gray-800 text-sm break-words">Okładka e-booka</h3>
+                  <h3 className="font-medium text-gray-800 text-sm break-words">Ebook cover</h3>
                 </div>
               </div>
 
@@ -3503,22 +3618,22 @@ function EbookGeneratorContent() {
                     <img
                       key={`cover-${imageRefreshTimestamp}`}
                       src={coverData.cover_url}
-                      alt="Okładka ebooka"
+                      alt="Ebook cover"
                       className="object-cover w-full h-full cursor-pointer hover:opacity-90 transition-opacity"
                       onClick={() => {
-                        console.log('Kliknięto okładkę, URL:', coverData.cover_url);
+                        console.log('Cover clicked, URL:', coverData.cover_url);
                         handleImagePreview(coverData.cover_url);
                       }}
-                      onLoad={() => console.log('✅ Okładka załadowana pomyślnie:', coverData.cover_url)}
+                      onLoad={() => console.log('✅ Cover loaded successfully:', coverData.cover_url)}
                       onError={(e) => {
-                        console.error('❌ Błąd ładowania okładki:', coverData.cover_url);
+                        console.error('❌ Error loading cover:', coverData.cover_url);
                         setTimeout(() => fetchCoverStatus(), 2000);
                       }}
                     />
                   ) : (
                     <div className="flex flex-col items-center justify-center text-gray-500 text-sm p-4 text-center">
                       <Palette size={32} className="text-gray-400 mb-2" />
-                      <p>Brak okładki</p>
+                      <p>No cover</p>
                     </div>
                   )}
                 </div>
@@ -3536,12 +3651,12 @@ function EbookGeneratorContent() {
                     {isGeneratingCover ? (
                       <>
                         <Loader size={14} className="animate-spin mr-1.5" />
-                        <span className="truncate">Generowanie...</span>
+                        <span className="truncate">Generating...</span>
                       </>
                     ) : (
                       <>
                         <Sparkles size={14} className="mr-1.5 flex-shrink-0" />
-                        <span className="truncate">{coverData?.cover_url ? 'Regeneruj' : 'Generuj z AI'}</span>
+                        <span className="truncate">{coverData?.cover_url ? 'Regenerate' : 'Generate with AI'}</span>
                       </>
                     )}
                   </button>
@@ -3558,12 +3673,12 @@ function EbookGeneratorContent() {
                     {uploadingCoverImage ? (
                       <>
                         <Loader size={14} className="animate-spin mr-1.5" />
-                        <span className="truncate">Przesyłanie...</span>
+                        <span className="truncate">Uploading...</span>
                       </>
                     ) : (
                       <>
                         <Upload size={14} className="mr-1.5 flex-shrink-0" />
-                        <span className="truncate">{coverData?.cover_url ? 'Zmień' : 'Dodaj z dysku'}</span>
+                        <span className="truncate">{coverData?.cover_url ? 'Change' : 'Add from disk'}</span>
                       </>
                     )}
                   </button>
@@ -3571,11 +3686,11 @@ function EbookGeneratorContent() {
               </div>
             </div>
 
-            {/* GRAFIKI ROZDZIAŁÓW */}
+            {/* CHAPTER GRAPHICS */}
             {tocItems.length === 0 ? (
               <div className="col-span-full flex flex-col items-center justify-center py-10 text-gray-500 border border-dashed border-gray-300 rounded-lg bg-gray-50">
                 <BookOpen size={36} className="text-gray-400 mb-2" />
-                <p>Brak rozdziałów. Wróć do kroku 2, aby dodać rozdziały.</p>
+                <p>No chapters. Go back to step 2 to add chapters.</p>
               </div>
             ) : (
               tocItems.map((item, index) => (
@@ -3587,11 +3702,11 @@ function EbookGeneratorContent() {
                     <div className="flex items-center justify-between mb-2">
                       {(completedChapterIds.includes(item.id) || (item.content && item.content.trim().length > 0)) ? (
                         <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700">
-                          Treść ✓
+                          Content ✓
                         </span>
                       ) : (
                         <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">
-                          Brak treści
+                          No content
                         </span>
                       )}
 
@@ -3601,8 +3716,8 @@ function EbookGeneratorContent() {
                           : 'bg-gray-200 text-gray-700'
                       }`}>
                         {item.image_url
-                          ? 'Grafika ✓'
-                          : 'Brak grafiki'}
+                          ? 'Graphic ✓'
+                          : 'No graphic'}
                       </span>
                     </div>
 
@@ -3622,19 +3737,19 @@ function EbookGeneratorContent() {
                         <img
                           key={`${item.id}-${imageRefreshTimestamp}`}
                           src={item.image_url}
-                          alt={`Ilustracja do rozdziału: ${item.title}`}
+                          alt={`Illustration for the chapter: ${item.title}`}
                           className="object-cover w-full h-full cursor-pointer hover:opacity-90 transition-opacity"
                           onClick={() => handleImagePreview(item.image_url)}
-                          onLoad={() => console.log(`✅ Obrazek załadowany: ${item.title}`)}
+                          onLoad={() => console.log(`✅ Image loaded: ${item.title}`)}
                           onError={(e) => {
-                            console.error(`❌ Błąd ładowania obrazka dla ${item.title}:`, item.image_url);
+                            console.error(`❌ Error loading image for ${item.title}:`, item.image_url);
                             setTimeout(() => refreshImagesStatus(), 2000);
                           }}
                         />
                       ) : (
                         <div className="flex flex-col items-center justify-center text-gray-500 text-sm p-4 text-center">
                           <Image size={32} className="text-gray-300 mb-2" />
-                          <p>Brak grafiki</p>
+                          <p>No graphic</p>
                         </div>
                       )}
                     </div>
@@ -3648,12 +3763,12 @@ function EbookGeneratorContent() {
                         {isSaving && uploadingImageForChapter === item.id ? (
                           <>
                             <Loader size={14} className="animate-spin mr-1.5" />
-                            <span className="truncate">Przesyłanie...</span>
+                            <span className="truncate">Uploading...</span>
                           </>
                         ) : (
                           <>
                             <Upload size={14} className="mr-1.5 flex-shrink-0" />
-                            <span className="truncate">{item.image_url ? 'Zmień' : 'Dodaj'}</span>
+                            <span className="truncate">{item.image_url ? 'Change' : 'Add'}</span>
                           </>
                         )}
                       </button>
@@ -3674,12 +3789,12 @@ function EbookGeneratorContent() {
                           {generatingAIImageForChapter === item.id ? (
                             <>
                               <Loader size={14} className="animate-spin mr-1.5 flex-shrink-0" />
-                              <span className="truncate">Generowanie...</span>
+                              <span className="truncate">Generating...</span>
                             </>
                           ) : (
                             <>
                               <Sparkles size={14} className="mr-1.5 flex-shrink-0" />
-                              <span className="truncate">Generuj z AI</span>
+                              <span className="truncate">Generate with AI</span>
                             </>
                           )}
                       </button>
@@ -3695,7 +3810,7 @@ function EbookGeneratorContent() {
                     {!((completedChapterIds.includes(item.id) || (item.content && item.content.trim().length > 0))) && (
                       <div className="mt-2 text-xs text-amber-600 bg-amber-50 p-1.5 rounded-md">
                         <AlertCircle size={12} className="inline-block mr-1" />
-                        <span className="line-clamp-2">Najpierw dodaj treść rozdziału</span>
+                        <span className="line-clamp-2">First, add chapter content</span>
                       </div>
                     )}
                   </div>
@@ -3709,7 +3824,7 @@ function EbookGeneratorContent() {
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="font-medium text-blue-800 flex items-center">
                     <Loader size={16} className="mr-2 animate-spin text-blue-600" />
-                    Generowanie grafik
+                    Generating graphics
                   </h3>
                   <span className="text-sm text-blue-600 font-medium">
                     {generatedImagesCount}/{totalImagesToGenerate}
@@ -3725,8 +3840,8 @@ function EbookGeneratorContent() {
 
                 <p className="text-xs text-blue-700 mt-2 truncate">
                   {generatingAIImageForChapter &&
-                    `Aktualnie generowana: grafika dla rozdziału "${
-                      tocItems.find(item => item.id === generatingAIImageForChapter)?.title || 'nieznany'
+                    `Currently generating: graphic for chapter "${
+                      tocItems.find(item => item.id === generatingAIImageForChapter)?.title || 'unknown'
                     }"`
                   }
                 </p>
@@ -3740,7 +3855,7 @@ function EbookGeneratorContent() {
               disabled={isSaving || isGeneratingAllImages || isGeneratingCover || uploadingCoverImage}
             >
               <ChevronLeft size={16} className="mr-1" />
-              Treść
+              Content
             </button>
 
             <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
@@ -3760,12 +3875,12 @@ function EbookGeneratorContent() {
                 {isGeneratingAllImages ? (
                   <>
                     <Loader size={16} className="mr-2 animate-spin" />
-                    {`Generowanie (${generatedImagesCount}/${totalImagesToGenerate})`}
+                    {`Generating (${generatedImagesCount}/${totalImagesToGenerate})`}
                   </>
                 ) : (
                   <>
                     <Sparkles size={16} className="mr-2" />
-                    Wygeneruj brakujące grafiki
+                    Generate missing graphics
                   </>
                 )}
               </button>
@@ -3778,12 +3893,12 @@ function EbookGeneratorContent() {
                 {isSaving ? (
                   <>
                     <Loader size={16} className="mr-2 animate-spin" />
-                    Eksportowanie...
+                    Exporting...
                   </>
                 ) : (
                   <>
                     <Download size={16} className="mr-2" />
-                    Pobierz jako PDF
+                    Download as PDF
                   </>
                 )}
               </button>
@@ -3799,7 +3914,7 @@ function EbookGeneratorContent() {
       <div className="flex justify-between items-center pb-4 mb-6 border-b border-gray-200">
         <div className="flex items-center">
           <BookOpen size={24} className="text-blue-600 mr-2" />
-          <p className="text-gray-800 text-xl font-semibold">Generator E-booków AI</p>
+          <p className="text-gray-800 text-xl font-semibold">Gerador de E-books com IA</p>
         </div>
       </div>
 
@@ -3807,7 +3922,7 @@ function EbookGeneratorContent() {
         <div className="bg-red-50 border-l-4 border-red-500 text-red-700 p-4 mb-6 rounded-lg shadow-sm flex items-start animate-fadeIn">
           <AlertCircle className="mr-3 flex-shrink-0 mt-0.5" size={20} />
           <div>
-            <div className="font-medium mb-1">Wystąpił błąd</div>
+            <div className="font-medium mb-1">An error occurred</div>
             <div className="text-sm">{error}</div>
           </div>
         </div>
@@ -3832,7 +3947,7 @@ function EbookGeneratorContent() {
               step >= 1 ? 'bg-blue-600 text-white ring-4 ring-blue-100' : 'bg-gray-200 text-gray-500'
             } ${tocGenerated ? 'cursor-pointer' : ''}`}
             onClick={() => tocGenerated && setStep(1)}
-            title={tocGenerated ? "Edytuj dane" : ""}
+            title={tocGenerated ? "Edit data" : ""}
           >
             1
           </div>
@@ -3844,7 +3959,7 @@ function EbookGeneratorContent() {
                 : 'bg-gray-200 text-gray-500'
             }`}
             onClick={() => tocGenerated && step !== 2 && setStep(2)}
-            title={tocGenerated && step !== 2 ? "Edytuj spis treści" : ""}
+            title={tocGenerated && step !== 2 ? "Edit table of contents" : ""}
           >
             2
           </div>
@@ -3861,7 +3976,7 @@ function EbookGeneratorContent() {
                 setStep(3);
               }
             }}
-            title={contentGenerated && step !== 3 ? "Przeglądaj treść" : ""}
+            title={contentGenerated && step !== 3 ? "Browse content" : ""}
           >
             3
           </div>
@@ -3873,16 +3988,16 @@ function EbookGeneratorContent() {
                 : 'bg-gray-200 text-gray-500'
             }`}
             onClick={() => contentGenerated && step !== 4 && setStep(4)}
-            title={contentGenerated && step !== 4 ? "Grafiki i okładka" : ""}
+            title={contentGenerated && step !== 4 ? "Graphics and cover" : ""}
           >
             4
           </div>
         </div>
         <div className="flex justify-between text-sm text-gray-600">
-          <div className="w-20 text-center -ml-5">Dane</div>
-          <div className="w-20 text-center">Rozdziały</div>
-          <div className="w-20 text-center">Treść</div>
-          <div className="w-20 text-center -mr-5">Grafiki</div>
+          <div className="w-20 text-center -ml-5">Data</div>
+          <div className="w-20 text-center">Chapters</div>
+          <div className="w-20 text-center">Content</div>
+          <div className="w-20 text-center -mr-5">Graphics</div>
         </div>
       </div>
 
@@ -3896,7 +4011,7 @@ function EbookGeneratorContent() {
 
       {showRegeneratePopup && renderRegeneratePopup()}
       {showChapterRegeneratePopup && renderChapterRegeneratePopup()}
-      {/* NOWY MODAL - testowy */}
+      {/* NEW MODAL - test */}
       <SourcePreviewModal
         isVisible={sourcePreviewModal.isVisible}
         sourceType={sourcePreviewModal.sourceType || 'web'}
@@ -3923,7 +4038,7 @@ function EbookGeneratorContent() {
           >
             <img
               src={previewImage}
-              alt="Podgląd obrazu"
+              alt="Image preview"
               className="block rounded-2xl"
               style={{
                 maxWidth: 'calc(95vw - 8px)',
