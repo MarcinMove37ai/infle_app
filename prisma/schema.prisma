@@ -1,3 +1,7 @@
+//
+// 📜 CAŁY PLIK SCHEMA.PRISMA Z DODANYMI NOWYMI ELEMENTAMI
+//
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -33,21 +37,16 @@ model User {
   instagramProfile    InstagramProfileCheck?       @relation(fields: [instagramProfileId], references: [id])
   linkedinProfile     LinkedInProfileCheck?        @relation(fields: [linkedinProfileId], references: [id])
   ebooks              ebooks[]
-
-  // === NOWE POLA: PROFIL AUTORA ===
-  authorDisplayName   String?  // Nazwa wyświetlana na okładkach ebooków
-  authorLogoUrl       String?  // Link do loga/zdjęcia autora
-
-  // === NOWE POLA: USTAWIENIA AI - TEKST ===
-  textAiProvider      String?  @default("anthropic")
-  textAiModel         String?  @default("claude-3-haiku")
-
-  // === NOWE POLA: USTAWIENIA AI - OBRAZY ===
-  imageAiProvider     String?  @default("openai")
-  imageAiModel        String?  @default("dall-e-3")
-
-  // === NOWA RELACJA: KLUCZE API ===
+  authorDisplayName   String?
+  authorLogoUrl       String?
+  textAiProvider      String?                      @default("anthropic")
+  textAiModel         String?                      @default("claude-3-haiku")
+  imageAiProvider     String?                      @default("openai")
+  imageAiModel        String?                      @default("dall-e-3")
   apiKeys             UserApiKey[]
+
+  // === NOWA RELACJA DO ŹRÓDEŁ ===
+  ebookSources        EbookSource[]
 
   @@map("users")
 }
@@ -55,17 +54,14 @@ model User {
 model UserApiKey {
   id           String   @id @default(cuid())
   userId       String
-  provider     String   // "anthropic", "openai", "gemini"
-  encryptedKey String   // AES-256 zaszyfrowany klucz API
-  keyHash      String   // SHA-256 hash klucza do weryfikacji integralności
+  provider     String
+  encryptedKey String
+  keyHash      String
   isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
-
-  // Relacja z użytkownikiem
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  // Ograniczenia: jeden klucz na provider na użytkownika
   @@unique([userId, provider])
   @@index([userId])
   @@index([provider])
@@ -259,8 +255,45 @@ model ebooks {
   userId                          String?
   user                            User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
 
+  // === NOWA RELACJA DO ŹRÓDEŁ ===
+  sources                         EbookSource[]
+
   @@index([x_amz_meta_user_id], map: "idx_ebooks_user_id")
 }
+
+//
+// +++ NOWE ELEMENTY DODANE PONIŻEJ +++
+//
+
+model EbookSource {
+  id          Int        @id @default(autoincrement())
+  ebook_id    Int
+  user_id     String
+  sourceType  SourceType
+  url         String     @db.VarChar(1024)
+  title       String     @db.VarChar(512)
+  content     String
+  sourceLabel String?    @db.VarChar(100)
+  metadata    Json?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  // Relacje
+  ebook       ebooks     @relation(fields: [ebook_id], references: [id], onDelete: Cascade)
+  user        User       @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  // Ograniczenia i Indeksy
+  @@unique([ebook_id, url])
+  @@index([ebook_id])
+  @@index([user_id])
+  @@map("ebook_sources")
+}
+
+enum SourceType {
+  WEB
+  PDF
+}
+// Koniec dodanych elementów
 
 enum SocialProfileType {
   INSTAGRAM_ONLY

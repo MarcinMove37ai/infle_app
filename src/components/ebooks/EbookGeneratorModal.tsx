@@ -82,6 +82,13 @@ export default function EbookGeneratorModal({ isOpen, onClose, onEbookCreated, e
 }
 
 function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { isOpen: boolean, ebookId?: number | null, onEbookCreated?: () => void, onClose: () => void }) {
+  const [isSavingDraft, setIsSavingDraft] = useState(false); // ✅ NOWY STAN
+  const draftSavedByUser = useRef(false); // ✅ NOWA REFERENCJA
+  const [originalScrapedContent, setOriginalScrapedContent] = useState<ScrapedContent[]>([]);
+  const initialized = useRef(false);
+  const wasSuccessfullyCompleted = useRef(false);
+  const isNewEbookSession = useRef(!ebookId);
+  const [isInitializing, setIsInitializing] = useState(false);
   const [sourcePreviewModal, setSourcePreviewModal] = useState({
       isVisible: false,
       sourceType: null as 'web' | 'pdf' | null,
@@ -167,13 +174,44 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
   const fileInputRef = useRef<HTMLInputElement>(null);
   const descriptionInputRef = useRef<HTMLTextAreaElement>(null);
 
+  // NOWA FUNKCJA POMOCNICZA
+  const areSourcesEqual = (sourcesA: ScrapedContent[], sourcesB: ScrapedContent[]): boolean => {
+    if (sourcesA.length !== sourcesB.length) {
+      return false;
+    }
+
+    if (sourcesA.length === 0 && sourcesB.length === 0) {
+      return true;
+    }
+
+    // Tworzymy "mapę" źródeł z B dla szybkiego dostępu, używając URL jako unikalnego klucza
+    const sourcesBMap = new Map(sourcesB.map(item => [item.url, item]));
+
+    // Sprawdzamy, czy każdy element z A istnieje w B i czy ma te same kluczowe dane
+    for (const itemA of sourcesA) {
+      const itemB = sourcesBMap.get(itemA.url);
+      if (!itemB) {
+        return false; // Nie znaleziono odpowiednika
+      }
+
+      // Porównujemy tylko kluczowe, niezmienne pola
+      if (itemA.title !== itemB.title || itemA.content !== itemB.content) {
+        return false;
+      }
+    }
+
+    return true;
+  };
+
+
   // =================================================================
-  // NEW, CENTRAL LOGIC - LOADING FOR EDIT / RESETTING FOR CREATE
+  // NEW, CENTRAL LOGIC - LOADING FOR EDIT / CREATING FOR NEW
   // =================================================================
   useEffect(() => {
-    // Function to reset the state to initial values (for "create" mode)
-    const resetStateForCreate = () => {
-      console.log('🔄 Resetting state for new ebook...');
+    const resetState = () => {
+      console.log('🔄 Resetting state...');
+      draftSavedByUser.current = false; // ✅ ZRESETUJ FLAGĘ
+      setOriginalScrapedContent([]);
       setStep(1);
       setTitle('');
       setSubtitle('');
@@ -181,7 +219,7 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
       setUrlInputs(['']);
       setScrapedContent([]);
       setTocItems([]);
-      setCurrentEbookId(null); // Use internal ebookId state from `useState`
+      setCurrentEbookId(null);
       setError(null);
       setTocGenerated(false);
       setContentGenerated(false);
@@ -191,88 +229,154 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
       setOriginalTitle('');
       setOriginalSubtitle('');
       setOriginalDescription('');
-      // Reset all other states that might hold data
-      setCompletedChapterIds([]);
-      setChaptersWithoutContent([]);
     };
 
-    // Function to load ebook data from the API (for "edit" mode)
     const loadEbookForEditing = async (id: number) => {
-      console.log(`🚀 Loading data for ebook with ID: ${id}`);
+      console.log(`🚀 Wczytywanie danych do edycji dla ebooka o ID: ${id}`);
       try {
         const response = await fetch(`/api/ebooks?id=${id}`);
         if (!response.ok) {
-          throw new Error('Failed to fetch ebook data for editing.');
+          throw new Error('Nie udało się pobrać danych ebooka do edycji.');
         }
         const data = await response.json();
-        console.log('✅ Received data from API:', data);
+        console.log('✅ Otrzymano dane podstawowe z API:', data);
 
-        // Krok 1: Wypełnij dane podstawowe
+        // Ustawienie stanu dla danych podstawowych
         setTitle(data.title || '');
         setSubtitle(data.subtitle || '');
         setDescription(data.description || '');
-        setCurrentEbookId(data.id); // Ustaw wewnętrzny stan ID
-
+        setCurrentEbookId(data.id);
         setOriginalTitle(data.title || '');
         setOriginalSubtitle(data.subtitle || '');
         setOriginalDescription(data.description || '');
 
-        // =================================================================
-        // KROK 2: NOWA, NIEZAWODNA LOGIKA USTAWIANIA STANU POSTĘPU
-        // =================================================================
         if (data.chapters && data.chapters.length > 0) {
           const chapters = data.chapters as TocItem[];
-
-          // Ustawiamy rozdziały
           setTocItems(chapters);
           setTocGenerated(true);
 
-          // Bezpośrednio obliczamy wszystkie statusy na podstawie świeżych danych `chapters`,
-          // a nie na podstawie stanu `tocItems`, który może jeszcze nie być zaktualizowany.
-
-          const anyContentExists = chapters.some(ch => ch.content && ch.content.trim() !== '');
-          const anyGraphicsExist = chapters.some(ch => ch.image_url);
-
-          const chaptersWithContentIds = chapters
-            .filter(ch => ch.content && ch.content.trim() !== '')
-            .map(ch => ch.id);
-
-          const chaptersWithoutContentIds = chapters
-            .filter(ch => !ch.content || ch.content.trim() === '')
-            .map(ch => ch.id);
-
-          // Jawnie ustawiamy wszystkie flagi i stany zależne
-          setContentGenerated(anyContentExists);
-          setGraphicsAdded(anyGraphicsExist);
-          setCompletedChapterIds(chaptersWithContentIds);
-          setChaptersWithoutContent(chaptersWithoutContentIds);
-
-          console.log(`✅ Status edycji załadowany: contentGenerated=${anyContentExists}`);
+          // ✅ POPRAWKA: Sprawdź, czy wczytane rozdziały mają treść i ustaw flagę
+          const hasContent = chapters.some(ch => ch.content && ch.content.trim() !== '');
+          if (hasContent) {
+            setContentGenerated(true);
+            console.log('📖 Wykryto istniejącą treść, ustawiono contentGenerated=true');
+          }
         }
-        // =================================================================
-        // KONIEC NOWEJ LOGIKI
-        // =================================================================
-
-        // Zawsze zaczynaj od kroku 1, zgodnie z wymaganiem
         setStep(1);
 
+        try {
+          console.log(`📚 Pobieranie źródeł dla ebooka o ID: ${id}...`);
+          const sourcesResponse = await fetch(`/api/ebooks/${id}/sources`);
+          if (sourcesResponse.ok) {
+            const sourcesData = await sourcesResponse.json();
+            if (sourcesData.success && Array.isArray(sourcesData.sources)) {
+              console.log(`✅ Pomyślnie pobrano ${sourcesData.sources.length} źródeł.`);
+              setScrapedContent(sourcesData.sources);
+              // ✅ POPRAWKA: Zapisz oryginalny stan źródeł do porównań
+              setOriginalScrapedContent(sourcesData.sources);
+            }
+          } else {
+            console.warn(`⚠️ Nie udało się pobrać źródeł (status: ${sourcesResponse.status}).`);
+          }
+        } catch (sourceErr) {
+          console.error("❌ Błąd podczas pobierania źródeł (niekrytyczny):", sourceErr);
+        }
+
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'An unknown error occurred');
-        resetStateForCreate(); // W razie błędu, wróć do czystego stanu
+        setError(err instanceof Error ? err.message : 'Wystąpił nieznany błąd');
+        resetState();
       }
     };
 
-    // Main logic switch
+    const createNewEbookEntry = async () => {
+        console.log('🚀 Creating new ebook entry in the database...');
+        setIsInitializing(true);
+        try {
+            const response = await fetch('/api/ebooks', {
+                method: 'POST',
+                headers: getUserHeaders(),
+                body: JSON.stringify({
+                    title: "Nowy Ebook (roboczy)",
+                    status: "draft",
+                }),
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to create a new ebook entry.');
+            }
+            const data = await response.json();
+            if (data.success && data.ebookId) {
+                console.log(`✅ New ebook created with ID: ${data.ebookId}`);
+                setCurrentEbookId(data.ebookId);
+            } else {
+                throw new Error('Invalid response from the ebook creation API.');
+            }
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Could not initialize a new ebook.');
+        } finally {
+            setIsInitializing(false);
+        }
+    };
+
     if (isOpen) {
-      if (ebookId) {
-        // We have an ID from props -> EDIT Mode
-        loadEbookForEditing(ebookId);
-      } else {
-        // No ID -> CREATE Mode
-        resetStateForCreate();
+      if (!initialized.current) {
+        initialized.current = true;
+        console.log('✨ Modal opened, initializing...');
+        resetState();
+        if (ebookId) {
+          loadEbookForEditing(ebookId);
+        } else {
+          createNewEbookEntry();
+        }
       }
+    } else {
+      initialized.current = false;
+      console.log('🚪 Modal closed, reset initialization flag.');
     }
-  }, [isOpen, ebookId]); // This hook will run when the modal is opened or the ID changes
+  }, [isOpen, ebookId]);
+
+  const cleanupStateRef = useRef<any>(null);
+  useEffect(() => {
+    // Ten efekt uruchamia się przy każdym renderowaniu, aby ref zawsze miał świeże dane
+    cleanupStateRef.current = {
+      isNewEbookSession: isNewEbookSession.current,
+      wasSuccessfullyCompleted: wasSuccessfullyCompleted.current,
+      draftSavedByUser: draftSavedByUser.current, // ✅ DODAJ FLAGĘ
+      currentEbookId,
+      title,
+      subtitle,
+      description,
+      scrapedContent,
+      tocGenerated
+    };
+  });
+
+  useEffect(() => {
+    // Ten efekt uruchamia się tylko raz (przy montowaniu), a jego funkcja zwrotna
+    // wykona się przy zamykaniu modala (odmontowaniu).
+    return () => {
+      const state = cleanupStateRef.current; // Pobieramy najnowszy stan z refa
+
+      if (state.isNewEbookSession && !state.wasSuccessfullyCompleted && state.currentEbookId) {
+
+        // Warunek usunięcia: tytuł jest wciąż domyślny ("Nowy Ebook (roboczy)") lub pusty
+        const isDefaultTitle = !state.title || state.title === "Nowy Ebook (roboczy)";
+        const hasNoMeaningfulData = !state.subtitle && !state.description && state.scrapedContent.length === 0;
+        const tocWasNotGenerated = !state.tocGenerated;
+
+        if (isDefaultTitle && hasNoMeaningfulData && tocWasNotGenerated) {
+          console.log(`🗑️ Usuwanie nieużywanego szkicu ebooka (ID: ${state.currentEbookId})...`);
+
+          fetch(`/api/ebooks/${state.currentEbookId}`, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+          }).catch(err => {
+            console.error("Błąd podczas usuwania nieużywanego szkicu ebooka:", err);
+          });
+        }
+      }
+    };
+  }, []);
 
   // Existing useEffects
   useEffect(() => {
@@ -583,10 +687,51 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
       }
     };
 
+    // Zaktualizuj interfejs ScrapedContent, aby zawierał opcjonalne ID
+    interface ScrapedContent {
+      id?: number; // Opcjonalne ID z bazy danych
+      url: string;
+      title: string;
+      content: string;
+      source?: string;
+      metadata?: any;
+    }
+
     // FUNCTION to remove a source from the list
-    const handleRemoveScrapedContent = (urlToRemove: string) => {
-      setScrapedContent(prev => prev.filter(item => item.url !== urlToRemove));
-      console.log('🗑️ Removed source:', urlToRemove);
+    const handleRemoveScrapedContent = async (sourceToRemove: ScrapedContent) => {
+      // Logika dla źródła, które nie jest jeszcze w bazie
+      if (!currentEbookId || !sourceToRemove.id) {
+        const newSources = scrapedContent.filter(item => item.url !== sourceToRemove.url);
+        setScrapedContent(newSources);
+        console.log('🗑️ Usunięto źródło ze stanu lokalnego (nie było w bazie):', sourceToRemove.url);
+        return;
+      }
+
+      // Logika dla źródła, które jest w bazie
+      try {
+        const response = await fetch(`/api/ebooks/${currentEbookId}/sources`, {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            sourceId: sourceToRemove.id
+          }),
+        });
+
+        const data = await response.json();
+
+        if (!response.ok || !data.success) {
+          throw new Error(data.error || 'Nie udało się usunąć źródła z bazy danych.');
+        }
+
+        const newSources = scrapedContent.filter(item => item.id !== sourceToRemove.id);
+        setScrapedContent(newSources);
+        console.log('🗑️ Pomyślnie usunięto źródło z bazy i stanu:', sourceToRemove.url);
+
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Wystąpił nieznany błąd podczas usuwania źródła.');
+      }
     };
 
 
@@ -677,27 +822,66 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
       });
     };
 
-    const handleSourceAccept = (content: ScrapedContent) => {
-      setScrapedContent(prev => [...prev, content]);
+    const handleSourceAccept = async (content: ScrapedContent) => {
+      console.log('%c--- ROZPOCZYNAM ZAPIS ŹRÓDŁA ---', 'color: blue; font-weight: bold;');
 
-      // Clear the URL input if it was a web scrape
-      if (sourcePreviewModal.sourceType === 'web') {
-        const urlIndex = urlInputs.findIndex(url => url === content.url);
-        if (urlIndex !== -1) {
-          const newUrls = [...urlInputs];
-          newUrls[urlIndex] = '';
-          setUrlInputs(newUrls);
-        }
+      if (!currentEbookId) {
+        setError("Nie można zapisać źródła. Brak ID ebooka.");
+        handleSourceReject();
+        return;
       }
 
-      // Close the modal
-      setSourcePreviewModal({
-        isVisible: false,
-        sourceType: null,
-        content: null,
-        status: null,
-        errorDetails: ''
-      });
+      try {
+        const response = await fetch(`/api/ebooks/${currentEbookId}/sources`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            sourceType: sourcePreviewModal.sourceType === 'pdf' ? 'PDF' : 'WEB',
+            url: content.url,
+            title: content.title,
+            content: content.content,
+            sourceLabel: content.source,
+            metadata: content.metadata,
+          }),
+        });
+
+        const data = await response.json();
+
+        if (!response.ok || !data.success) {
+          throw new Error(data.error || 'Nie udało się zapisać źródła w bazie danych.');
+        }
+
+        const newSources = [...scrapedContent, data.source];
+        setScrapedContent(newSources);
+
+        const urlIndex = urlInputs.findIndex(url => url === content.url);
+        if (urlIndex !== -1) {
+          const updatedUrls = [...urlInputs];
+          updatedUrls[urlIndex] = '';
+          if (updatedUrls.length > 1 && updatedUrls.every(u => u === '')) {
+             setUrlInputs(['']);
+          } else if (updatedUrls.length > 1) {
+             const finalUrls = updatedUrls.filter((u, i) => u !== '' || i === urlIndex);
+             setUrlInputs(finalUrls.length > 0 ? finalUrls : ['']);
+          } else {
+             setUrlInputs(updatedUrls);
+          }
+        }
+
+        setSourcePreviewModal({
+          isVisible: false,
+          sourceType: null,
+          content: null,
+          status: null,
+          errorDetails: ''
+        });
+
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Wystąpił nieznany błąd podczas zapisywania źródła.');
+        handleSourceReject();
+      }
     };
 
     const handleSourceReject = () => {
@@ -747,7 +931,10 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
     // Remove corresponding content from scrapedContent if it exists
     const urlToRemove = urlInputs[index];
     if (urlToRemove) {
-      setScrapedContent(prev => prev.filter(item => item.url !== urlToRemove));
+      const sourceObjectToRemove = scrapedContent.find(item => item.url === urlToRemove);
+      if (sourceObjectToRemove) {
+        handleRemoveScrapedContent(sourceObjectToRemove);
+      }
     }
   };
 
@@ -890,19 +1077,19 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
   const changeStep = (newStep: number) => {
       const hasDescriptionChanged = description !== originalDescription;
       const hasUrlsChanged = JSON.stringify(urlInputs) !== JSON.stringify(originalUrlInputs);
-      const hasSourcesChanged = scrapedContent.length > 0; // NEW LINE
+      // ✅ POPRAWKA: Niezawodne porównywanie stanu źródeł
+      const hasSourcesChanged = !areSourcesEqual(scrapedContent, originalScrapedContent);
 
       if (newStep === 2 && step === 1 && tocGenerated &&
          (title !== originalTitle ||
           subtitle !== originalSubtitle ||
           hasDescriptionChanged ||
           hasUrlsChanged ||
-          hasSourcesChanged)) { // ADDED CHANGE
+          hasSourcesChanged)) {
         setShowRegeneratePopup(true);
       }
     else if (newStep === 3 && step === 2) {
       console.log('🔄 Moving to step 3 - synchronizing chapter status...');
-
       syncChapterStatus();
 
       const chaptersWithNoContent = tocItems
@@ -992,103 +1179,45 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
       return;
     }
 
+    if (!currentEbookId) {
+        setError('Ebook ID is missing. Cannot proceed. Please try closing and reopening the modal.');
+        return;
+    }
+
     setError(null);
     setIsGeneratingToc(true);
 
     try {
+      // Krok 1: Zawsze aktualizuj dane istniejącego ebooka
+      console.log(`🔄 Updating ebook data for ID: ${currentEbookId}`);
 
-      let tempEbookId = currentEbookId;
+      setTocItems([]);
+      // Resetuj inne stany związane z rozdziałami
+      setCompletedChapterIds([]);
+      setContentGenerated(false);
+      setGraphicsAdded(false);
 
-      // 2. Create or update the ebook
-      if (!tempEbookId) {
-        // Creating a new ebook...
-        const createEbookResponse = await fetch('/api/ebooks', {
-          method: 'POST',
-          headers: getUserHeaders(),
-          body: JSON.stringify({
-            title,
-            subtitle: subtitle.trim() || undefined,
-            description: description.trim() || undefined
-          }),
-        });
+      const updateEbookResponse = await fetch(`/api/ebooks/${currentEbookId}`, {
+        method: 'PUT',
+        headers: {
+          ...getUserHeaders(),
+        },
+        body: JSON.stringify({
+          title,
+          subtitle: subtitle.trim() || null,
+          description: description.trim() || null
+        }),
+      });
 
-        if (!createEbookResponse.ok) {
-          throw new Error('Error creating the ebook in the database');
-        }
-
-        const ebookData = await createEbookResponse.json();
-        if (!ebookData.success || !ebookData.ebookId) {
-          throw new Error('Invalid response from the ebook creation API');
-        }
-
-        tempEbookId = ebookData.ebookId;
-        setCurrentEbookId(tempEbookId);
-        console.log(`Created ebook in the database with ID: ${tempEbookId}`);
-
-      } else {
-        // Reset states before regeneration
-        console.log('🔄 Resetting chapter states before regeneration...');
-
-        setCompletedChapterIds([]);
-        setGeneratingChapterIds([]);
-        setChaptersWithoutContent([]);
-        setContentGenerated(false);
-        setGraphicsAdded(false);
-        setActiveChapterId(null);
-        setEditingContent(false);
-        setEditingChapterContent('');
-        setEditingItemId(null);
-        setEditingItemTitle('');
-        setIsGeneratingContent(false);
-        setIsGeneratingSingleChapter(false);
-        setIsGeneratingMissingContent(false);
-        setCurrentGeneratingIndex(-1);
-        setGeneratingAIImageForChapter(null);
-        setUploadingImageForChapter(null);
-        setIsGeneratingAllImages(false);
-        setGeneratedImagesCount(0);
-        setTotalImagesToGenerate(0);
-
-        console.log('✅ Chapter states have been reset');
-
-        // Update ebook data
-        const updateEbookResponse = await fetch(`/api/ebooks/${tempEbookId}`, {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            title,
-            subtitle: subtitle.trim() || null,
-            description: description.trim() || null
-          }),
-        });
-
-        if (!updateEbookResponse.ok) {
-          throw new Error('Error updating the ebook title');
-        }
-
-        // Delete old chapters
-        try {
-          console.log(`🗑️ Deleting all chapters for ebook with ID: ${tempEbookId}`);
-          const deleteChaptersResponse = await fetch(`/api/ebooks/${tempEbookId}/chapters`, {
-            method: 'DELETE',
-          });
-
-          if (deleteChaptersResponse.ok) {
-            const deleteData = await deleteChaptersResponse.json();
-            console.log(`✅ Deleted ${deleteData.deletedCount} chapters`);
-          }
-
-          setTocItems([]);
-          await new Promise(resolve => setTimeout(resolve, 300));
-
-        } catch (error) {
-          console.warn('Error while deleting chapters:', error);
-        }
+      if (!updateEbookResponse.ok) {
+        throw new Error('Error updating the ebook data');
       }
 
-      // 3. Generate a new table of contents
+      // Usuń stare rozdziały, jeśli istnieją
+      await fetch(`/api/ebooks/${currentEbookId}/chapters`, { method: 'DELETE' });
+      console.log(`🗑️ Old chapters for ebook ID ${currentEbookId} deleted.`);
+
+      // Krok 2: Generuj nowy spis treści
       const response = await fetch('/api/anthropic/generate-toc', {
         method: 'POST',
         headers: {
@@ -1123,42 +1252,26 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
         setOriginalTitle(title);
         setOriginalSubtitle(subtitle);
         setOriginalDescription(description);
-        setOriginalUrlInputs([...urlInputs]);
+        // Zatwierdź aktualny stan źródeł jako nowy stan "oryginalny"
+        setOriginalScrapedContent(scrapedContent);
 
-        // 4. Save the new chapters in the database
-        try {
-          const chaptersResponse = await fetch(`/api/ebooks/${tempEbookId}/chapters`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ chapters: data.tocItems }),
-          });
+        // Krok 3: Zapisz nowe rozdziały w bazie
+        const chaptersResponse = await fetch(`/api/ebooks/${currentEbookId}/chapters`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ chapters: data.tocItems }),
+        });
 
-          if (!chaptersResponse.ok) {
-            console.warn('Failed to save chapters in the database, but continuing the process');
-          } else {
-            const chaptersData = await chaptersResponse.json();
-            console.log(`💾 Saved ${chaptersData.chapters.length} chapters in the database`);
-
-            if (chaptersData.chapters && Array.isArray(chaptersData.chapters)) {
-              const updatedTocItems = data.tocItems.map((item: TocItem, index: number) => {
-                return {
-                  ...item,
-                  id: chaptersData.chapters[index].id.toString(),
-                  position: chaptersData.chapters[index].position
-                };
-              });
-              setTocItems(updatedTocItems);
-
-              // Set new IDs as requiring content
-              const newChapterIds = updatedTocItems.map((item: TocItem) => item.id);
-              setChaptersWithoutContent(newChapterIds);
-              console.log(`📝 Set ${newChapterIds.length} chapters as requiring content`);
-            }
-          }
-        } catch (chaptersError) {
-          console.warn('Error while saving chapters:', chaptersError);
+        if (chaptersResponse.ok) {
+          const chaptersData = await chaptersResponse.json();
+          const updatedTocItemsWithIds = data.tocItems.map((item: TocItem, index: number) => ({
+            ...item,
+            id: chaptersData.chapters[index].id.toString(),
+            position: chaptersData.chapters[index].position
+          }));
+          setTocItems(updatedTocItemsWithIds);
+        } else {
+            console.warn('Failed to save new chapters to the database.');
         }
 
         setStep(2);
@@ -1363,6 +1476,8 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
     if (regenerate) {
       generateTableOfContents();
     } else {
+      // Użytkownik idzie dalej bez regeneracji - aktualne źródła stają się nową "oryginalną" wersją
+      setOriginalScrapedContent(scrapedContent);
       setShowRegeneratePopup(false);
       setStep(2);
     }
@@ -2368,6 +2483,7 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
       if (onEbookCreated) {
         onEbookCreated();
       }
+      wasSuccessfullyCompleted.current = true;
 
       onClose();
 
@@ -2397,6 +2513,48 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
 
   const handleClosePreview = () => {
     setPreviewImage(null);
+  };
+
+  // ✅ NOWA FUNKCJA DO ZAPISU SZKICU
+  const handleSaveDraft = async () => {
+    if (!currentEbookId || !title.trim()) {
+      setError('Tytuł jest wymagany, aby zapisać szkic.');
+      return;
+    }
+
+    setIsSavingDraft(true);
+    setError(null);
+
+    try {
+      const response = await fetch(`/api/ebooks/${currentEbookId}`, {
+        method: 'PUT',
+        headers: getUserHeaders(),
+        body: JSON.stringify({
+          title,
+          subtitle: subtitle.trim() || null,
+          description: description.trim() || null,
+          status: "draft" // Upewnijmy się, że status to wciąż szkic
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Błąd podczas zapisywania szkicu ebooka.');
+      }
+
+      const data = await response.json();
+      if (data.success) {
+        console.log(`✅ Szkic ebooka (ID: ${currentEbookId}) został zapisany.`);
+        draftSavedByUser.current = true; // Ustaw flagę, aby zapobiec usunięciu
+        // Opcjonalnie: Można tu dodać chwilową informację zwrotną dla użytkownika
+      } else {
+        throw new Error('Odpowiedź serwera wskazuje na błąd zapisu.');
+      }
+
+    } catch (err) {
+      handleApiError(err, 'Wystąpił nieoczekiwany błąd podczas zapisywania szkicu.');
+    } finally {
+      setIsSavingDraft(false);
+    }
   };
 
   // EXTENDED renderStep1 with new fields
@@ -2497,22 +2655,21 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
 
                   {url.trim() && !scrapedContent.find(item => item.url === url) && (
                       <button
-                        onClick={() => scrapeSingleUrl(url)}
-                        disabled={isGeneratingToc || isSaving || isScrapingUrls || isScrapingSingleUrl}
-                        className={`px-3 py-2 text-sm rounded-lg transition-colors ${
-                          isScrapingSingleUrl
-                            ? 'bg-gray-400 text-white cursor-not-allowed'
-                            : 'bg-blue-600 text-white hover:bg-blue-700 cursor-pointer'
-                        }`}
+                          onClick={() => scrapeSingleUrl(url)}
+                          disabled={isInitializing || isGeneratingToc || isSaving || isScrapingUrls || isScrapingSingleUrl}
+                          className={`px-3 py-2 text-sm rounded-lg transition-colors ${
+                            isScrapingSingleUrl
+                              ? 'bg-gray-400 text-white cursor-not-allowed'
+                              : 'bg-blue-600 text-white hover:bg-blue-700 cursor-pointer'
+                          }`}
                       >
-                        {isScrapingSingleUrl ? (
-                          <>
-                            <Loader size={14} className="animate-spin mr-1" />
-
-                          </>
-                        ) : (
-                          'Approve'
-                        )}
+                          {isScrapingSingleUrl ? (
+                            <>
+                              <Loader size={14} className="animate-spin mr-1" />
+                            </>
+                          ) : (
+                            'Approve'
+                          )}
                       </button>
                     )}
 
@@ -2545,7 +2702,7 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
                 <div className="flex items-center gap-3">
                   <button
                     onClick={handleOpenPdfDialog}
-                    disabled={isGeneratingToc || isSaving || isScrapingUrls || isScrapingSingleUrl || isUploadingPdf}
+                    disabled={isInitializing || isGeneratingToc || isSaving || isScrapingUrls || isScrapingSingleUrl || isUploadingPdf}
                     className={`flex items-center px-4 py-2 border border-dashed border-gray-300 rounded-lg transition-colors ${
                       isGeneratingToc || isSaving || isScrapingUrls || isScrapingSingleUrl || isUploadingPdf
                         ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
@@ -2588,7 +2745,7 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
                   {scrapedContent.map((item, index) => (
                     <div key={index} className="text-xs bg-gray-50 p-2 rounded border relative">
                       <button
-                        onClick={() => handleRemoveScrapedContent(item.url)}
+                        onClick={() => handleRemoveScrapedContent(item)} // Zmień z item.url na item
                         className="absolute top-1 right-1 text-red-500 hover:text-red-700 hover:bg-red-100 rounded-full p-1 transition-colors cursor-pointer"
                         title="Remove source"
                       >
@@ -2606,16 +2763,30 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
       </div>
 
       <div className="flex justify-center mt-8 gap-4">
-        {tocGenerated && (
+        {/* ✅ NOWY PRZYCISK "ZAPISZ SZKIC" (widoczny tylko dla nowych ebooków) */}
+        {!tocGenerated && (
           <button
-            onClick={() => changeStep(2)}
-            className="flex items-center justify-center px-6 py-3 rounded-lg text-gray-700 font-medium border border-gray-300 shadow-sm hover:bg-gray-50 transition-all duration-200 cursor-pointer"
-            disabled={isSaving}
+            onClick={handleSaveDraft}
+            disabled={!title.trim() || isGeneratingToc || isSaving || isScrapingUrls || isSavingDraft}
+            className={`flex items-center justify-center px-6 py-3 rounded-lg font-medium shadow-md transition-all duration-200 ${
+              !title.trim() || isSavingDraft
+                ? 'bg-gray-300 text-gray-600 cursor-not-allowed'
+                : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 cursor-pointer'
+            }`}
           >
-            Cancel
+            {isSavingDraft ? (
+              <>
+                <Loader size={20} className="animate-spin mr-3" />
+                Zapisywanie...
+              </>
+            ) : (
+              <>
+                <Save size={20} className="mr-3" />
+                Zapisz szkic
+              </>
+            )}
           </button>
         )}
-
         <button
           onClick={tocGenerated ? updateEbookTitle : generateTableOfContents}
           disabled={!title.trim() || isGeneratingToc || isSaving || isScrapingUrls}

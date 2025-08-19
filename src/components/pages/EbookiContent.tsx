@@ -120,13 +120,19 @@ export default function EbookiContent() {
   }, []);
 
   // === NOWA LOGIKA: Filtrowanie i paginacja po stronie frontendu ===
+
   const { displayedEbooks, pagination, stats } = useMemo(() => {
-    let filteredEbooks = [...allEbooks];
+    // Krok 1: Stworzenie czystej listy bez roboczych e-booków
+    const cleanEbooks = allEbooks.filter(ebook => ebook.title !== 'Nowy Ebook (roboczy)');
+
+    // ✅ POPRAWKA: Użyj `cleanEbooks` jako bazy do dalszego filtrowania
+    let filteredEbooks = [...cleanEbooks];
 
     // Filtrowanie według statusu
     if (activeFilter === 'completed') {
       filteredEbooks = filteredEbooks.filter(ebook => isEbookCompleted(ebook));
     } else if (activeFilter === 'draft') {
+      // Ten filtr może zostać, jeśli status 'draft' ma szersze znaczenie
       filteredEbooks = filteredEbooks.filter(ebook => !isEbookCompleted(ebook));
     }
 
@@ -141,14 +147,14 @@ export default function EbookiContent() {
       );
     }
 
-    // Obliczanie statystyk na podstawie pełnej listy
+    // ✅ POPRAWKA: Obliczanie statystyk na podstawie `cleanEbooks`
     const statsData: Stats = {
-        total: allEbooks.length,
-        completed: allEbooks.filter(isEbookCompleted).length,
-        inProgress: allEbooks.filter(e => !isEbookCompleted(e)).length,
+        total: cleanEbooks.length,
+        completed: cleanEbooks.filter(isEbookCompleted).length,
+        inProgress: cleanEbooks.filter(e => !isEbookCompleted(e)).length,
     };
 
-    // Paginacja
+    // Paginacja (bez zmian, operuje już na `filteredEbooks`)
     const limit = 10;
     const total = filteredEbooks.length;
     const totalPages = Math.ceil(total / limit);
