@@ -261,12 +261,13 @@ const callGoogleImageGeneration = async (
     // Konwersja rozmiaru na format Imagen
     let aspectRatio = "1:1";
     if (size === "1024x1536") aspectRatio = "3:4";
-    else if (size === "1536x1024") aspectRatio = "4:3";
+    else if (size === "1536x1024") aspectRatio = "16:9";
 
     requestBody = {
       instances: [{ prompt: prompt }],
       parameters: {
-        sampleCount: (modelConfig as any).max_images || 1,
+        // 👇 ZMIANA: Na stałe prosimy tylko o 1 obraz, aby oszczędzać środki
+        sampleCount: 1,
         aspectRatio: aspectRatio,
         personGeneration: "allow_adult"
       }
@@ -507,16 +508,16 @@ const shouldFallback = (error: any, currentModel: string): boolean => {
   return conditions.some(Boolean);
 };
 
-// 🖼️ IMAGE OPTIMIZATION - unchanged
+// 🖼️ IMAGE OPTIMIZATION - REVISED FOR NATIVE RESOLUTION & BETTER COMPRESSION
 const optimizeImageForEbook = async (imageBuffer: ArrayBuffer): Promise<Buffer> => {
     const originalSize = (imageBuffer.byteLength / 1024).toFixed(1);
     const optimized = await sharp(Buffer.from(imageBuffer))
-        .png({ quality: 95, compressionLevel: 3, adaptiveFiltering: true })
-        .resize(1536, 1024, { fit: 'inside', withoutEnlargement: true })
+        // Konwersja do WebP z dobrą jakością, co znacząco zmniejszy plik
+        .webp({ quality: 85 })
         .sharpen({ sigma: 0.5 })
         .toBuffer();
     const optimizedSize = (optimized.length / 1024).toFixed(1);
-    console.log(`🔧 Image optimization: ${originalSize}KB → ${optimizedSize}KB`);
+    console.log(`🔧 Image optimization (Native Res, WebP): ${originalSize}KB → ${optimizedSize}KB`);
     return optimized;
 };
 
@@ -661,7 +662,7 @@ export async function POST(
     const storageBasePath = process.env.FILE_STORAGE_PATH || '/data';
     const uploadsDir = path.join(storageBasePath, 'uploads');
     await fs.mkdir(uploadsDir, { recursive: true });
-    const fileName = `${session.user.id}_EB${ebookIdNum}_CH${chapterIdNum}.png`;
+    const fileName = `${session.user.id}_EB${ebookIdNum}_CH${chapterIdNum}.webp`;
     const filePath = path.join(uploadsDir, fileName);
     await fs.writeFile(filePath, processedImageBuffer);
 

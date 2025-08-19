@@ -258,7 +258,7 @@ Napisz TYLKO surowy prompt okładki (bez komentarzy czy nagłówków):`;
 
     } else {
       // IMAGEN-4/GPT-IMAGE-1 - ULTRA SZCZEGÓŁOWY
-      prompt = `Jesteś ekspertem w tworzeniu ultra-szczegółowych promptów okładek książek dla ${imageModel.toUpperCase()} (limit ${finalConfig.maxLength} znaków). Stwórz bardzo długi, precyzyjny prompt okładki dla ebooka o długości ${finalConfig.optimalLength}-${finalConfig.maxLength} znaków.
+      prompt = `Jesteś ekspertem w tworzeniu ultra-szczegółowych opisów ilustracji artystycznych i konceptualnych. Twoim zadaniem jest stworzyć opis grafiki, która będzie wizualną esencją danego ebooka dla ${imageModel.toUpperCase()} (limit ${finalConfig.maxLength} znaków). Stwórz bardzo długi, precyzyjny prompt okładki dla ebooka o długości ${finalConfig.optimalLength}-${finalConfig.maxLength} znaków.
 
 INFORMACJE O EBOOKU:
 - Tytuł: "${title}"${subtitle ? `\n- Podtytuł: "${subtitle}"` : ''}
@@ -280,6 +280,9 @@ INSTRUKCJE DLA ${imageModel.toUpperCase()} (${finalConfig.detailLevel.toUpperCas
 - Komercyjna atrakcyjność marketingowa
 - Gatunek-specyficzny visual language
 - Emocjonalny impact i storytelling
+- Efektem ma być wyłącznie czysta, nieprzerwana kompozycja wizualna.
+- Obraz musi być całkowicie pozbawiony jakichkolwiek liter, cyfr, słów, symboli, logotypów i napisów.
+- Kompozycja ma być czysto graficzna, bez żadnych elementów tekstowych.
 
 KRYTYCZNY ZAKAZ TEKSTU:
 - ABSOLUTNIE ŻADEN TEKST, NAPISY, LITERY, CYFRY, SŁOWA, TYTUŁY
@@ -289,6 +292,7 @@ KRYTYCZNY ZAKAZ TEKSTU:
 - ZABRONIONE: signs, banners, posters z tekstem
 - ZABRONIONE: książki z widocznym tekstem, gazety z napisami
 - TYLKO CZYSTA GRAFIKA: pure visual composition without any textual elements
+- KRYTYCZNA ZASADA: Wygenerowany obraz NIE MOŻE przedstawiać fizycznej książki, ebooka, makiety okładki ani żadnego obiektu, na którym nadrukowana jest grafika. Twoim celem jest opisanie WYŁĄCZNIE samej ilustracji jako pełnego, samodzielnego dzieła sztuki. Czysty obraz, bez ramek, bez kontekstu produktu.
 - Natural edge blending i borderless design
 
 PAMIĘTAJ: Efektem ma być CZYSTA GRAFIKA 1:1 BEZ JAKICHKOLWIEK ELEMENTÓW TEKSTOWYCH!

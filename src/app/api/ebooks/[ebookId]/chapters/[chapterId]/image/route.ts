@@ -9,10 +9,11 @@ import path from 'path';
 
 /**
  * Obsługa przesyłania obrazu dla rozdziału (POST)
+ * 🆕 WSZYSTKIE OBRAZY SĄ TERAZ KONWERTOWANE DO WEBP
  */
 export async function POST(
   request: NextRequest,
-  { params }: { params: Promise<{ ebookId: string, chapterId: string }> }
+  { params }: { params: Promise<{ ebookId: string; chapterId: string }> }
 ) {
   try {
     // Autoryzacja przez session
@@ -34,163 +35,98 @@ export async function POST(
 
     // Sprawdzenie typu zawartości
     const contentType = request.headers.get('content-type') || '';
-    console.log('Content-Type:', contentType);
-
-    let imageFile;
+    let imageFile: File | null = null;
 
     // Obsługa różnych typów zawartości
     if (contentType.includes('multipart/form-data')) {
-      // Standardowa obsługa formData
-      try {
-        const formData = await request.formData();
-        imageFile = formData.get('image') as File | null;
-      } catch (formError) {
-        console.error('Błąd podczas parsowania formData:', formError);
-        return NextResponse.json({
-          error: 'Nie można przetworzyć formularza',
-          details: 'Upewnij się, że żądanie jest wysyłane jako multipart/form-data'
-        }, { status: 400 });
-      }
-    } else {
-      // Alternatywna metoda: bezpośrednie odczytanie pliku z request.body
-      try {
-        const buffer = await request.arrayBuffer();
-        const blob = new Blob([buffer]);
-        imageFile = new File([blob], 'uploaded-image.jpg', {
-          type: contentType.includes('image/') ? contentType : 'image/jpeg'
-        });
-        console.log('Przetworzono plik bezpośrednio z body requestu');
-      } catch (bodyError) {
-        console.error('Błąd podczas odczytu body:', bodyError);
-        return NextResponse.json({
-          error: 'Nie można przetworzyć pliku',
-          contentTypeReceived: contentType
-        }, { status: 400 });
-      }
+      const formData = await request.formData();
+      imageFile = formData.get('image') as File | null;
+    } else if (contentType.startsWith('image/')) {
+      const buffer = await request.arrayBuffer();
+      const blob = new Blob([buffer]);
+      imageFile = new File([blob], 'uploaded-image', { type: contentType });
+      console.log('Przetworzono plik bezpośrednio z body requestu');
     }
 
     if (!imageFile) {
-      return NextResponse.json({ error: 'Brak pliku obrazu' }, { status: 400 });
+      return NextResponse.json({ error: 'Brak pliku obrazu lub nieprawidłowy Content-Type' }, { status: 400 });
     }
 
-    // Sprawdzenie typu pliku
-    const fileType = imageFile.type;
-    console.log('Typ pliku:', fileType);
-
-    if (!fileType.startsWith('image/') && !contentType.startsWith('image/')) {
-      return NextResponse.json({
-        error: 'Wybrany plik nie jest obrazem',
-        fileType,
-        contentType
-      }, { status: 400 });
+    // Sprawdzenie, czy plik jest obrazem
+    if (!imageFile.type.startsWith('image/')) {
+      return NextResponse.json({ error: 'Wybrany plik nie jest obrazem', fileType: imageFile.type }, { status: 400 });
     }
 
-    // Weryfikacja uprawnień - sprawdź czy rozdział należy do użytkownika
+    // Weryfikacja uprawnień
     const chapter = await prisma.ebook_chapters.findFirst({
       where: {
         id: chapterId,
         ebook_id: ebookId,
-        ebooks: {
-          userId: session.user.id
-        }
+        ebooks: { userId: session.user.id },
       },
-      include: {
-        ebooks: {
-          select: {
-            id: true,
-            title: true,
-            userId: true
-          }
-        }
-      }
     });
 
     if (!chapter) {
-      return NextResponse.json({
-        error: 'Rozdział nie został znaleziony lub nie masz uprawnień'
-      }, { status: 404 });
+      return NextResponse.json({ error: 'Rozdział nie został znaleziony lub nie masz uprawnień' }, { status: 404 });
     }
 
     // Konwersja pliku do ArrayBuffer
     const buffer = await imageFile.arrayBuffer();
 
-    // Przetwarzanie obrazu za pomocą sharp
-    let processedImageBuffer;
-    let outputContentType;
-    let fileExtension;
+    // 🆕 UJEDNOLICONA OPTYMALIZACJA DO WEBP
+    console.log('⚙️  Rozpoczynanie konwersji obrazu do formatu WebP...');
 
-    if (fileType.includes('png') || contentType.includes('png') ||
-        fileType.includes('webp') || contentType.includes('webp')) {
-      // Przetwarzanie jako PNG z zachowaniem przezroczystości
-      processedImageBuffer = await sharp(Buffer.from(buffer))
-        .png({
-          quality: 90,
-          compressionLevel: 9,
-          effort: 10  // Maksymalny effort dla najlepszej kompresji
-        })
-        .resize(1024, 1024, {
-          fit: 'inside',
-          position: 'center',
-          withoutEnlargement: false
-        })
-        .toBuffer();
-      outputContentType = 'image/png';
-      fileExtension = 'png';
-    } else {
-      // Przetwarzanie jako JPEG
-      processedImageBuffer = await sharp(Buffer.from(buffer))
-        .jpeg({
-          quality: 85,
-          progressive: true
-        })
-        .resize(1024, 1024, {
-          fit: 'inside',
-          position: 'center',
-          withoutEnlargement: false
-        })
-        .toBuffer();
-      outputContentType = 'image/jpeg';
-      fileExtension = 'jpg';
-    }
+    // Logowanie oryginalnych wymiarów
+    const originalMetadata = await sharp(Buffer.from(buffer)).metadata();
+    console.log(`🖼️  Oryginalny obraz: ${originalMetadata.width}x${originalMetadata.height} (${(buffer.byteLength / 1024).toFixed(1)} KB)`);
+
+    // Przetwarzanie obrazu: zmiana rozmiaru i konwersja do WebP
+    const processedImageBuffer = await sharp(Buffer.from(buffer))
+      .resize(1024, 1024, {
+        fit: 'inside',
+        position: 'center',
+        withoutEnlargement: true, // Lepsza praktyka: nie powiększaj małych obrazów
+      })
+      .webp({
+        quality: 85, // Dobry balans między jakością a rozmiarem
+        effort: 6,   // Maksymalny wysiłek dla najlepszej kompresji
+      })
+      .toBuffer();
+
+    // Logowanie nowych wymiarów
+    const finalMetadata = await sharp(processedImageBuffer).metadata();
+    console.log(`✅ Obraz przekonwertowany na WebP: ${finalMetadata.width}x${finalMetadata.height} (${(processedImageBuffer.length / 1024).toFixed(1)} KB)`);
+
+    const fileExtension = 'webp'; // Zawsze zapisujemy jako .webp
 
     // Przygotowanie ścieżki zapisu w Railway storage
     const storageBasePath = process.env.FILE_STORAGE_PATH || '/data';
     const uploadsDir = path.join(storageBasePath, 'uploads');
-
-    // Upewnij się, że folder istnieje
     await fs.mkdir(uploadsDir, { recursive: true });
 
-    // Generowanie nazwy pliku zgodnie z konwencją
+    // Generowanie nazwy pliku z nowym rozszerzeniem
     const fileName = `${session.user.id}_EB${ebookId}_CH${chapterId}.${fileExtension}`;
     const filePath = path.join(uploadsDir, fileName);
 
-    console.log(`💾 Zapisywanie obrazu jako ${fileName} w Railway storage`);
-
-    // Zapisanie pliku w Railway storage
+    console.log(`💾 Zapisywanie obrazu jako ${fileName} w storage`);
     await fs.writeFile(filePath, processedImageBuffer);
 
     // Generowanie publicznego URL dla obrazu
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
     const imageUrl = `${baseUrl}/api/assets/uploads/${fileName}`;
 
-    // Aktualizacja URL obrazu w bazie danych przez Prisma
+    // Aktualizacja URL obrazu w bazie danych
     const updatedChapter = await prisma.ebook_chapters.update({
-      where: {
-        id: chapterId
-      },
-      data: {
-        image_url: imageUrl,
-        updated_at: new Date()
-      }
+      where: { id: chapterId },
+      data: { image_url: imageUrl, updated_at: new Date() },
     });
 
-    // Aktualizacja daty modyfikacji ebooka
     await prisma.ebooks.update({
       where: { id: ebookId },
-      data: { updated_at: new Date() }
+      data: { updated_at: new Date() },
     });
 
-    console.log(`✅ Pomyślnie zaktualizowano URL obrazu dla rozdziału ID=${chapterId} w ebooku ID=${ebookId}`);
+    console.log(`✅ Pomyślnie zaktualizowano URL obrazu dla rozdziału ID=${chapterId}`);
 
     return NextResponse.json({
       success: true,
@@ -198,15 +134,14 @@ export async function POST(
       chapter: {
         id: updatedChapter.id,
         title: updatedChapter.title,
-        image_url: updatedChapter.image_url
-      }
+        image_url: updatedChapter.image_url,
+      },
     });
-
   } catch (error) {
     console.error('❌ Błąd podczas przesyłania obrazu:', error);
     return NextResponse.json({
       error: 'Wystąpił błąd podczas przesyłania obrazu',
-      details: error instanceof Error ? error.message : 'Nieznany błąd'
+      details: error instanceof Error ? error.message : 'Nieznany błąd',
     }, { status: 500 });
   }
 }

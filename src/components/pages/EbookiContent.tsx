@@ -53,6 +53,11 @@ export default function EbookiContent() {
   // === NOWA LOGIKA: Stan dla wszystkich e-booków ===
   const [allEbooks, setAllEbooks] = useState<Ebook[]>([]);
 
+  // === NOWA LOGIKA: Stany do obsługi modala usuwania ===
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [ebookToDelete, setEbookToDelete] = useState<Ebook | null>(null);
+
+
   // Hook SSE dla aktualizacji w czasie rzeczywistym
   const { connected, error: sseError, reconnect, updateTrigger } = useEbooksSSE();
   const error = sseError || localError;
@@ -235,11 +240,29 @@ export default function EbookiContent() {
     }
   };
 
-  const deleteEbook = async (ebookId: number) => {
-    if (!confirm('Czy na pewno chcesz usunąć ten e-book? Operacji nie można cofnąć.')) return;
+  // === NOWA LOGIKA: Funkcje do obsługi modala i usuwania ===
 
+  // Otwiera modal
+  const handleDeleteEbook = (ebook: Ebook) => {
+    setEbookToDelete(ebook);
+    setShowDeleteConfirm(true);
+  };
+
+  // Zamyka modal
+  const cancelDelete = () => {
+    setShowDeleteConfirm(false);
+    setEbookToDelete(null);
+  };
+
+  // Potwierdza i wykonuje usunięcie
+  const confirmDelete = async () => {
+    if (!ebookToDelete) return;
+
+    const ebookId = ebookToDelete.id;
+    setShowDeleteConfirm(false);
     setDeletingIds(prev => new Set(prev).add(ebookId));
     setLocalError(null);
+
     try {
       const response = await fetch(`/api/ebooks?id=${ebookId}`, { method: 'DELETE' });
       if (!response.ok) {
@@ -258,6 +281,7 @@ export default function EbookiContent() {
         newSet.delete(ebookId);
         return newSet;
       });
+      setEbookToDelete(null);
     }
   };
 
@@ -493,7 +517,7 @@ export default function EbookiContent() {
                       )}
 
                       <button
-                        onClick={() => deleteEbook(ebook.id)}
+                        onClick={() => handleDeleteEbook(ebook)}
                         className={`p-2 text-red-600 hover:bg-red-100 rounded-lg transition-colors disabled:opacity-50 ${isDeleting || isDownloading ? 'cursor-not-allowed' : ''}`}
                         title="Usuń"
                         disabled={isDeleting || isDownloading}
@@ -539,6 +563,54 @@ export default function EbookiContent() {
         onEbookCreated={handleEbookCreated}
         ebookId={editingEbookId}
       />
+
+      {/* === NOWY MODAL POTWIERDZAJĄCY USUNIĘCIE === */}
+      {showDeleteConfirm && ebookToDelete && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[70] p-4 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 animate-fadeIn">
+
+            {/* Header */}
+            <div className="flex items-center space-x-3 mb-4">
+              <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
+                <Trash2 className="h-6 w-6 text-red-600" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Usuń e-book</h3>
+                <p className="text-sm text-gray-500">Tej operacji nie można cofnąć</p>
+              </div>
+            </div>
+
+            {/* Content */}
+            <div className="mb-6">
+              <p className="text-gray-700 mb-2">
+                Czy na pewno chcesz trwale usunąć e-book:
+              </p>
+              <div className="bg-gray-50 rounded-lg p-3 border">
+                <p className="font-medium text-gray-900 truncate" title={ebookToDelete.title}>
+                  {ebookToDelete.title}
+                </p>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex space-x-3">
+              <button
+                onClick={cancelDelete}
+                className="flex-1 px-4 py-2.5 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium transition-colors"
+              >
+                Anuluj
+              </button>
+              <button
+                onClick={confirmDelete}
+                className="flex-1 px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition-colors"
+              >
+                Usuń
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
     </div>
   );
 }

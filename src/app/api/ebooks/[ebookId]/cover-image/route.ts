@@ -107,44 +107,22 @@ export async function POST(
     // Konwersja pliku do ArrayBuffer
     const buffer = await imageFile.arrayBuffer();
 
-    // Przetwarzanie obrazu okładki za pomocą sharp - optymalizacja pod okładki
-    let processedImageBuffer;
-    let outputContentType;
-    let fileExtension;
+    // 🔄 ZMIANA: Ujednolicona konwersja wszystkich obrazów do formatu WebP
+    console.log('⚙️  Konwersja obrazu okładki do formatu WebP...');
 
-    if (fileType.includes('png') || contentType.includes('png') ||
-        fileType.includes('webp') || contentType.includes('webp')) {
-      // Przetwarzanie jako PNG z zachowaniem przezroczystości (idealne dla okładek)
-      processedImageBuffer = await sharp(Buffer.from(buffer))
-        .png({
-          quality: 95,           // Wyższa jakość dla okładek
-          compressionLevel: 6,   // Mniejsza kompresja dla lepszej jakości
-          effort: 10
-        })
-        .resize(1024, 1024, {    // Kwadratowy format dla okładek
-          fit: 'cover',
-          position: 'center',
-          withoutEnlargement: false
-        })
-        .toBuffer();
-      outputContentType = 'image/png';
-      fileExtension = 'png';
-    } else {
-      // Przetwarzanie jako JPEG
-      processedImageBuffer = await sharp(Buffer.from(buffer))
-        .jpeg({
-          quality: 90,           // Wyższa jakość dla okładek
-          progressive: true
-        })
-        .resize(1024, 1024, {    // Kwadratowy format dla okładek
-          fit: 'cover',
-          position: 'center',
-          withoutEnlargement: false
-        })
-        .toBuffer();
-      outputContentType = 'image/jpeg';
-      fileExtension = 'jpg';
-    }
+    const processedImageBuffer = await sharp(Buffer.from(buffer))
+      .resize(1024, 1024, {    // Kwadratowy format dla okładek
+        fit: 'cover',
+        position: 'center',
+        withoutEnlargement: false
+      })
+      .webp({
+        quality: 90,           // Wysoka jakość dla okładki
+        effort: 6              // Dobra kompresja
+      })
+      .toBuffer();
+
+    const fileExtension = 'webp';
 
     // Przygotowanie ścieżki zapisu w Railway storage
     const storageBasePath = process.env.FILE_STORAGE_PATH || '/data';

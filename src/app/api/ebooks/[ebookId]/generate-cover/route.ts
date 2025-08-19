@@ -464,13 +464,13 @@ const optimizePromptForModel = (prompt: string, bookTitle: string, model: string
   }
 
   if (!finalPrompt.toLowerCase().includes(bookTitle.toLowerCase().substring(0, 15))) {
-    finalPrompt += ` Perfect book cover illustration for "${bookTitle}".`;
+    finalPrompt += ` An artistic illustration inspired by the themes of "${bookTitle}".`;
     console.log(`🔧 Added book title reference`);
   }
 
   // ETAP 2: Optymalizacje specyficzne dla providera
   if (config.provider === 'google' && 'supports_text_rendering' in config && (config as any).supports_text_rendering && !prompt.toLowerCase().includes('clear')) {
-    finalPrompt += " Clear, professional book cover composition.";
+    finalPrompt += " A clear, professional, and high-resolution artistic composition.";
     console.log(`🔧 Added clarity for Google model`);
   } else if (config.provider === 'openai' && 'supports_transparency' in config && (config as any).supports_transparency && !prompt.toLowerCase().includes('transparent')) {
     finalPrompt += " Transparent background with seamless edges for book cover.";
@@ -531,30 +531,35 @@ const shouldFallback = (error: any, currentModel: string): boolean => {
   return conditions.some(Boolean);
 };
 
-// 🖼️ IMAGE OPTIMIZATION FOR BOOK COVERS
+// 🖼️ IMAGE OPTIMIZATION FOR BOOK COVERS - 🔄 UPDATED TO WEBP
 const optimizeImageForBookCover = async (imageBuffer: ArrayBuffer): Promise<Buffer> => {
-  const originalSize = (imageBuffer.byteLength / 1024).toFixed(1);
+    const originalSharp = sharp(Buffer.from(imageBuffer));
+    const originalMetadata = await originalSharp.metadata();
+    const originalSize = (imageBuffer.byteLength / 1024).toFixed(1);
+    const originalResolution = `${originalMetadata.width}x${originalMetadata.height}`;
 
-  const optimized = await sharp(Buffer.from(imageBuffer))
-    .png({
-      quality: 98,        // 🔥 Wysoka jakość dla okładek (marketing)
-      compressionLevel: 4, // Mniejsza kompresja dla okładek
-      effort: 9,          // Maksymalny effort dla okładek
-      palette: false,
-      adaptiveFiltering: true
-    })
-    .resize(1024, 1024, {  // 🔥 Wymuszenie formatu kwadratowego
-      fit: 'cover',
-      position: 'center',
-      withoutEnlargement: false
-    })
-    .sharpen({ sigma: 0.8, m1: 1.2, m2: 2.5 })  // 🔥 Mocniejsze wyostrzenie dla okładek
-    .toBuffer();
+    console.log(`🖼️  Odebrano obraz okładki: ${originalResolution} (${originalSize}KB)`);
 
-  const optimizedSize = (optimized.length / 1024).toFixed(1);
-  console.log(`🔧 Book cover optimization: ${originalSize}KB → ${optimizedSize}KB (square format with enhanced quality)`);
+    const optimizedBuffer = await originalSharp
+        .resize(1024, 1024, {
+            fit: 'cover',
+            position: 'center',
+            withoutEnlargement: false
+        })
+        .webp({
+            quality: 90,        // Wysoka jakość dla okładki
+            effort: 6           // Maksymalny wysiłek dla najlepszej kompresji
+        })
+        .sharpen({ sigma: 0.8, m1: 1.2, m2: 2.5 })
+        .toBuffer();
 
-  return optimized;
+    const optimizedMetadata = await sharp(optimizedBuffer).metadata();
+    const optimizedSize = (optimizedBuffer.length / 1024).toFixed(1);
+    const optimizedResolution = `${optimizedMetadata.width}x${optimizedMetadata.height}`;
+
+    console.log(`🔧 Optymalizacja okładki (WebP): ${originalResolution} (${originalSize}KB) → ${optimizedResolution} (${optimizedSize}KB)`);
+
+    return optimizedBuffer;
 };
 
 export async function POST(
@@ -791,7 +796,8 @@ export async function POST(
 
     await fs.mkdir(uploadsDir, { recursive: true });
 
-    const fileName = `${session.user.id}_EB${ebookIdNum}_COVER.png`;
+    // 🔄 ZMIANA NAZWY PLIKU NA .webp
+    const fileName = `${session.user.id}_EB${ebookIdNum}_COVER.webp`;
     const filePath = path.join(uploadsDir, fileName);
 
     console.log(`💾 Zapisywanie okładki jako ${fileName} w Railway storage`);
