@@ -1,5 +1,5 @@
 // ===================================================================
-// src/app/api/ebooks/route.ts - WERSJA ZAKTUALIZOWANA
+// src/app/api/ebooks/route.ts - WERSJA FINALNA
 // ===================================================================
 
 import { NextResponse } from 'next/server';
@@ -8,6 +8,10 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { getUserEbookSettings } from '@/lib/ai-settings';
 import { ebookEvents } from '@/lib/ebookEvents';
+// --- NOWE IMPORTY DLA OPERACJI NA PLIKACH ---
+import fs from 'fs/promises';
+import path from 'path';
+
 
 /**
  * ZAKTUALIZOWANA FUNKCJA GET
@@ -232,7 +236,8 @@ export async function POST(request: Request) {
 }
 
 /**
- * Obsługa usuwania ebooka (DELETE) - BEZ ZMIAN
+ * ZAKTUALIZOWANA FUNKCJA DELETE
+ * Usuwa e-book z bazy danych ORAZ wszystkie powiązane z nim grafiki z dysku.
  */
 export async function DELETE(request: Request) {
   try {
@@ -243,20 +248,22 @@ export async function DELETE(request: Request) {
     const userId = session.user.id;
 
     const { searchParams } = new URL(request.url);
-    const ebookId = searchParams.get('id');
+    const ebookIdParam = searchParams.get('id');
 
-    if (!ebookId) {
+    if (!ebookIdParam) {
       return NextResponse.json({ error: 'ID e-booka jest wymagane' }, { status: 400 });
     }
+    const ebookId = parseInt(ebookIdParam);
 
     const existingEbook = await prisma.ebooks.findFirst({
       where: {
-        id: parseInt(ebookId),
+        id: ebookId,
         userId: userId,
       },
       select: {
         id: true,
         title: true,
+        userId: true, // Pobieramy userId, aby mieć pewność, że go mamy
       },
     });
 
@@ -267,34 +274,80 @@ export async function DELETE(request: Request) {
       );
     }
 
+    // Krok 1: Usunięcie e-booka z bazy danych
     await prisma.ebooks.delete({
       where: {
-        id: parseInt(ebookId),
+        id: ebookId,
       },
     });
 
+    console.log(`✅ Usunięto e-book "${existingEbook.title}" (ID=${ebookId}) z bazy danych.`);
+
+    // ===================================================================
+    // Krok 2: Logika usuwania powiązanych grafik z dysku
+    // ===================================================================
+    let deletedFilesCount = 0;
+    try {
+      const filePrefix = `${existingEbook.userId}_EB${existingEbook.id}_`;
+
+      // ====================== KLUCZOWA POPRAWKA ======================
+      // Zmieniamy logikę, aby naśladowała działanie eksploratora plików.
+      // Używamy ścieżki absolutnej od roota dysku, tak jak w logach, które
+      // potwierdziły skuteczne usuwanie przez eksplorator.
+      const uploadsDir = path.resolve(process.env.UPLOADS_DIR || '/data/uploads/uploads');
+      // ===============================================================
+
+      console.log(`🔍 Skanowanie katalogu: ${uploadsDir} w poszukiwaniu plików z prefiksem: "${filePrefix}"`);
+
+      try {
+        const allFiles = await fs.readdir(uploadsDir);
+        const filesToDelete = allFiles.filter(file => file.startsWith(filePrefix));
+
+        if (filesToDelete.length === 0) {
+          console.log(`ℹ️ Nie znaleziono plików do usunięcia dla e-booka ID=${ebookId}.`);
+        } else {
+          await Promise.all(filesToDelete.map(async (file) => {
+            const filePath = path.join(uploadsDir, file);
+            await fs.unlink(filePath);
+            console.log(`🗑️ Usunięto plik graficzny: ${file}`);
+            deletedFilesCount++;
+          }));
+        }
+      } catch (dirError: any) {
+        if (dirError.code === 'ENOENT') {
+          console.log(`ℹ️ Katalog ${uploadsDir} nie istnieje. Pomijam krok usuwania plików graficznych.`);
+        } else {
+          throw dirError; // Rzucamy dalej inne, nieoczekiwane błędy
+        }
+      }
+    } catch (error) {
+      console.error(`❌ Wystąpił błąd podczas usuwania plików graficznych dla e-booka ID=${ebookId}, ale rekord z bazy został usunięty. Błąd:`, error);
+    }
+    // ===================================================================
+
+    // Krok 3: Emisja zdarzenia i wysłanie odpowiedzi
     ebookEvents.emitEbookChange({
       type: 'deleted',
       userId: userId,
-      ebookId: parseInt(ebookId),
+      ebookId: ebookId,
       timestamp: new Date()
     });
 
-    console.log(`✅ Usunięto e-book "${existingEbook.title}" (ID=${ebookId})`);
-
     return NextResponse.json({
       success: true,
-      message: 'E-book został usunięty',
+      message: `E-book "${existingEbook.title}" został pomyślnie usunięty.`,
+      details: `Usunięto ${deletedFilesCount} powiązanych plików graficznych.`,
       deletedEbook: {
         id: existingEbook.id,
         title: existingEbook.title,
       },
     });
+
   } catch (error) {
-    console.error('❌ Błąd podczas usuwania e-booka:', error);
+    console.error('❌ Krytyczny błąd podczas usuwania e-booka:', error);
     return NextResponse.json(
       {
-        error: 'Wystąpił błąd podczas usuwania e-booka',
+        error: 'Wystąpił błąd serwera podczas usuwania e-booka',
         details: error instanceof Error ? error.message : 'Unknown error',
       },
       { status: 500 }
