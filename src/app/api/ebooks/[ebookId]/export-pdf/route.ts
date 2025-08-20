@@ -1,16 +1,19 @@
 // src/app/api/ebooks/[ebookId]/export-pdf/route.ts
 import { NextRequest, NextResponse } from 'next/server';
+import sharp from 'sharp';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import puppeteer from 'puppeteer-core';
 import chromium from '@sparticuz/chromium';
 import fs from 'fs';
+import path from 'path';
 
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ ebookId: string }> }
 ) {
+  let browser;
   try {
     // Autoryzacja przez session
     const session = await getServerSession(authOptions);
@@ -69,7 +72,6 @@ export async function POST(
     const htmlContent = generateHTMLContent(title, subtitle, chapters, cover_image_url, authorDisplayName, authorLogoUrl);
 
     // --- POPRAWIONA KONFIGURACJA PUPPETEER DLA RAILWAY ---
-    let browser;
     let executablePath: string;
 
     const isProduction = process.env.NODE_ENV === 'production';
@@ -142,43 +144,91 @@ export async function POST(
     page.setDefaultTimeout(60000);
     page.setDefaultNavigationTimeout(60000);
 
+    // === KROK 1: USTAW ROZMIAR OKNA PRZEGLĄDARKI PRZED WCZYTANIEM TREŚCI ===
+    // To zmusi stronę (100vw, 100vh) do wyrenderowania się w idealnych proporcjach A4
+
+    await page.setViewport({
+      width: 595,  // Szerokość A4 w pikselach
+      height: 842, // Wysokość A4 w pikselach
+    });
+
     await page.setContent(htmlContent, {
       waitUntil: 'networkidle0',
       timeout: 60000,
     });
 
-    console.log(`🔄 Generowanie PDF...`);
+    console.log(`🔄 Rozpoczęcie generowania PDF i okładki WEBP...`);
 
-    const pdfBuffer = await page.pdf({
-      format: 'A4',
-      margin: {
-        top: '20mm',
-        right: '20mm',
-        bottom: '25mm',
-        left: '20mm',
-      },
-      printBackground: true,
-      displayHeaderFooter: false,
-      preferCSSPageSize: true,
-      timeout: 60000,
-      scale: 1,
-      tagged: false,
-      outline: false,
-      omitBackground: false,
-      landscape: false,
-      pageRanges: '',
-    });
+    // Definicja ścieżek (bez zmian)
+    const uploadsDir = path.resolve(process.env.UPLOADS_DIR || '/data/uploads/uploads');
+    const coverImageFileName = `${session.user.id}_EB${ebookIdNum}_rawMOCK.webp`;
+    const coverImageFullPath = path.join(uploadsDir, coverImageFileName);
 
-    await browser.close();
+    await fs.promises.mkdir(uploadsDir, { recursive: true });
 
-    // Aktualizuj status ebooka na 'completed'
+    const [pdfBuffer, rawCoverBuffer] = await Promise.all([
+      // Zadanie 1: Generowanie PDF
+      page.pdf({
+        format: 'A4',
+        margin: { top: '20mm', right: '20mm', bottom: '25mm', left: '20mm' },
+        printBackground: true,
+        displayHeaderFooter: false,
+        preferCSSPageSize: true,
+        timeout: 60000,
+      }),
+      // Zadanie 2: Generowanie zrzutu ekranu DO PAMIĘCI (jako bufor)
+      page.screenshot({
+        type: 'webp',
+        quality: 85
+      }),
+    ]);
+    console.log(`✅ PDF i surowa okładka wygenerowane w pamięci.`);
+
+    // Zapisz surową okładkę z bufora na dysk
+    await fs.promises.writeFile(coverImageFullPath, rawCoverBuffer);
+    console.log(`🖼️  Surowa okładka WEBP zapisana w: ${coverImageFullPath}`);
+
+    // Stwórz finalny mockup, używając bufora z pamięci
+    console.log(`🖌️  Łączenie okładki z ramką tabletu...`);
+
+    const framePath = path.resolve('./src/lib/templates/raw_mokup.png');
+    const finalMockupFileName = `${session.user.id}_EB${ebookIdNum}_finalMOK.png`;
+    const finalMockupFullPath = path.join(uploadsDir, finalMockupFileName);
+
+    const resizedCoverBuffer = await sharp(rawCoverBuffer) // Używamy bufora z pamięci!
+        .resize({
+            width: 600,
+            height: 840,
+            fit: 'cover'
+        })
+        .toBuffer();
+
+    await sharp(framePath)
+        .composite([{
+            input: resizedCoverBuffer,
+            blend: 'dest-over',
+            top: 220,
+            left: 180,
+        }])
+        .toFile(finalMockupFullPath);
+
+    console.log(`✅ Finalny mockup PNG zapisany w: ${finalMockupFullPath}`);
+
+
+    // 4. Zdefiniuj ścieżki URL i zaktualizuj bazę danych o oba mockupy
+    const rawMockupUrlPath = `/uploads/${coverImageFileName}`;
+    const finalMockupUrlPath = `/uploads/${finalMockupFileName}`; // Używamy zmiennej zdefiniowanej w poprzednim kroku
+
     await prisma.ebooks.update({
       where: {
         id: ebookIdNum,
-        userId: session.user.id // Zabezpieczenie - tylko własne ebooki
+        userId: session.user.id
       },
       data: {
-        status: 'completed'
+        status: 'completed',
+        // Upewnij się, że masz oba te pola w pliku schema.prisma
+        cover_image_webp_url: rawMockupUrlPath, // Zapis ścieżki do surowego mockupu
+        final_mockup_url: finalMockupUrlPath,     // Zapis ścieżki do finalnego mockupu
       }
     });
 
@@ -207,6 +257,16 @@ export async function POST(
       },
       { status: 500 }
     );
+  } finally {
+    if (browser) {
+      console.log('🧹 Zamykanie przeglądarki...');
+      try {
+        await browser.close();
+        console.log('✅ Przeglądarka zamknięta pomyślnie.');
+      } catch (closeError) {
+        console.warn('⚠️ Wystąpił niekrytyczny błąd podczas zamykania przeglądarki.', closeError);
+      }
+    }
   }
 }
 

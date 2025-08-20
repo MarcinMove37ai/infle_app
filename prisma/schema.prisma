@@ -244,6 +244,8 @@ model ebooks {
   description                     String?
   cover_image_url                 String?
   cover_image_prompt              String?
+  cover_image_webp_url            String?
+  final_mockup_url                String?
   text_ai_provider                String?          @db.VarChar(50)
   text_ai_model                   String?          @db.VarChar(100)
   image_ai_provider               String?          @db.VarChar(50)
