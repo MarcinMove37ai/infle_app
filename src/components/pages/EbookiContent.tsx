@@ -6,7 +6,7 @@ import { BookOpen, Plus, Edit, Download, Sparkles, Trash2, AlertCircle, RefreshC
 import EbookGeneratorModal from '@/components/ebooks/EbookGeneratorModal';
 import { useEbooksSSE } from '@/hooks/useEbooksSSE';
 
-// Interfejsy
+// Interfaces
 interface Ebook {
   id: number;
   title: string;
@@ -74,11 +74,11 @@ export default function EbookiContent() {
 
   const getStatusLabel = (status: string | null) => {
     switch (status) {
-      case 'published': return 'Opublikowany';
-      case 'completed': return 'Ukończony';
-      case 'in-progress': return 'W realizacji';
-      case 'draft': return 'Szkic';
-      default: return 'Nieznany status';
+      case 'published': return 'Published';
+      case 'completed': return 'Completed';
+      case 'in-progress': return 'In progress';
+      case 'draft': return 'Draft';
+      default: return 'Unknown status';
     }
   };
 
@@ -97,7 +97,7 @@ export default function EbookiContent() {
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('pl-PL', {
+    return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
@@ -111,18 +111,18 @@ export default function EbookiContent() {
       const response = await fetch(`/api/ebooks?limit=9999`);
       const data = await response.json();
       if (!response.ok) {
-        throw new Error(data.error || 'Nie udało się pobrać e-booków');
+        throw new Error(data.error || 'Failed to fetch e-books');
       }
       setAllEbooks(data.ebooks || []);
     } catch (err) {
-      setLocalError(err instanceof Error ? err.message : 'Wystąpił nieznany błąd');
+      setLocalError(err instanceof Error ? err.message : 'An unknown error occurred');
     } finally {
       setLoading(false);
     }
   }, []);
 
   const { displayedEbooks, pagination, stats } = useMemo(() => {
-    const cleanEbooks = allEbooks.filter(ebook => ebook.title !== 'Nowy Ebook (roboczy)');
+    const cleanEbooks = allEbooks.filter(ebook => ebook.title !== 'New Ebook (draft)');
     let filteredEbooks = [...cleanEbooks];
 
     if (activeFilter === 'completed') {
@@ -227,7 +227,7 @@ export default function EbookiContent() {
       const response = await fetch(`/api/ebooks/${ebookId}/export-pdf`, { method: 'POST' });
       if (!response.ok) {
         const data = await response.json();
-        throw new Error(data.error || 'Nie udało się wygenerować PDF');
+        throw new Error(data.error || 'Failed to generate PDF');
       }
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
@@ -240,7 +240,7 @@ export default function EbookiContent() {
       window.URL.revokeObjectURL(url);
       fetchAllEbooks();
     } catch (err) {
-      setLocalError(err instanceof Error ? err.message : 'Wystąpił błąd podczas generowania PDF');
+      setLocalError(err instanceof Error ? err.message : 'An error occurred while generating the PDF');
     } finally {
       setDownloadingIds(prev => {
         const newSet = new Set(prev);
@@ -270,11 +270,11 @@ export default function EbookiContent() {
       const response = await fetch(`/api/ebooks?id=${ebookId}`, { method: 'DELETE' });
       if (!response.ok) {
         const data = await response.json();
-        throw new Error(data.error || 'Nie udało się usunąć e-booka');
+        throw new Error(data.error || 'Failed to delete the e-book');
       }
       fetchAllEbooks();
     } catch (err) {
-      setLocalError(err instanceof Error ? err.message : 'Wystąpił błąd podczas usuwania');
+      setLocalError(err instanceof Error ? err.message : 'An error occurred while deleting');
     } finally {
       setDeletingIds(prev => {
         const newSet = new Set(prev);
@@ -316,10 +316,10 @@ export default function EbookiContent() {
         }
         const previewImageUrl = `/api/assets/${previewFilename}`;
         setPreviewImage(previewImageUrl);
-        setPreviewImageTitle(`Podgląd okładki: ${ebook.title}`);
-        setPreviewImageName(`okladka_${ebook.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.png`);
+        setPreviewImageTitle(`Cover preview: ${ebook.title}`);
+        setPreviewImageName(`cover_${ebook.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.png`);
 
-        // Pobieranie spisu treści
+        // Fetching table of contents
         setIsPreviewTocLoading(true);
         setPreviewTocItems(null);
         try {
@@ -331,13 +331,13 @@ export default function EbookiContent() {
                 setPreviewTocItems([]);
             }
         } catch (error) {
-            console.error("Błąd podczas pobierania spisu treści:", error);
+            console.error("Error fetching table of contents:", error);
             setPreviewTocItems([]);
         } finally {
             setIsPreviewTocLoading(false);
         }
     } else {
-        console.warn("Próbowano otworzyć podgląd dla e-booka bez okładki.");
+        console.warn("Attempted to open preview for an e-book without a cover.");
     }
   };
 
@@ -347,7 +347,7 @@ export default function EbookiContent() {
     setPreviewImageTitle('');
     setPreviewImageName('');
     setIsConverting(false);
-    setPreviewTocItems(null); // Czyszczenie danych spisu treści
+    setPreviewTocItems(null); // Clear table of contents data
   };
 
   const handleDownloadAsPng = async (webpUrl: string | null, baseFileName: string) => {
@@ -416,13 +416,13 @@ export default function EbookiContent() {
             className="flex items-center justify-center px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium shadow-sm cursor-pointer"
           >
             <Plus size={20} className="mr-2" />
-            Utwórz nowy e-book
+            Create new e-book
           </button>
         </div>
         <form onSubmit={handleSearch} className="flex gap-2 lg:flex-1 lg:max-w-md lg:justify-end">
           <input
             type="text"
-            placeholder="Szukaj e-booków..."
+            placeholder="Search e-books..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="flex-1 lg:min-w-0 px-4 py-2 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:border-gray-400"
@@ -432,7 +432,7 @@ export default function EbookiContent() {
             disabled={loading}
             className="px-6 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors disabled:opacity-50 whitespace-nowrap cursor-pointer disabled:cursor-not-allowed"
           >
-            Szukaj
+            Search
           </button>
           {searchTerm && (
             <button
@@ -440,7 +440,7 @@ export default function EbookiContent() {
               onClick={() => { setSearchTerm(''); setCurrentPage(1); }}
               className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors whitespace-nowrap cursor-pointer"
             >
-              Wyczyść
+              Clear
             </button>
           )}
         </form>
@@ -450,14 +450,14 @@ export default function EbookiContent() {
         <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex flex-col sm:flex-row items-start sm:items-center space-y-3 sm:space-y-0 sm:space-x-3">
           <AlertCircle className="text-red-500 flex-shrink-0" size={20} />
           <div className="flex-1">
-            <p className="text-red-800 font-medium">Wystąpił błąd</p>
+            <p className="text-red-800 font-medium">An error occurred</p>
             <p className="text-red-600 text-sm">{error}</p>
           </div>
           <button
             onClick={() => { setLocalError(null); reconnect(); fetchAllEbooks(); }}
             className="w-full sm:w-auto px-3 py-1 bg-red-100 text-red-700 rounded text-sm hover:bg-red-200 transition-colors cursor-pointer"
           >
-            Spróbuj ponownie
+            Try again
           </button>
         </div>
       )}
@@ -472,7 +472,7 @@ export default function EbookiContent() {
           >
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-blue-600 text-sm font-medium">Wszystkie e-booki</p>
+                <p className="text-blue-600 text-sm font-medium">All e-books</p>
                 <p className="text-xl sm:text-2xl font-bold text-blue-900">{stats.total}</p>
               </div>
               <BookOpen className="text-blue-600" size={28} />
@@ -486,7 +486,7 @@ export default function EbookiContent() {
           >
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-green-600 text-sm font-medium">Ukończone</p>
+                <p className="text-green-600 text-sm font-medium">Completed</p>
                 <p className="text-xl sm:text-2xl font-bold text-green-900">{stats.completed}</p>
               </div>
               <Sparkles className="text-green-600" size={28} />
@@ -500,7 +500,7 @@ export default function EbookiContent() {
           >
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-orange-600 text-sm font-medium">Wersje robocze</p>
+                <p className="text-orange-600 text-sm font-medium">Drafts</p>
                 <p className="text-xl sm:text-2xl font-bold text-orange-900">{stats.inProgress}</p>
               </div>
               <Edit className="text-orange-600" size={28} />
@@ -511,22 +511,22 @@ export default function EbookiContent() {
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50">
-            <h2 className="text-lg font-semibold text-gray-800">Twoje e-booki</h2>
+            <h2 className="text-lg font-semibold text-gray-800">Your e-books</h2>
             {pagination && pagination.total > 0 && (
             <p className="text-sm text-gray-600">
-                Wyświetlanie {((pagination.page - 1) * pagination.limit) + 1} - {Math.min(pagination.page * pagination.limit, pagination.total)} z {pagination.total}
+                Showing {((pagination.page - 1) * pagination.limit) + 1} - {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total}
             </p>
             )}
         </div>
 
         <div className="divide-y divide-gray-200">
           {loading ? (
-            <div className="px-6 py-12 text-center"><RefreshCw size={48} className="mx-auto text-gray-300 mb-4 animate-spin" /><p className="text-gray-500">Ładowanie e-booków...</p></div>
+            <div className="px-6 py-12 text-center"><RefreshCw size={48} className="mx-auto text-gray-300 mb-4 animate-spin" /><p className="text-gray-500">Loading e-books...</p></div>
           ) : displayedEbooks.length === 0 ? (
             <div className="px-6 py-12 text-center">
               <BookOpen size={48} className="mx-auto text-gray-300 mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">{searchTerm || activeFilter !== 'all' ? 'Nie znaleziono e-booków' : 'Nie utworzyłeś jeszcze żadnych e-booków'}</h3>
-              <p className="text-gray-500 mb-6">{searchTerm ? 'Spróbuj zmienić frazę wyszukiwania.' : 'Kliknij przycisk powyżej, aby stworzyć swój pierwszy e-book.'}</p>
+              <h3 className="text-lg font-medium text-gray-900 mb-2">{searchTerm || activeFilter !== 'all' ? 'No e-books found' : 'You haven\'t created any e-books yet'}</h3>
+              <p className="text-gray-500 mb-6">{searchTerm ? 'Try changing your search phrase.' : 'Click the button above to create your first e-book.'}</p>
             </div>
           ) : (
             displayedEbooks.map((ebook) => {
@@ -536,12 +536,18 @@ export default function EbookiContent() {
                 <div
                     key={ebook.id}
                     className={`px-6 py-4 hover:bg-blue-50/50 hover:border-blue-300 transition-colors group ${isDeleting || isDownloading ? 'opacity-50' : 'cursor-pointer'}`}
-                    onClick={() => handlePreviewEbook(ebook)}
+                    onClick={() => {
+                      if (ebook.cover_image_webp_url) {
+                        handlePreviewEbook(ebook);
+                      } else {
+                        handleEditEbook(ebook.id);
+                      }
+                    }}
                 >
                   <div className="flex items-center justify-between gap-4">
                     <div className="flex items-center flex-1 min-w-0 gap-4">
                       {ebook.cover_image_webp_url ? (
-                        <img src={`/api/assets/${ebook.cover_image_webp_url}`} alt={`Okładka: ${ebook.title}`} className="w-30 h-30 object-cover rounded-md flex-shrink-0 bg-gray-200" loading="lazy"/>
+                        <img src={`/api/assets/${ebook.cover_image_webp_url}`} alt={`Cover: ${ebook.title}`} className="w-30 h-30 object-cover rounded-md flex-shrink-0 bg-gray-200" loading="lazy"/>
                       ) : (
                         <div className="w-14 h-20 flex items-center justify-center bg-gray-100 rounded-md flex-shrink-0"><ImageIcon className="w-6 h-6 text-gray-400" /></div>
                       )}
@@ -557,9 +563,9 @@ export default function EbookiContent() {
                       </div>
                     </div>
                     <div className="flex items-center space-x-2">
-                      <button onClick={(e) => { e.stopPropagation(); handleEditEbook(ebook.id); }} className={`p-2 text-blue-600 hover:bg-blue-100 rounded-lg transition-colors disabled:opacity-50 ${isDownloading || isDeleting ? 'cursor-not-allowed' : ''}`} title="Edytuj" disabled={isDownloading || isDeleting}><Edit size={16} /></button>
-                      {isEbookCompleted(ebook) && (<button onClick={(e) => { e.stopPropagation(); downloadPDF(ebook.id, ebook.title); }} className={`p-2 text-green-600 hover:bg-green-100 rounded-lg transition-colors disabled:opacity-50 ${isDownloading || isDeleting ? 'cursor-not-allowed' : ''}`} title="Pobierz PDF" disabled={isDownloading || isDeleting}>{isDownloading ? <RefreshCw size={16} className="animate-spin" /> : <Download size={16} />}</button>)}
-                      <button onClick={(e) => { e.stopPropagation(); handleDeleteEbook(ebook); }} className={`p-2 text-red-600 hover:bg-red-100 rounded-lg transition-colors disabled:opacity-50 ${isDeleting || isDownloading ? 'cursor-not-allowed' : ''}`} title="Usuń" disabled={isDeleting || isDownloading}>{isDeleting ? <RefreshCw size={16} className="animate-spin" /> : <Trash2 size={16} />}</button>
+                      <button onClick={(e) => { e.stopPropagation(); handleEditEbook(ebook.id); }} className={`p-2 text-blue-600 hover:bg-blue-100 rounded-lg transition-colors disabled:opacity-50 ${isDownloading || isDeleting ? 'cursor-not-allowed' : ''}`} title="Edit" disabled={isDownloading || isDeleting}><Edit size={16} /></button>
+                      {isEbookCompleted(ebook) && (<button onClick={(e) => { e.stopPropagation(); downloadPDF(ebook.id, ebook.title); }} className={`p-2 text-green-600 hover:bg-green-100 rounded-lg transition-colors disabled:opacity-50 ${isDownloading || isDeleting ? 'cursor-not-allowed' : ''}`} title="Download PDF" disabled={isDownloading || isDeleting}>{isDownloading ? <RefreshCw size={16} className="animate-spin" /> : <Download size={16} />}</button>)}
+                      <button onClick={(e) => { e.stopPropagation(); handleDeleteEbook(ebook); }} className={`p-2 text-red-600 hover:bg-red-100 rounded-lg transition-colors disabled:opacity-50 ${isDeleting || isDownloading ? 'cursor-not-allowed' : ''}`} title="Delete" disabled={isDeleting || isDownloading}>{isDeleting ? <RefreshCw size={16} className="animate-spin" /> : <Trash2 size={16} />}</button>
                     </div>
                   </div>
                 </div>
@@ -571,9 +577,9 @@ export default function EbookiContent() {
         {pagination && pagination.totalPages > 1 && (
           <div className="px-4 sm:px-6 py-4 border-t border-gray-200 bg-gray-50">
             <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-              <button onClick={() => handlePaginationClick(currentPage - 1)} disabled={!pagination.hasPrev || loading} className={`w-full sm:w-auto inline-flex items-center justify-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 ${!pagination.hasPrev || loading ? 'cursor-not-allowed' : ''}`}>← Poprzednia</button>
-              <span className="text-sm text-gray-600">Strona {pagination.page} z {pagination.totalPages}</span>
-              <button onClick={() => handlePaginationClick(currentPage + 1)} disabled={!pagination.hasNext || loading} className={`w-full sm:w-auto inline-flex items-center justify-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 ${!pagination.hasNext || loading ? 'cursor-not-allowed' : ''}`}>Następna →</button>
+              <button onClick={() => handlePaginationClick(currentPage - 1)} disabled={!pagination.hasPrev || loading} className={`w-full sm:w-auto inline-flex items-center justify-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 ${!pagination.hasPrev || loading ? 'cursor-not-allowed' : ''}`}>← Previous</button>
+              <span className="text-sm text-gray-600">Page {pagination.page} of {pagination.totalPages}</span>
+              <button onClick={() => handlePaginationClick(currentPage + 1)} disabled={!pagination.hasNext || loading} className={`w-full sm:w-auto inline-flex items-center justify-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 ${!pagination.hasNext || loading ? 'cursor-not-allowed' : ''}`}>Next →</button>
             </div>
           </div>
         )}
@@ -588,14 +594,14 @@ export default function EbookiContent() {
               <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <Trash2 className="h-8 w-8 text-red-600" />
               </div>
-              <h3 className="text-xl font-bold text-gray-800 mb-2">Usuwanie e-booka</h3>
+              <h3 className="text-xl font-bold text-gray-800 mb-2">Delete e-book</h3>
               <p className="text-gray-600">
-                Czy na pewno chcesz trwale usunąć e-book "{ebookToDelete.title}"? Tej operacji nie można cofnąć.
+                Are you sure you want to permanently delete the e-book "{ebookToDelete.title}"? This action cannot be undone.
               </p>
             </div>
             <div className="flex justify-center gap-3 mt-6">
-              <button onClick={cancelDelete} className="px-6 py-2.5 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50 transition-all duration-200 cursor-pointer">Anuluj</button>
-              <button onClick={confirmDelete} className="px-6 py-2.5 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 transition-all duration-200 cursor-pointer">Tak, usuń</button>
+              <button onClick={cancelDelete} className="px-6 py-2.5 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50 transition-all duration-200 cursor-pointer">Cancel</button>
+              <button onClick={confirmDelete} className="px-6 py-2.5 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 transition-all duration-200 cursor-pointer">Yes, delete</button>
             </div>
           </div>
         </div>
@@ -604,7 +610,7 @@ export default function EbookiContent() {
       {previewImage && previewEbook && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[70] p-4 backdrop-blur-sm">
           <div ref={previewModalRef} className="relative w-full max-w-screen-xl max-h-[95vh] flex flex-col bg-black/50 rounded-lg animate-fadeIn">
-            {/* Nagłówek modala */}
+            {/* Modal Header */}
             <div className="flex items-center justify-between p-4 flex-shrink-0 border-b border-white/10">
               <div className="flex items-center space-x-3 min-w-0">
                 <ImageIcon className="h-5 w-5 text-white flex-shrink-0" />
@@ -615,9 +621,9 @@ export default function EbookiContent() {
               </button>
             </div>
 
-            {/* Główna treść: Obraz + Spis Treści */}
+            {/* Main Content: Image + Table of Contents */}
             <div className="flex-1 flex flex-row gap-6 p-4 min-h-0">
-              {/* Lewa strona: Obraz */}
+              {/* Left Side: Image */}
               <div className="w-2/3 flex items-center justify-center">
                 <img
                   src={previewImage}
@@ -627,12 +633,12 @@ export default function EbookiContent() {
                 />
               </div>
 
-              {/* Prawa strona: Spis Treści */}
+              {/* Right Side: Table of Contents */}
               <div className="w-1/3 bg-black/20 rounded-lg flex flex-col overflow-hidden border border-white/10">
                 <div className="p-3 flex-shrink-0 bg-black/20">
                   <h4 className="font-semibold text-white flex items-center">
                     <FileText size={18} className="mr-2 text-gray-300"/>
-                    Spis treści
+                    Table of Contents
                   </h4>
                 </div>
                 <div className="flex-1 overflow-y-auto custom-scrollbar">
@@ -651,17 +657,17 @@ export default function EbookiContent() {
                     </ul>
                   ) : (
                     <div className="flex items-center justify-center h-full text-center text-gray-400 px-4">
-                        <p>Ten e-book nie ma jeszcze spisu treści.</p>
+                        <p>This e-book does not have a table of contents yet.</p>
                     </div>
                   )}
                 </div>
               </div>
             </div>
 
-            {/* Stopka modala */}
+            {/* Modal Footer */}
             <div className="flex justify-center items-center p-4 flex-shrink-0 space-x-3 border-t border-white/10">
               <button onClick={handleClosePreview} className="px-6 py-2 bg-white/10 text-white rounded-lg hover:bg-white/20 transition-colors font-medium">
-                Zamknij
+                Close
               </button>
               <button
                 onClick={() => handleDownloadAsPng(previewImage, previewImageName)}
@@ -671,17 +677,17 @@ export default function EbookiContent() {
                     ? "bg-gray-400 text-white cursor-not-allowed"
                     : "bg-green-600 text-white hover:bg-green-700"
                 }`}
-                title="Pobierz jako PNG"
+                title="Download as PNG"
               >
                 {isConverting ? (
                   <>
                     <RefreshCw size={18} className="animate-spin" />
-                    <span>Konwertuję...</span>
+                    <span>Converting...</span>
                   </>
                 ) : (
                   <>
                     <Download size={18} />
-                    <span>Pobierz PNG</span>
+                    <span>Download PNG</span>
                   </>
                 )}
               </button>
@@ -695,14 +701,14 @@ export default function EbookiContent() {
                 className="flex items-center space-x-2 px-6 py-2 rounded-lg font-medium transition-colors bg-blue-600 text-white hover:bg-blue-700"
               >
                 <Edit size={18} />
-                <span>Edytuj e-book</span>
+                <span>Edit e-book</span>
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Definicja stylu dla paska przewijania (jeśli jeszcze nie istnieje w pliku) */}
+      {/* Style definition for scrollbar (if it doesn't already exist in the file) */}
       <style jsx global>{`
         .custom-scrollbar::-webkit-scrollbar {
           width: 8px;

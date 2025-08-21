@@ -244,7 +244,7 @@ export async function POST(
     // Stwórz finalny mockup, używając bufora z pamięci
     console.log(`🖌️  Łączenie okładki z ramką tabletu...`);
 
-    const framePath = path.resolve('./src/lib/templates/raw_mokup.png');
+    const framePath = path.resolve('./public/templates/raw_mokup.png');
     const finalMockupFileName = `${session.user.id}_EB${ebookIdNum}_finalMOK.png`;
     const finalMockupFullPath = path.join(uploadsDir, finalMockupFileName);
 
