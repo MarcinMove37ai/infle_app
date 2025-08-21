@@ -64,7 +64,7 @@ export default function EbookiContent() {
   const [isPreviewTocLoading, setIsPreviewTocLoading] = useState(false);
 
   const previewModalRef = useRef<HTMLDivElement>(null);
-
+  const previewImageRef = useRef<HTMLImageElement>(null);
   const { error: sseError, reconnect, updateTrigger } = useEbooksSSE();
   const error = sseError || localError;
 
@@ -350,8 +350,13 @@ export default function EbookiContent() {
     setPreviewTocItems(null); // Clear table of contents data
   };
 
-  const handleDownloadAsPng = async (webpUrl: string | null, baseFileName: string) => {
-    if (!webpUrl) return;
+  const handleDownloadAsPng = async (baseFileName: string) => {
+    // Sprawdzamy, czy ref jest podłączony do elementu <img>
+    if (!previewImageRef.current) return;
+
+    // Pobieramy AKTUALNY adres URL bezpośrednio z atrybutu src obrazka
+    const currentImageUrl = previewImageRef.current.src;
+    if (!currentImageUrl) return;
 
     setIsConverting(true);
     setLocalError(null);
@@ -362,7 +367,8 @@ export default function EbookiContent() {
       await new Promise((resolve, reject) => {
         image.onload = resolve;
         image.onerror = reject;
-        image.src = webpUrl;
+        // Używamy aktualnego, poprawnego adresu URL
+        image.src = currentImageUrl;
       });
 
       const canvas = document.createElement('canvas');
@@ -624,13 +630,25 @@ export default function EbookiContent() {
             {/* Main Content: Image + Table of Contents */}
             <div className="flex-1 flex flex-row gap-6 p-4 min-h-0">
               {/* Left Side: Image */}
+              {/* Left Side: Image */}
               <div className="w-2/3 flex items-center justify-center">
-                <img
-                  src={previewImage}
-                  alt={previewImageTitle}
-                  className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
+                {/* 1. Dodajemy wrapper do przycinania i stylizacji */}
+                <div
+                  className="max-w-full max-h-full rounded-lg shadow-2xl overflow-hidden"
                   style={{ height: 'calc(95vh - 160px)' }}
-                />
+                >
+                  <img
+                    ref={previewImageRef}
+                    src={previewImage}
+                    alt={previewImageTitle}
+                    // 2. Obraz teraz wypełnia wrapper, a object-contain dba o proporcje
+                    className="w-full h-full object-contain"
+                    onError={(e) => {
+                      e.currentTarget.onerror = null;
+                      e.currentTarget.src = `/api/assets/${previewEbook.cover_image_webp_url}`;
+                    }}
+                  />
+                </div>
               </div>
 
               {/* Right Side: Table of Contents */}
@@ -670,7 +688,7 @@ export default function EbookiContent() {
                 Close
               </button>
               <button
-                onClick={() => handleDownloadAsPng(previewImage, previewImageName)}
+                onClick={() => handleDownloadAsPng(previewImageName)} // Usunięty argument 'previewImage'
                 disabled={isConverting}
                 className={`flex items-center space-x-2 px-6 py-2 rounded-lg font-medium transition-colors ${
                   isConverting
