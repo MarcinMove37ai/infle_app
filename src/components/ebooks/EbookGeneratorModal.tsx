@@ -7,7 +7,7 @@ import {
   BookOpen, Edit, Search, Plus, ArrowUp, ArrowDown,
   X, Check, AlertCircle, Loader, ChevronLeft, Save,
   FileText, BookMarked, Sparkles, MoreVertical, Download,
-  ChevronRight, Upload, Image, Palette, Eye
+  ChevronRight, Upload, Image as ImageIcon, Palette, Eye
 } from 'lucide-react';
 
 // Interface for table of contents items, extended with content and image
@@ -56,11 +56,35 @@ interface EbookGeneratorModalProps {
 
 // Main component for the ebook generator
 export default function EbookGeneratorModal({ isOpen, onClose, onEbookCreated, ebookId }: EbookGeneratorModalProps) {
+  // ✅ NOWY KOD: Referencja do elementu z treścią modala
+  const modalContentRef = useRef<HTMLDivElement>(null);
+
+  // ✅ NOWY KOD: Efekt do obsługi kliknięcia poza modalem
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      // Sprawdzamy, czy referencja istnieje i czy kliknięty element nie jest częścią modala
+      if (modalContentRef.current && !modalContentRef.current.contains(event.target as Node)) {
+        onClose(); // Wywołujemy funkcję zamykającą
+      }
+    };
+
+    if (isOpen) {
+      // Dodajemy nasłuchiwanie tylko, gdy modal jest otwarty
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    // Sprzątamy po sobie
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isOpen, onClose]); // Efekt zależy od stanu otwarcia i funkcji zamykającej
+
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-7xl max-h-[95vh] overflow-hidden">
+      {/* ✅ NOWY KOD: Dodajemy ref do tego diva */}
+      <div ref={modalContentRef} className="bg-white rounded-xl shadow-2xl w-full max-w-7xl max-h-[95vh] overflow-hidden">
         {/* Modal Header with close button */}
         <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gray-50">
           <h2 className="text-xl font-semibold text-gray-800">Create your ebook with AI</h2>
@@ -152,8 +176,14 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
   const [generatingAIImageForChapter, setGeneratingAIImageForChapter] = useState<string | null>(null);
   const [aiImageGenerationProgress, setAiImageGenerationProgress] = useState<number>(0);
   const [aiImageGenerationError, setAiImageGenerationError] = useState<string | null>(null);
-  const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [uploadingCoverImage, setUploadingCoverImage] = useState(false);
+
+  // 🆕 ZAKTUALIZOWANE STANY DO PODGLĄDU GRAFIKI
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [previewImageTitle, setPreviewImageTitle] = useState<string>('');
+  const [previewImageName, setPreviewImageName] = useState<string>('');
+  const [isConverting, setIsConverting] = useState(false);
+
 
   // STATES for cover (moved from step 5)
   const [coverData, setCoverData] = useState<EbookCoverData | null>(null);
@@ -416,6 +446,37 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, []);
+
+  // ✅ ZAKTUALIZOWANY EFEKT: Obsługa zamykania podglądu (ESC i kliknięcie na zewnątrz)
+  const previewModalContentRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    // Funkcja do zamykania przyciskiem ESC
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        handleClosePreview();
+      }
+    };
+
+    // Funkcja do zamykania po kliknięciu na zewnątrz
+    const handleClickOutside = (event: MouseEvent) => {
+      if (previewModalContentRef.current && !previewModalContentRef.current.contains(event.target as Node)) {
+        handleClosePreview();
+      }
+    };
+
+    // Nasłuchuj tylko wtedy, gdy podgląd jest otwarty
+    if (previewImage) {
+      document.addEventListener('keydown', handleKeyDown);
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    // Posprzątaj po sobie, gdy podgląd zostanie zamknięty lub komponent odmontowany
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [previewImage]); // Efekt jest zależny od stanu `previewImage`
 
   // useEffect for fetching cover data in step 4
   useEffect(() => {
@@ -2456,18 +2517,75 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
     }
   };
 
-  const handleImagePreview = (imageUrl: string | undefined) => {
-    console.log('handleImagePreview called with URL:', imageUrl);
-    if (imageUrl && imageUrl.trim()) {
-      console.log('Setting previewImage to:', imageUrl);
-      setPreviewImage(imageUrl);
-    } else {
-      console.warn('Cannot display preview - empty URL:', imageUrl);
+  const handleDownloadAsPng = async (webpUrl: string | null, baseFileName: string) => {
+    if (!webpUrl) return;
+
+    setIsConverting(true);
+    try {
+      // 1. Stwórz nowy obiekt obrazu w pamięci
+      const image = new Image();
+      image.crossOrigin = "anonymous"; // Ważne dla obrazów z innych domen (np. S3)
+
+      // 2. Utwórz obietnicę, która rozwiąże się, gdy obraz zostanie w pełni załadowany
+      await new Promise((resolve, reject) => {
+        image.onload = resolve;
+        image.onerror = reject;
+        image.src = webpUrl;
+      });
+
+      // 3. Stwórz niewidoczny element canvas
+      const canvas = document.createElement('canvas');
+      canvas.width = image.width;
+      canvas.height = image.height;
+      const ctx = canvas.getContext('2d');
+
+      if (!ctx) {
+        throw new Error("Nie można uzyskać kontekstu canvas");
+      }
+
+      // 4. Narysuj załadowany obrazek WebP na płótnie
+      ctx.drawImage(image, 0, 0);
+
+      // 5. Pobierz dane z canvas jako URL w formacie PNG
+      const pngUrl = canvas.toDataURL('image/png');
+
+      // 6. Stwórz tymczasowy link do pobrania pliku PNG
+      const link = document.createElement('a');
+      link.href = pngUrl;
+
+      // Usuń stare rozszerzenie i dodaj .png
+      const finalFileName = baseFileName.replace(/\.[^/.]+$/, "") + ".png";
+      link.download = finalFileName;
+
+      // 7. Symuluj kliknięcie, aby rozpocząć pobieranie
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+    } catch (error) {
+      console.error("Błąd podczas konwersji WebP na PNG:", error);
+      setError("Nie udało się przekonwertować obrazka. Spróbuj pobrać go manualnie.");
+    } finally {
+      setIsConverting(false);
     }
   };
 
+  const handleImagePreview = (imageUrl: string | undefined, title: string, downloadName?: string) => {
+      if (imageUrl && imageUrl.trim()) {
+          setPreviewImage(imageUrl);
+          setPreviewImageTitle(title);
+
+          const finalDownloadName = downloadName || title.replace(/[^a-z0-9]/gi, '_').toLowerCase() + '.jpg';
+          setPreviewImageName(finalDownloadName);
+      } else {
+          console.warn('Nie można wyświetlić podglądu - pusty URL:', imageUrl);
+      }
+  };
+
   const handleClosePreview = () => {
-    setPreviewImage(null);
+      setPreviewImage(null);
+      setPreviewImageTitle('');
+      setPreviewImageName('');
   };
 
   // ✅ NOWA FUNKCJA DO ZAPISU SZKICU
@@ -2488,7 +2606,7 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
           title,
           subtitle: subtitle.trim() || null,
           description: description.trim() || null,
-          status: "draft" // Upewnijmy się, że status to wciąż szkic
+          status: "draft"
         }),
       });
 
@@ -2498,9 +2616,9 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
 
       const data = await response.json();
       if (data.success) {
-        console.log(`✅ Szkic ebooka (ID: ${currentEbookId}) został zapisany.`);
-        draftSavedByUser.current = true; // Ustaw flagę, aby zapobiec usunięciu
-        // Opcjonalnie: Można tu dodać chwilową informację zwrotną dla użytkownika
+        console.log(`✅ Szkic ebooka (ID: ${currentEbookId}) został zapisany i modal jest zamykany.`);
+        draftSavedByUser.current = true;
+        onClose(); // ✅ ZAMKNIJ MODAL PO ZAPISIE
       } else {
         throw new Error('Odpowiedź serwera wskazuje na błąd zapisu.');
       }
@@ -2718,33 +2836,31 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
       </div>
 
       <div className="flex justify-center mt-8 gap-4">
-        {/* ✅ NOWY PRZYCISK "ZAPISZ SZKIC" (widoczny tylko dla nowych ebooków) */}
-        {!tocGenerated && (
-          <button
-            onClick={handleSaveDraft}
-            disabled={!title.trim() || isGeneratingToc || isSaving || isScrapingUrls || isSavingDraft}
-            className={`flex items-center justify-center px-6 py-3 rounded-lg font-medium shadow-md transition-all duration-200 ${
-              !title.trim() || isSavingDraft
-                ? 'bg-gray-300 text-gray-600 cursor-not-allowed'
-                : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 cursor-pointer'
-            }`}
-          >
-            {isSavingDraft ? (
-              <>
-                <Loader size={20} className="animate-spin mr-3" />
-                Zapisywanie...
-              </>
-            ) : (
-              <>
-                <Save size={20} className="mr-3" />
-                Zapisz szkic
-              </>
-            )}
-          </button>
-        )}
+        {/* Przycisk zapisu szkicu */}
         <button
-          onClick={tocGenerated ? updateEbookTitle : generateTableOfContents}
-          disabled={!title.trim() || isGeneratingToc || isSaving || isScrapingUrls}
+          onClick={handleSaveDraft}
+          disabled={!title.trim() || isGeneratingToc || isSaving || isScrapingUrls || isSavingDraft}
+          className={`flex items-center justify-center px-6 py-3 rounded-lg font-medium shadow-md transition-all duration-200 ${
+            !title.trim() || isSavingDraft
+              ? 'bg-gray-300 text-gray-600 cursor-not-allowed'
+              : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 cursor-pointer'
+          }`}
+        >
+          {isSavingDraft ? (
+            <>
+              <Loader size={20} className="animate-spin mr-3" />
+              Saving...
+            </>
+          ) : (
+            <>
+              <Save size={20} className="mr-3" />
+              Save & Close
+            </>
+          )}
+          </button>
+          <button
+            onClick={tocGenerated ? updateEbookTitle : generateTableOfContents}
+            disabled={!title.trim() || isGeneratingToc || isSaving || isScrapingUrls}
           className={`flex items-center justify-center px-6 py-3 rounded-lg text-white font-medium shadow-md transition-all duration-200 ${
             !title.trim() || isGeneratingToc || isSaving || isScrapingUrls
               ? 'bg-gray-400 cursor-not-allowed'
@@ -3641,7 +3757,7 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
             disabled={isSaving || editingContent}
             title={editingContent ? "Finish editing content to go to graphics and cover" : ""}
           >
-            <Image size={16} className="mr-2" />
+            <ImageIcon size={16} className="mr-2" />
             Graphics and cover
           </button>
         </div>
@@ -3746,10 +3862,11 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
                       src={coverData.cover_url}
                       alt="Ebook cover"
                       className="object-cover w-full h-full cursor-pointer hover:opacity-90 transition-opacity"
-                      onClick={() => {
-                        console.log('Cover clicked, URL:', coverData.cover_url);
-                        handleImagePreview(coverData.cover_url);
-                      }}
+                      onClick={() => handleImagePreview(
+                        coverData.cover_url,
+                        `Okładka - ${title}`,
+                        `okladka_${title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.jpg`
+                      )}
                       onLoad={() => console.log('✅ Cover loaded successfully:', coverData.cover_url)}
                       onError={(e) => {
                         console.error('❌ Error loading cover:', coverData.cover_url);
@@ -3865,7 +3982,11 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
                           src={item.image_url}
                           alt={`Illustration for the chapter: ${item.title}`}
                           className="object-cover w-full h-full cursor-pointer hover:opacity-90 transition-opacity"
-                          onClick={() => handleImagePreview(item.image_url)}
+                          onClick={() => handleImagePreview(
+                            item.image_url,
+                            `Ilustracja Rozdziału ${index + 1}. - ${item.title}`,
+                            `rozdzial_${index + 1}_${item.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.jpg`
+                          )}
                           onLoad={() => console.log(`✅ Image loaded: ${item.title}`)}
                           onError={(e) => {
                             console.error(`❌ Error loading image for ${item.title}:`, item.image_url);
@@ -3874,7 +3995,7 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
                         />
                       ) : (
                         <div className="flex flex-col items-center justify-center text-gray-500 text-sm p-4 text-center">
-                          <Image size={32} className="text-gray-300 mb-2" />
+                          <ImageIcon size={32} className="text-gray-300 mb-2" />
                           <p>No graphic</p>
                         </div>
                       )}
@@ -4135,38 +4256,70 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
         onReject={handleSourceReject}
       />
 
+      {/* 🆕 NOWY, ZAKTUALIZOWANY KOD MODALA PODGLĄDU */}
       {previewImage && (
-        <div
-          className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4 backdrop-blur-sm cursor-pointer"
-          onClick={handleClosePreview}
-        >
-          <div
-            className="relative bg-white rounded-3xl overflow-hidden shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              maxWidth: '95vw',
-              maxHeight: '95vh',
-              padding: '4px'
-            }}
-          >
-            <img
-              src={previewImage}
-              alt="Image preview"
-              className="block rounded-2xl"
-              style={{
-                maxWidth: 'calc(95vw - 8px)',
-                maxHeight: 'calc(95vh - 8px)',
-                width: 'auto',
-                height: 'auto',
-                objectFit: 'contain'
-              }}
-            />
-            <button
-              onClick={handleClosePreview}
-              className="absolute top-2 right-2 bg-black/50 text-white p-2 rounded-full hover:bg-black/70 transition-colors cursor-pointer z-10"
-            >
-              <X size={20} />
-            </button>
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[60] p-4 backdrop-blur-sm">
+          {/* ✅ DODAJEMY REF DO TREŚCI MODALA PODGLĄDU */}
+          <div ref={previewModalContentRef} className="relative w-full max-w-7xl max-h-[95vh] flex flex-col bg-black/50 rounded-lg">
+
+            {/* Nagłówek podglądu */}
+            <div className="flex items-center justify-between p-4 flex-shrink-0">
+              <div className="flex items-center space-x-3 min-w-0">
+                <ImageIcon className="h-5 w-5 text-white flex-shrink-0" />
+                <h3 className="text-white font-medium truncate">{previewImageTitle}</h3>
+              </div>
+              <button
+                onClick={handleClosePreview}
+                className="text-white hover:text-gray-300 transition-colors flex-shrink-0 ml-4"
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            {/* Kontener z obrazkiem */}
+            <div className="flex-1 flex items-center justify-center p-4 min-h-0 overflow-hidden">
+              <img
+                src={previewImage}
+                alt={previewImageTitle}
+                className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
+                style={{
+                  height: 'calc(95vh - 160px)', // ✅ ZMIANA Z max-height NA height
+                  maxWidth: 'calc(100vw - 32px)'
+                }}
+              />
+            </div>
+
+            {/* Stopka podglądu z przyciskiem pobierania */}
+            <div className="flex justify-center items-center p-4 flex-shrink-0 space-x-3">
+              <button
+                onClick={handleClosePreview}
+                className="px-6 py-2 bg-white/10 text-white rounded-lg hover:bg-white/20 transition-colors font-medium"
+              >
+                Zamknij
+              </button>
+              <button
+                onClick={() => handleDownloadAsPng(previewImage, previewImageName)}
+                disabled={isConverting}
+                className={`flex items-center space-x-2 px-6 py-2 rounded-lg font-medium transition-colors ${
+                  isConverting
+                    ? "bg-gray-400 text-white cursor-not-allowed"
+                    : "bg-blue-600 text-white hover:bg-blue-700"
+                }`}
+                title={`Pobierz jako PNG`}
+              >
+                {isConverting ? (
+                  <>
+                    <Loader size={18} className="animate-spin" />
+                    <span>Konwertuję...</span>
+                  </>
+                ) : (
+                  <>
+                    <Download size={18} />
+                    <span>Pobierz PNG</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}
