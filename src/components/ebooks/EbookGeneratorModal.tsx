@@ -1861,161 +1861,116 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
     }
   };
 
-  // ✅ COMPLETELY REWRITTEN handleGenerateAllImages FUNCTION
+  // ✅ COMPLETELY REWRITTEN handleGenerateAllImages FUNCTION FOR PARALLEL EXECUTION
   const handleGenerateAllImages = async () => {
-    const chaptersWithContent = tocItems.filter(
+    const chaptersToGenerate = tocItems.filter(
       item => (item.content && item.content.trim().length > 0) && !item.image_url
     );
 
-    if (chaptersWithContent.length === 0) {
-      setError('No chapters with content without graphics to generate');
+    if (chaptersToGenerate.length === 0) {
+      setError('Brak rozdziałów z treścią do wygenerowania grafik.');
       return;
     }
 
-    console.log(`🎨 Starting bulk generation of ${chaptersWithContent.length} graphics...`);
+    console.log(`🎨 Rozpoczynam równoległe generowanie ${chaptersToGenerate.length} grafik...`);
 
     setIsGeneratingAllImages(true);
     setGeneratedImagesCount(0);
-    setTotalImagesToGenerate(chaptersWithContent.length);
+    setTotalImagesToGenerate(chaptersToGenerate.length);
     setError(null);
 
     const startTime = Date.now();
-    const chaptersWithErrors = [];
 
-    try {
-      for (let i = 0; i < chaptersWithContent.length; i++) {
-        const chapter = chaptersWithContent[i];
-
-        console.log(`🎨 [${i + 1}/${chaptersWithContent.length}] Generating graphic for: ${chapter.title}`);
-
-        setGeneratingAIImageForChapter(chapter.id);
-        setAiImageGenerationProgress(10);
-        setAiImageGenerationError(null);
-
-        try {
-          if (!chapter.content || !currentEbookId) {
-            console.warn(`⚠️ Skipped chapter ${chapter.id} - no content or ebookId`);
-            chaptersWithErrors.push(chapter.id);
-            continue;
-          }
-
-          const response = await fetch(`/api/ebooks/${currentEbookId}/chapters/${chapter.id}/generate-image`, {
-            method: 'POST',
-            headers: getUserHeaders(),
-            body: JSON.stringify({
-              forceRegenerate: false,
-              size: "1024x1024"
-            }),
-          });
-
-          setAiImageGenerationProgress(60);
-
-          if (!response.ok) {
-            let errorMessage = 'Error generating AI graphic';
-            try {
-              const errorData = await response.json();
-              if (errorData && errorData.error) {
-                errorMessage = errorData.error;
-              }
-            } catch (jsonError) {
-              errorMessage = `Server error (${response.status})`;
-            }
-
-            console.warn(`❌ Error for chapter ${chapter.title}: ${errorMessage}`);
-            chaptersWithErrors.push(chapter.id);
-            continue;
-          }
-
-          setAiImageGenerationProgress(90);
-          const data = await response.json();
-
-          if (!data.success || !data.image_url) {
-            console.warn(`⚠️ Invalid response from the server for chapter ${chapter.title}`);
-            chaptersWithErrors.push(chapter.id);
-            continue;
-          }
-
-          // ✅ STABLE state update
-          const timestamp = Date.now();
-          const baseUrl = data.image_url.split('?')[0];
-          const newImageUrl = `${baseUrl}?t=${timestamp}`;
-
-          // Use callback in setTocItems for stability
-          setTocItems(currentTocItems => {
-            const updatedItems = currentTocItems.map(item =>
-              item.id === chapter.id
-                ? { ...item, image_url: newImageUrl }
-                : item
-            );
-
-            console.log(`✅ [${i + 1}/${chaptersWithContent.length}] Updated state for: ${chapter.title}`);
-            return updatedItems;
-          });
-
-          if (!graphicsAdded) {
-            setGraphicsAdded(true);
-          }
-
-          setAiImageGenerationProgress(100);
-          setGeneratedImagesCount(prev => prev + 1);
-
-          console.log(`✅ [${i + 1}/${chaptersWithContent.length}] Graphic generated for: ${chapter.title}`);
-
-        } catch (err) {
-          console.error(`❌ General error for chapter ${chapter.title}:`, err);
-          chaptersWithErrors.push(chapter.id);
+    // 1. Stwórz tablicę obietnic (promisów) dla każdego zapytania API
+    const generationPromises = chaptersToGenerate.map(chapter =>
+      fetch(`/api/ebooks/${currentEbookId}/chapters/${chapter.id}/generate-image`, {
+        method: 'POST',
+        headers: getUserHeaders(),
+        body: JSON.stringify({
+          forceRegenerate: false,
+          size: "1024x1024"
+        }),
+      })
+      .then(response => {
+        if (!response.ok) {
+          // Spróbuj odczytać błąd JSON, jeśli się nie uda, rzuć ogólny błąd
+          return response.json().then(err => Promise.reject(err)).catch(() => Promise.reject({ error: `Błąd serwera: ${response.status}` }));
         }
-
-        // Clear generation state for this chapter
-        setGeneratingAIImageForChapter(null);
-        setAiImageGenerationProgress(0);
-
-        // Delay between generations (important for the API)
-        if (i < chaptersWithContent.length - 1) {
-          await new Promise(resolve => setTimeout(resolve, 2000));
+        return response.json();
+      })
+      .then(data => {
+        if (!data.success || !data.image_url) {
+          throw new Error('Nieprawidłowa odpowiedź z serwera');
         }
+        // Zwróć ID rozdziału i nowy URL obrazka
+        return { chapterId: chapter.id, imageUrl: data.image_url, title: chapter.title };
+      })
+      .catch(error => {
+        // Zwróć informację o błędzie dla tego konkretnego rozdziału
+        return { chapterId: chapter.id, error: error.error || error.message || 'Nieznany błąd', title: chapter.title };
+      })
+    );
+
+    // 2. Użyj Promise.allSettled, aby poczekać na zakończenie wszystkich zapytań
+    const results = await Promise.allSettled(generationPromises);
+    console.log('🏁 Wszystkie operacje generowania zakończone, przetwarzanie wyników...');
+
+    const successfulChapters: { chapterId: string, imageUrl: string }[] = [];
+    const failedChapters: { title: string, reason: string }[] = [];
+
+    // 3. Przetwórz wyniki
+    results.forEach(result => {
+      if (result.status === 'fulfilled' && 'imageUrl' in result.value) {
+        const { chapterId, imageUrl, title } = result.value;
+        console.log(`✅ Sukces dla rozdziału: "${title}"`);
+        successfulChapters.push({ chapterId, imageUrl });
+      } else {
+        const reason = result.status === 'rejected'
+          ? result.reason
+          : ('error' in result.value ? result.value.error : 'Nieznany błąd');
+        const chapterTitle = result.status === 'fulfilled' ? result.value.title : 'Nieznany rozdział';
+        console.error(`⌐ Błąd dla rozdziału "${chapterTitle}":`, reason);
+        failedChapters.push({ title: chapterTitle, reason });
       }
+    });
 
-    } catch (err) {
-      console.error('❌ General bulk generation error:', err);
-      setError('An error occurred during bulk graphic generation');
+    // 4. Zaktualizuj stan JEDEN RAZ dla wszystkich udanych operacji
+    if (successfulChapters.length > 0) {
+      const timestamp = Date.now();
+      setTocItems(currentTocItems => {
+        const updatedItems = [...currentTocItems];
+        successfulChapters.forEach(({ chapterId, imageUrl }) => {
+          const index = updatedItems.findIndex(item => item.id === chapterId);
+          if (index !== -1) {
+            const baseUrl = imageUrl.split('?')[0];
+            updatedItems[index] = { ...updatedItems[index], image_url: `${baseUrl}?t=${timestamp}` };
+          }
+        });
+        return updatedItems;
+      });
+      setGraphicsAdded(true);
     }
 
-    // ✅ FINAL cleanup and summary
-    setIsGeneratingAllImages(false);
-    setGeneratingAIImageForChapter(null);
-    setAiImageGenerationProgress(0);
+    setGeneratedImagesCount(successfulChapters.length);
 
+    // 5. Zakończ proces i wyświetl podsumowanie
+    setIsGeneratingAllImages(false);
     const endTime = Date.now();
     const duration = Math.round((endTime - startTime) / 1000);
-    const successCount = chaptersWithContent.length - chaptersWithErrors.length;
 
-    console.log(`🏁 Bulk generation finished in ${duration}s:`);
-    console.log(`✅ Successful: ${successCount}/${chaptersWithContent.length}`);
-    console.log(`❌ Errors: ${chaptersWithErrors.length}`);
+    console.log(`📊 Podsumowanie generowania równoległego (czas: ${duration}s):`);
+    console.log(`   - Sukcesy: ${successfulChapters.length}/${chaptersToGenerate.length}`);
+    console.log(`   - Błędy: ${failedChapters.length}`);
 
-    // Automatically refresh status after a few seconds
-    setTimeout(() => {
-      console.log('🔄 Automatically refreshing graphics status...');
-      refreshImagesStatus();
-    }, 3000);
-
-    // Show errors if they occurred
-    if (chaptersWithErrors.length > 0) {
-      const errorChapterTitles = chaptersWithErrors.map(id => {
-        const chapter = tocItems.find(item => item.id === id);
-        return chapter ? chapter.title : `Chapter ${id}`;
-      });
-
-      if (chaptersWithErrors.length === chaptersWithContent.length) {
-        setError(`Failed to generate any graphics. Please try again later.`);
-      } else {
-        setError(`Failed to generate graphics for ${chaptersWithErrors.length} chapters: ${errorChapterTitles.join(', ')}. You can try generating these graphics individually.`);
-      }
-    } else if (successCount > 0) {
+    if (failedChapters.length > 0) {
+      const errorTitles = failedChapters.map(f => f.title).join(', ');
+      setError(`Nie udało się wygenerować grafiki dla ${failedChapters.length} rozdziałów: ${errorTitles}. Możesz spróbować ponownie dla pojedynczych grafik.`);
+    } else {
       setError(null);
-      console.log('🎉 All graphics generated successfully');
     }
+
+    // Odśwież status, aby upewnić się, że wszystkie obrazki są widoczne
+    setTimeout(() => refreshImagesStatus(), 1000);
   };
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {

@@ -145,11 +145,9 @@ export async function POST(
     page.setDefaultNavigationTimeout(60000);
 
     // === KROK 1: USTAW ROZMIAR OKNA PRZEGLĄDARKI PRZED WCZYTANIEM TREŚCI ===
-    // To zmusi stronę (100vw, 100vh) do wyrenderowania się w idealnych proporcjach A4
-
     await page.setViewport({
-      width: 595,  // Szerokość A4 w pikselach
-      height: 842, // Wysokość A4 w pikselach
+      width: 795,
+      height: 1125,
     });
 
     await page.setContent(htmlContent, {
@@ -157,17 +155,78 @@ export async function POST(
       timeout: 60000,
     });
 
-    console.log(`🔄 Rozpoczęcie generowania PDF i okładki WEBP...`);
+    // ========================================================================
+    //         NOWA SEKWENCJA GENEROWANIA ZGODNIE Z WYTYCZNYMI
+    // ========================================================================
 
-    // Definicja ścieżek (bez zmian)
+    console.log('🔄 Krok 1: Generowanie zrzutu ekranu dla mockupów (z tekstem)...');
+    const rawCoverBuffer = await page.screenshot({
+      type: 'webp',
+      quality: 85
+    });
+    console.log('✅ Zrzut ekranu dla mockupów wygenerowany w pamięci.');
+
+    // --- Krok 2: Generowanie szablonu okładki dla PDF (bez tekstu) ---
+    console.log('🔄 Krok 2: Modyfikowanie DOM w celu ukrycia tekstu na okładce...');
+    await page.evaluate(() => {
+      const titleEl = document.querySelector('.cover-title');
+      const subtitleEl = document.querySelector('.cover-subtitle');
+      if (titleEl) (titleEl as HTMLElement).style.visibility = 'hidden';
+      if (subtitleEl) (subtitleEl as HTMLElement).style.visibility = 'hidden';
+    });
+
+    console.log('🔄 Krok 2b: Generowanie zrzutu ekranu szablonu tła (bez tekstu)...');
+    const coverTemplateBuffer = await page.screenshot({
+      type: 'webp',
+      quality: 95 // Lepsza jakość dla tła w PDF
+    });
+    console.log('✅ Szablon tła okładki wygenerowany w pamięci.');
+
+    // --- Krok 3: Przygotowanie strony do generowania PDF ---
+    console.log('🔄 Krok 3: Modyfikowanie DOM w celu użycia tła i przywrócenia tekstu...');
+    const coverTemplateDataUrl = `data:image/webp;base64,${(coverTemplateBuffer as Buffer).toString('base64')}`;
+
+    await page.evaluate((dataUrl) => {
+      const coverPage = document.querySelector('.cover-page') as HTMLElement | null;
+      if (!coverPage) return;
+
+      // Ukryj oryginalne elementy, które są teraz częścią tła
+      const elementsToHide = ['.cover-logo', '.cover-image-container', '.cover-fallback'];
+      elementsToHide.forEach(selector => {
+        const el = coverPage.querySelector(selector) as HTMLElement | null;
+        if (el) el.style.display = 'none';
+      });
+
+      // Ustaw wygenerowane tło
+      coverPage.style.backgroundImage = `url(${dataUrl})`;
+      coverPage.style.backgroundSize = '100% 100%';
+      coverPage.style.backgroundPosition = 'center';
+      coverPage.style.backgroundRepeat = 'no-repeat';
+
+      // Przywróć widoczność tekstu i usuń gradienty z jego kontenerów
+      const titleSection = coverPage.querySelector('.cover-title-section') as HTMLElement | null;
+      const subtitleSection = coverPage.querySelector('.cover-subtitle-section') as HTMLElement | null;
+      if (titleSection) titleSection.style.background = 'none';
+      if (subtitleSection) subtitleSection.style.background = 'none';
+
+      const titleEl = coverPage.querySelector('.cover-title') as HTMLElement | null;
+      const subtitleEl = coverPage.querySelector('.cover-subtitle') as HTMLElement | null;
+      if (titleEl) titleEl.style.visibility = 'visible';
+      if (subtitleEl) subtitleEl.style.visibility = 'visible';
+    }, coverTemplateDataUrl);
+    console.log('✅ DOM przygotowany do generowania PDF.');
+
+    // Definicja ścieżek
     const uploadsDir = path.resolve(process.env.UPLOADS_DIR || '/data/uploads/uploads');
     const coverImageFileName = `${session.user.id}_EB${ebookIdNum}_rawMOCK.webp`;
     const coverImageFullPath = path.join(uploadsDir, coverImageFileName);
 
     await fs.promises.mkdir(uploadsDir, { recursive: true });
 
-    const [pdfBuffer, rawCoverBuffer] = await Promise.all([
-      // Zadanie 1: Generowanie PDF
+    console.log(`🔄 Rozpoczęcie równoległego generowania PDF i zapisu mockupu...`);
+
+    const [pdfBuffer] = await Promise.all([
+      // Zadanie 1: Generowanie PDF z przygotowanej strony
       page.pdf({
         format: 'A4',
         margin: { top: '20mm', right: '20mm', bottom: '25mm', left: '20mm' },
@@ -176,16 +235,10 @@ export async function POST(
         preferCSSPageSize: true,
         timeout: 60000,
       }),
-      // Zadanie 2: Generowanie zrzutu ekranu DO PAMIĘCI (jako bufor)
-      page.screenshot({
-        type: 'webp',
-        quality: 85
-      }),
+      // Zadanie 2: Zapis surowego mockupu (z tekstem) na dysk
+      fs.promises.writeFile(coverImageFullPath, rawCoverBuffer),
     ]);
-    console.log(`✅ PDF i surowa okładka wygenerowane w pamięci.`);
-
-    // Zapisz surową okładkę z bufora na dysk
-    await fs.promises.writeFile(coverImageFullPath, rawCoverBuffer);
+    console.log(`✅ PDF wygenerowany w pamięci.`);
     console.log(`🖼️  Surowa okładka WEBP zapisana w: ${coverImageFullPath}`);
 
     // Stwórz finalny mockup, używając bufora z pamięci
@@ -195,7 +248,7 @@ export async function POST(
     const finalMockupFileName = `${session.user.id}_EB${ebookIdNum}_finalMOK.png`;
     const finalMockupFullPath = path.join(uploadsDir, finalMockupFileName);
 
-    const resizedCoverBuffer = await sharp(rawCoverBuffer) // Używamy bufora z pamięci!
+    const resizedCoverBuffer = await sharp(rawCoverBuffer)
         .resize({
             width: 600,
             height: 840,
@@ -215,9 +268,9 @@ export async function POST(
     console.log(`✅ Finalny mockup PNG zapisany w: ${finalMockupFullPath}`);
 
 
-    // 4. Zdefiniuj ścieżki URL i zaktualizuj bazę danych o oba mockupy
+    // Zdefiniuj ścieżki URL i zaktualizuj bazę danych o oba mockupy
     const rawMockupUrlPath = `/uploads/${coverImageFileName}`;
-    const finalMockupUrlPath = `/uploads/${finalMockupFileName}`; // Używamy zmiennej zdefiniowanej w poprzednim kroku
+    const finalMockupUrlPath = `/uploads/${finalMockupFileName}`;
 
     await prisma.ebooks.update({
       where: {
@@ -226,9 +279,8 @@ export async function POST(
       },
       data: {
         status: 'completed',
-        // Upewnij się, że masz oba te pola w pliku schema.prisma
-        cover_image_webp_url: rawMockupUrlPath, // Zapis ścieżki do surowego mockupu
-        final_mockup_url: finalMockupUrlPath,     // Zapis ścieżki do finalnego mockupu
+        cover_image_webp_url: rawMockupUrlPath,
+        final_mockup_url: finalMockupUrlPath,
       }
     });
 
@@ -271,7 +323,7 @@ export async function POST(
 }
 
 // ========================================================================
-//                    FUNKCJE POMOCNICZE - INTELIGENTNA KONTROLA GRAFIK
+//                    FUNKCJE POMOCNICZE (BEZ ZMIAN)
 // ========================================================================
 
 function generateHTMLContent(title: string, subtitle: string | null, chapters: any[], coverImageUrl?: string | null, authorDisplayName?: string | null, authorLogoUrl?: string | null): string {
@@ -384,9 +436,8 @@ function generateAdvancedCSS(ebookTitle: string, ebookSubtitle: string | null, a
       page-break-before: avoid;
     }
 
-    /* KLUCZOWA NAPRAWA: Usunięcie wymuszania nowych stron dla każdego rozdziału */
     .chapter:not(:first-of-type) {
-      page-break-before: always; /* ZMIEŃ z 'auto' na 'always' */
+      page-break-before: always;
       margin-top: 0;
     }
 
@@ -405,18 +456,17 @@ function generateAdvancedCSS(ebookTitle: string, ebookSubtitle: string | null, a
       clear: both;
     }
 
-    /* ZACHOWANY ORYGINALNY MARGINES PO TYTULE ROZDZIAŁU */
     .chapter-header {
       text-align: center;
       margin-top: 2rem;
-      margin-bottom: 18rem; /* ZACHOWANE zgodnie z życzeniem użytkownika */
+      margin-bottom: 18rem;
       page-break-inside: avoid;
       page-break-after: avoid;
     }
 
     .chapter:first-of-type .chapter-header {
       margin-top: 5rem;
-      margin-bottom: 18rem; /* ZACHOWANE zgodnie z życzeniem użytkownika */
+      margin-bottom: 18rem;
     }
 
     /* ========== ZAAWANSOWANA KONTROLA GRAFIK - PEŁNE PREZENTOWANIE ========== */
@@ -432,7 +482,6 @@ function generateAdvancedCSS(ebookTitle: string, ebookSubtitle: string | null, a
       align-items: center;
     }
 
-    /* KLUCZOWA ZMIANA: Grafiki prezentowane w pełnym rozmiarze */
     .chapter-image {
       width: 100%;
       max-width: 100%;
@@ -444,7 +493,6 @@ function generateAdvancedCSS(ebookTitle: string, ebookSubtitle: string | null, a
       max-height: calc(100vh - 8rem);
     }
 
-    /* Inteligentne zarządzanie wielkimi grafikami */
     .chapter-image-container.large-image {
       page-break-before: always;
       margin: 1rem 0;
@@ -454,24 +502,20 @@ function generateAdvancedCSS(ebookTitle: string, ebookSubtitle: string | null, a
       max-height: calc(100vh - 6rem);
     }
 
-    /* Zabezpieczenie przed zbyt małymi grafikami na końcu strony */
     .chapter-image-container.avoid-page-end {
       page-break-before: always;
     }
 
-    /* Kontrola obrazów na końcu rozdziału */
     .chapter-image-container.end-image {
       margin: 2rem 0 1rem 0;
       page-break-before: auto;
     }
 
-    /* Kontrola obrazów na początku rozdziału */
     .chapter-image-container.start-image {
       margin: 1rem 0 2rem 0;
       page-break-after: auto;
     }
 
-    /* Zabezpieczenie przed samotnymi obrazami na stronie */
     .chapter-image-container + .chapter-image-container {
       margin-top: 0.5rem;
     }
@@ -495,7 +539,6 @@ function generateAdvancedCSS(ebookTitle: string, ebookSubtitle: string | null, a
       page-break-before: avoid;
     }
 
-    /* Zabezpieczenie przed sierotkami przy grafikach */
     .text-before-image {
       orphans: 3;
       page-break-after: auto;
@@ -506,7 +549,6 @@ function generateAdvancedCSS(ebookTitle: string, ebookSubtitle: string | null, a
       page-break-before: avoid;
     }
 
-    /* Ulepszona kontrola pierwszego i ostatniego paragrafu */
     .paragraph.first-paragraph {
       margin-top: 0;
     }
@@ -520,8 +562,8 @@ function generateAdvancedCSS(ebookTitle: string, ebookSubtitle: string | null, a
     @media print {
       .chapter {
         page-break-inside: auto;
-        orphans: 2; /* ZMNIEJSZONE z 3 - mniej restrykcyjne */
-        widows: 2;  /* ZMNIEJSZONE z 3 - mniej restrykcyjne */
+        orphans: 2;
+        widows: 2;
       }
 
       .chapter-header {
@@ -540,16 +582,14 @@ function generateAdvancedCSS(ebookTitle: string, ebookSubtitle: string | null, a
       }
 
       .paragraph {
-        orphans: 2; /* ZMIENIONE z 3 na 2 */
-        widows: 2;  /* ZMIENIONE z 3 na 2 */
+        orphans: 2;
+        widows: 2;
       }
 
-      /* NAPRAWA: Usunięcie wymuszania nowych stron dla rozdziałów */
       .chapter:not(:first-of-type) {
-        page-break-before: always; /* ZMIEŃ z 'auto' na 'always' */
+        page-break-before: always;
       }
 
-      /* KLUCZOWA ZMIANA: Inteligentna kontrola grafik w druku */
       .chapter-image-container {
         page-break-inside: avoid;
         page-break-before: auto;
@@ -563,7 +603,6 @@ function generateAdvancedCSS(ebookTitle: string, ebookSubtitle: string | null, a
         height: auto;
       }
 
-      /* Specjalne zasady dla dużych grafik */
       .chapter-image-container.large-image {
         page-break-before: always;
         margin: 1rem 0;
@@ -573,7 +612,6 @@ function generateAdvancedCSS(ebookTitle: string, ebookSubtitle: string | null, a
         max-height: calc(100vh - 6rem);
       }
 
-      /* Elastyczne zarządzanie tekstem wokół grafik */
       .pre-image-text {
         page-break-after: auto;
       }
@@ -582,7 +620,6 @@ function generateAdvancedCSS(ebookTitle: string, ebookSubtitle: string | null, a
         page-break-before: avoid;
       }
 
-      /* Zabezpieczenie przed pustymi końcami stron */
       .text-block:has(+ .chapter-image-container) {
         page-break-after: auto;
         orphans: 4;
@@ -618,36 +655,44 @@ function generateAdvancedCSS(ebookTitle: string, ebookSubtitle: string | null, a
 
     .cover-title-section {
       position: absolute;
-      top: 6%;
-      left: 0;
-      right: 0;
+      top: 4%;
+      left: 11;
+      right: 5;
       text-align: center;
       z-index: 20;
-      width: 100%;
+      width: 97%;
       background: linear-gradient(to bottom,
         rgba(255, 255, 255, 1) 0%,
         rgba(255, 255, 255, 1) 70%,
         rgba(255, 255, 255, 0.95) 85%,
         rgba(255, 255, 255, 0) 100%
       );
-      padding: 1rem 3rem 1rem 3rem;
+      height: 230px;
+      padding: 1rem 2rem 1rem 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
 
     .cover-subtitle-section {
       position: absolute;
       bottom: 0;
-      left: 0;
-      right: 0;
+      left: 11;
+      right: 5;
       text-align: center;
       z-index: 20;
-      width: 100%;
+      width: 97%;
       background: linear-gradient(to top,
         rgba(255, 255, 255, 1) 0%,
         rgba(255, 255, 255, 1) 70%,
         rgba(255, 255, 255, 0.95) 85%,
         rgba(255, 255, 255, 0) 100%
       );
-      padding: 1rem 2rem 1rem 2rem;
+      height: 180px;
+      padding: 0 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
 
     .cover-header {
@@ -678,7 +723,7 @@ function generateAdvancedCSS(ebookTitle: string, ebookSubtitle: string | null, a
       top: 0;
       left: 50%;
       transform: translateX(-50%);
-      width: 95%;
+      width: 95.5%;
       height: 1px;
       background-color: #4a4a4a;
       opacity: 0.8;
@@ -690,7 +735,7 @@ function generateAdvancedCSS(ebookTitle: string, ebookSubtitle: string | null, a
       bottom: 0;
       left: 50%;
       transform: translateX(-50%);
-      width: 95%;
+      width: 95.5%;
       height: 1px;
       background-color: #4a4a4a;
       opacity: 0.8;
@@ -723,7 +768,7 @@ function generateAdvancedCSS(ebookTitle: string, ebookSubtitle: string | null, a
       top: 0;
       left: 50%;
       transform: translateX(-50%);
-      width: 95%;
+      width: 95.5%;
       height: 1px;
       background-color: #4a4a4a;
       opacity: 0.8;
@@ -735,7 +780,7 @@ function generateAdvancedCSS(ebookTitle: string, ebookSubtitle: string | null, a
       bottom: 0;
       left: 50%;
       transform: translateX(-50%);
-      width: 95%;
+      width: 95.5%;
       height: 1px;
       background-color: #4a4a4a;
       opacity: 0.8;
@@ -746,7 +791,7 @@ function generateAdvancedCSS(ebookTitle: string, ebookSubtitle: string | null, a
       top: 54%;
       left: 50%;
       transform: translateX(-50%) translateY(-50%);
-      width: 95%;
+      width: 95.5%;
       aspect-ratio: 1024 / 1024;
       z-index: 5;
     }
@@ -838,7 +883,7 @@ function generateAdvancedCSS(ebookTitle: string, ebookSubtitle: string | null, a
       font-size: 24px;
       font-weight: 700;
       color: #000;
-      line-height: 1.2;
+      line-height: 2;
       margin: 0;
     }
 
@@ -880,8 +925,8 @@ function generateAdvancedCSS(ebookTitle: string, ebookSubtitle: string | null, a
 
     /* ========== KONTROLA SIEROT I WDÓW ========== */
     p {
-      orphans: 2; /* ZMNIEJSZONE z 3 - mniej restrykcyjne */
-      widows: 2;  /* ZMNIEJSZONE z 3 - mniej restrykcyjne */
+      orphans: 2;
+      widows: 2;
       page-break-inside: auto;
     }
 
@@ -927,11 +972,9 @@ function generateCoverPage(title: string, subtitle: string | null, coverImageUrl
           />
         </div>
 
-        ${subtitle && subtitle.trim() ? `
         <div class="cover-subtitle-section">
-          <h2 class="cover-subtitle">${escapeHtml(subtitle)}</h2>
+          ${subtitle && subtitle.trim() ? `<h2 class="cover-subtitle">${escapeHtml(subtitle)}</h2>` : ''}
         </div>
-        ` : ''}
 
         <div class="cover-fallback" style="display: none;">
           <h1 class="${titleClass}">${escapeHtml(title)}</h1>
@@ -983,7 +1026,6 @@ function generateChaptersContent(chapters: any[]): string {
     .join('');
 }
 
-// UPROSZCZONA FUNKCJA generateChapterContent - grafika zawsze po 2. akapicie
 function generateChapterContent(
   content: string,
   imageUrl: string | null,
@@ -1008,8 +1050,6 @@ function generateChapterContent(
   let firstContentParagraph = true;
 
   const contentParagraphs = paragraphs.slice(startIndex);
-
-  // NAJPROSTSZE: Grafika zawsze po 2. akapicie
   const imagePosition = 2;
 
   console.log(`📍 Rozdział ${chapterIndex + 1}: ${contentParagraphs.length} paragrafów, obraz po ${imagePosition}. akapicie`);
@@ -1018,7 +1058,6 @@ function generateChapterContent(
     const paragraph = contentParagraphs[i].trim();
     if (!paragraph) continue;
 
-    // Wstaw obraz po 2. akapicie
     if (imageUrl && !imageInserted && i === imagePosition) {
       htmlContent += `
         <div class="chapter-image-container">
@@ -1028,7 +1067,6 @@ function generateChapterContent(
       imageInserted = true;
     }
 
-    // Przetwarzaj paragraf
     if (isSectionHeader(paragraph)) {
       htmlContent += `<h3 class="section-header">${escapeHtml(paragraph)}</h3>`;
       firstContentParagraph = true;
@@ -1038,10 +1076,6 @@ function generateChapterContent(
       firstContentParagraph = false;
     }
   }
-
-  // Grafika zostanie zawsze wstawiona po 2. akapicie (jeśli istnieje)
-  // Nie ma potrzeby dodawania na końcu
-
   return htmlContent;
 }
 

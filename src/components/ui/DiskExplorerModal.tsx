@@ -811,14 +811,25 @@ const DiskExplorerModal: React.FC<DiskExplorerModalProps> = ({ isOpen, onClose }
             </div>
 
             {/* Preview footer */}
-            <div className="flex justify-center p-4 flex-shrink-0">
+            {/* 🆕 Zmodyfikowana stopka z przyciskiem pobierania */}
+            <div className="flex justify-center items-center p-4 flex-shrink-0 space-x-3">
               <button
                 onClick={closeImagePreview}
-                className="px-6 py-2 bg-white text-gray-900 rounded-lg hover:bg-gray-100 transition-colors font-medium"
+                className="px-6 py-2 bg-white/10 text-white rounded-lg hover:bg-white/20 transition-colors font-medium"
               >
-                Close preview
+                Close
               </button>
+              <a
+                href={previewImage}
+                download={previewImageName}
+                className="flex items-center space-x-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                title={`Download ${previewImageName}`}
+              >
+                <Download size={18} />
+                <span>Download</span>
+              </a>
             </div>
+
           </div>
         </div>
       )}
