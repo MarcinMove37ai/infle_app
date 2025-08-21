@@ -6,7 +6,8 @@
   <component name="ChangeListManager">
     <list default="true" id="46749596-836e-4f8d-af4b-57221a03aed3" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/components/ebooks/EbookGeneratorModal.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/components/ebooks/EbookGeneratorModal.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/app/api/ebooks/route.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/app/api/ebooks/route.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/components/pages/EbookiContent.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/components/pages/EbookiContent.tsx" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />

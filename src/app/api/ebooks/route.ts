@@ -28,51 +28,38 @@ export async function GET(request: Request) {
     const userId = session.user.id;
     const { searchParams } = new URL(request.url);
 
-    // <-- NOWY BLOK: Sprawdzamy, czy żądanie dotyczy jednego, konkretnego e-booka
     const ebookId = searchParams.get('id');
 
     if (ebookId) {
-      // === SCENARIUSZ 1: POBIERANIE SZCZEGÓŁÓW JEDNEGO E-BOOKA ===
+      // === SCENARIUSZ 1: POBIERANIE SZCZEGÓŁÓW JEDNEGO E-BOOKA (BEZ ZMIAN) ===
       const ebook = await prisma.ebooks.findFirst({
-        where: {
-          id: parseInt(ebookId),
-          userId: userId, // Zapewnia, że użytkownik ma dostęp tylko do swoich e-booków
-        },
-        include: {
-          ebook_chapters: { // Dołączamy powiązane rozdziały
-            orderBy: {
-              position: 'asc', // Sortujemy rozdziały według ich kolejności
-            },
-          },
-        },
+        where: { id: parseInt(ebookId), userId: userId },
+        include: { ebook_chapters: { orderBy: { position: 'asc' } } },
       });
 
       if (!ebook) {
-        return NextResponse.json({ error: 'E-book nie został znaleziony lub nie masz do niego dostępu' }, { status: 404 });
+        return NextResponse.json({ error: 'E-book nie został znaleziony' }, { status: 404 });
       }
 
-      // Mapujemy dane na format, którego oczekuje frontend w modalu edycji
       const responseData = {
         id: ebook.id,
         title: ebook.title,
         subtitle: ebook.subtitle,
         description: ebook.description,
-        // Zmieniamy nazwę z 'ebook_chapters' na 'chapters' i dostosowujemy pola
         chapters: ebook.ebook_chapters.map(chapter => ({
-          id: chapter.id.toString(), // Frontend oczekuje ID jako string
+          id: chapter.id.toString(),
           title: chapter.title,
           content: chapter.content,
           position: chapter.position,
-          image_url: chapter.image_url, // Przesyłamy snake_case, frontend sobie poradzi lub można zmienić na camelCase
+          image_url: chapter.image_url,
           image_prompt: chapter.image_prompt,
         })),
       };
 
       return NextResponse.json(responseData);
     }
-    // <-- KONIEC NOWEGO BLOKU
 
-    // === SCENARIUSZ 2: POBIERANIE LISTY E-BOOKÓW (ISTNIEJĄCA LOGIKA) ===
+    // === SCENARIUSZ 2: POBIERANIE LISTY E-BOOKÓW (Z POPRAWKAMI) ===
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '10');
     const search = searchParams.get('search') || '';
@@ -83,7 +70,6 @@ export async function GET(request: Request) {
     const skip = (validatedPage - 1) * validatedLimit;
 
     const whereCondition: any = { userId: userId };
-
     if (search.trim()) {
       whereCondition.OR = [
         { title: { contains: search.trim(), mode: 'insensitive' } },
@@ -100,48 +86,54 @@ export async function GET(request: Request) {
       filteredWhereCondition.status = { in: ['in-progress', 'draft'] };
     }
 
-    const [ebooks, totalCount, completedCount, inProgressCount, allEbooksTotalCount] = await Promise.all([
+    // Krok 1: Pobieramy dane z bazy i statystyki (tak jak wcześniej)
+    const [ebooksFromDb, totalCount, completedCount, inProgressCount, allEbooksTotalCount] = await Promise.all([
       prisma.ebooks.findMany({
         where: filteredWhereCondition,
-        select: {
-          id: true,
-          title: true,
-          subtitle: true,
-          description: true,
-          status: true,
-          authorDisplayName: true,
-          authorLogoUrl: true,
-          text_ai_provider: true,
-          text_ai_model: true,
-          image_ai_provider: true,
-          image_ai_model: true,
-          ai_generation_timestamp: true,
-          created_at: true,
-          updated_at: true,
-        },
+        // Ważne: usuwamy 'select', aby pobrać wszystkie pola potrzebne do mapowania
         orderBy: { created_at: 'desc' },
         skip: skip,
         take: validatedLimit,
       }),
       prisma.ebooks.count({ where: filteredWhereCondition }),
-      prisma.ebooks.count({
-        where: {
-          ...whereCondition,
-          status: { in: ['published', 'completed'] }
-        },
-      }),
-      prisma.ebooks.count({
-        where: {
-          ...whereCondition,
-          status: { in: ['in-progress', 'draft'] }
-        },
-      }),
+      prisma.ebooks.count({ where: { ...whereCondition, status: { in: ['published', 'completed'] } } }),
+      prisma.ebooks.count({ where: { ...whereCondition, status: { in: ['in-progress', 'draft'] } } }),
       prisma.ebooks.count({ where: whereCondition }),
     ]);
 
+    // =======================================================================
+    // START: NOWA LOGIKA - DOŁĄCZANIE ŚCIEŻEK DO OKŁADEK
+    // =======================================================================
+
+    // Krok 2: Odczytujemy listę plików z katalogu `uploads`
+    const uploadsDir = path.resolve(process.env.UPLOADS_DIR || '/data/uploads/uploads');
+    let allUploadedFiles: string[] = [];
+    try {
+      allUploadedFiles = await fs.readdir(uploadsDir);
+    } catch (err) {
+      console.warn(`⚠️ Ostrzeżenie: Nie można odczytać katalogu z okładkami: ${uploadsDir}.`);
+    }
+
+    // Krok 3: Mapujemy wyniki z bazy, aby dołączyć ścieżkę do okładki
+    const ebooksWithCovers = ebooksFromDb.map(ebook => {
+      // Używamy tego samego prefiksu, co w logice usuwania
+      const filePrefix = `${ebook.userId}_EB${ebook.id}_`;
+      const coverFilename = allUploadedFiles.find(file => file.startsWith(filePrefix) && file.includes('_COVER'));
+
+      return {
+        ...ebook, // Kopiujemy wszystkie dane z bazy
+        cover_image_webp_url: coverFilename ? `uploads/${coverFilename}` : null,
+      };
+    });
+
+    // =======================================================================
+    // KONIEC: NOWA LOGIKA
+    // =======================================================================
+
+    // Krok 4: Zwracamy kompletne dane do frontendu
     return NextResponse.json({
       success: true,
-      ebooks: ebooks,
+      ebooks: ebooksWithCovers, // Zwracamy przetworzoną listę
       pagination: {
         page: validatedPage,
         limit: validatedLimit,
