@@ -90,6 +90,13 @@ export async function GET(request: Request) {
     const [ebooksFromDb, totalCount, completedCount, inProgressCount, allEbooksTotalCount] = await Promise.all([
       prisma.ebooks.findMany({
         where: filteredWhereCondition,
+        include: {
+          pages: {       // Dołącz powiązane rekordy z tabeli 'pages'
+            select: {
+              id: true   // Wystarczy nam tylko ID, aby potwierdzić istnienie
+            }
+          }
+        },
         // Ważne: usuwamy 'select', aby pobrać wszystkie pola potrzebne do mapowania
         orderBy: { created_at: 'desc' },
         skip: skip,
@@ -122,6 +129,7 @@ export async function GET(request: Request) {
 
       return {
         ...ebook, // Kopiujemy wszystkie dane z bazy
+        hasLandingPage: ebook.pages.length > 0,
         cover_image_webp_url: coverFilename ? `uploads/${coverFilename}` : null,
       };
     });

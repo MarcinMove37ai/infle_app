@@ -23,6 +23,7 @@ interface Ebook {
   created_at: string;
   updated_at: string;
   cover_image_webp_url: string | null;
+  hasLandingPage: boolean;
 }
 
 interface Pagination {
@@ -49,6 +50,7 @@ export default function EbookiContent() {
   const [localError, setLocalError] = useState<string | null>(null);
   const [editingEbookId, setEditingEbookId] = useState<number | null>(null);
   const [deletingIds, setDeletingIds] = useState<Set<number>>(new Set());
+  const [creatingPageId, setCreatingPageId] = useState<number | null>(null);
   const [downloadingIds, setDownloadingIds] = useState<Set<number>>(new Set());
 
   const [allEbooks, setAllEbooks] = useState<Ebook[]>([]);
@@ -285,6 +287,27 @@ export default function EbookiContent() {
     }
   };
 
+  const handleCreatePage = async (ebookId: number) => {
+      setCreatingPageId(ebookId);
+      setLocalError(null);
+      try {
+          const response = await fetch('/api/pages', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ ebookId: ebookId })
+          });
+          const data = await response.json();
+          if (!response.ok) {
+              throw new Error(data.error || 'Nie udało się utworzyć strony.');
+          }
+          await fetchAllEbooks(); // Odśwież listę, aby pokazać zmianę
+      } catch (err) {
+          setLocalError(err instanceof Error ? err.message : 'Wystąpił nieznany błąd.');
+      } finally {
+          setCreatingPageId(null);
+      }
+  };
+
   const handleEbookCreated = () => {
     setActiveFilter('all');
     setSearchTerm('');
@@ -405,13 +428,22 @@ export default function EbookiContent() {
     setIsGeneratorModalOpen(true);
   };
 
-  const handleCloseGenerator = () => {
-    if (editingEbookId) fetchAllEbooks();
-    setActiveFilter('all');
-    setCurrentPage(1);
-    setIsGeneratorModalOpen(false);
-    setEditingEbookId(null);
-  };
+  const handleCloseGenerator = async () => {
+  // 1. Natychmiast zamknij modal, aby UI był responsywny.
+  setIsGeneratorModalOpen(false);
+
+  // 2. Poczekaj ułamek sekundy (50 milisekund).
+  //    To daje czas na uruchomienie funkcji czyszczącej w modalu i wysłanie żądania DELETE.
+  await new Promise(resolve => setTimeout(resolve, 300));
+
+  // 3. Dopiero teraz pobierz świeżą listę ebooków.
+  fetchAllEbooks();
+
+  // 4. Zresetuj pozostałe stany.
+  setActiveFilter('all');
+  setCurrentPage(1);
+  setEditingEbookId(null);
+};
 
   return (
     <div className="space-y-4 sm:space-y-6">
@@ -562,6 +594,25 @@ export default function EbookiContent() {
                         {ebook.subtitle && <p className="text-sm text-gray-500 truncate">{ebook.subtitle}</p>}
                         <div className="flex items-center flex-wrap gap-x-4 gap-y-2 mt-2">
                           <span className={`text-xs px-2 py-1 rounded-full ${getStatusColor(ebook.status)}`}>{getStatusLabel(ebook.status)}</span>
+                          {creatingPageId === ebook.id ? (
+                              <span className="text-xs flex items-center gap-1 bg-gray-100 text-gray-700 px-2 py-1 rounded">
+                                  <RefreshCw size={12} className="animate-spin" /> Creating...
+                              </span>
+                          ) : ebook.hasLandingPage ? (
+                              <span className="text-xs flex items-center gap-1 bg-blue-100 text-blue-700 px-2 py-1 rounded">
+                                  <FileText size={12} /> LandingPage Ready
+                              </span>
+                          ) : (
+                              <button
+                                  onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleCreatePage(ebook.id);
+                                  }}
+                                  className="text-xs flex items-center gap-1 bg-yellow-100 text-yellow-700 px-2 py-1 rounded hover:bg-yellow-200 transition-colors"
+                              >
+                                  <Plus size={12} /> Create LandingPage
+                              </button>
+                          )}
                           <span className="text-xs text-gray-400">{formatDate(ebook.created_at)}</span>
                           {ebook.text_ai_model && (<span className="text-xs flex items-center gap-1 bg-gray-100 text-gray-700 px-2 py-1 rounded"><FileText size={12} className="text-gray-500" />{ebook.text_ai_model}</span>)}
                           {ebook.image_ai_model && (<span className="text-xs flex items-center gap-1 bg-gray-100 text-gray-700 px-2 py-1 rounded"><ImageIcon size={12} className="text-gray-500" />{ebook.image_ai_model}</span>)}

@@ -1,7 +1,3 @@
-//
-// 📜 CAŁY PLIK SCHEMA.PRISMA Z DODANYMI NOWYMI ELEMENTAMI
-//
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -9,6 +5,7 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  directUrl = env("DATABASE_URL")
 }
 
 model User {
@@ -30,23 +27,23 @@ model User {
   linkedinProfileId   String?
   socialProfileType   SocialProfileType            @default(NONE)
   instagramUsername   String?
+  authorDisplayName   String?
+  authorLogoUrl       String?
+  imageAiModel        String?                      @default("dall-e-3")
+  imageAiProvider     String?                      @default("openai")
+  textAiModel         String?                      @default("claude-3-haiku")
+  textAiProvider      String?                      @default("anthropic")
+  role                Role                         @default(free)
+  ebookSources        EbookSource[]
+  ebooks              ebooks[]
   instagramAIAnalyses InstagramCreatorAIAnalysis[]
   instagramAnalyses   InstagramCreatorAnalysis[]
   linkedinAIAnalyses  LinkedInCreatorAIAnalysis[]
   linkedinAnalyses    LinkedInCreatorAnalysis[]
+  pages               pages[]
+  apiKeys             UserApiKey[]
   instagramProfile    InstagramProfileCheck?       @relation(fields: [instagramProfileId], references: [id])
   linkedinProfile     LinkedInProfileCheck?        @relation(fields: [linkedinProfileId], references: [id])
-  ebooks              ebooks[]
-  authorDisplayName   String?
-  authorLogoUrl       String?
-  textAiProvider      String?                      @default("anthropic")
-  textAiModel         String?                      @default("claude-3-haiku")
-  imageAiProvider     String?                      @default("openai")
-  imageAiModel        String?                      @default("dall-e-3")
-  apiKeys             UserApiKey[]
-
-  // === NOWA RELACJA DO ŹRÓDEŁ ===
-  ebookSources        EbookSource[]
 
   @@map("users")
 }
@@ -244,28 +241,23 @@ model ebooks {
   description                     String?
   cover_image_url                 String?
   cover_image_prompt              String?
-  cover_image_webp_url            String?
-  final_mockup_url                String?
-  text_ai_provider                String?          @db.VarChar(50)
-  text_ai_model                   String?          @db.VarChar(100)
-  image_ai_provider               String?          @db.VarChar(50)
-  image_ai_model                  String?          @db.VarChar(100)
+  userId                          String?
   ai_generation_timestamp         DateTime?        @db.Timestamp(6)
+  image_ai_model                  String?          @db.VarChar(100)
+  image_ai_provider               String?          @db.VarChar(50)
+  text_ai_model                   String?          @db.VarChar(100)
+  text_ai_provider                String?          @db.VarChar(50)
   authorDisplayName               String?          @db.VarChar(200)
   authorLogoUrl                   String?          @db.VarChar(1024)
+  cover_image_webp_url            String?
+  final_mockup_url                String?
   ebook_chapters                  ebook_chapters[]
-  userId                          String?
-  user                            User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
-
-  // === NOWA RELACJA DO ŹRÓDEŁ ===
   sources                         EbookSource[]
+  pages                           pages[]
+  user                            User?            @relation(fields: [userId], references: [id])
 
   @@index([x_amz_meta_user_id], map: "idx_ebooks_user_id")
 }
-
-//
-// +++ NOWE ELEMENTY DODANE PONIŻEJ +++
-//
 
 model EbookSource {
   id          Int        @id @default(autoincrement())
@@ -279,23 +271,47 @@ model EbookSource {
   metadata    Json?
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
-
-  // Relacje
   ebook       ebooks     @relation(fields: [ebook_id], references: [id], onDelete: Cascade)
   user        User       @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
-  // Ograniczenia i Indeksy
   @@unique([ebook_id, url])
   @@index([ebook_id])
   @@index([user_id])
   @@map("ebook_sources")
 }
 
+model pages {
+  id               String    @id @db.VarChar(255)
+  title            String    @db.VarChar(255)
+  headline         String?
+  creator          String?   @db.VarChar(255)
+  visits           Int?      @default(0)
+  leads            Int?      @default(0)
+  type             String?   @db.VarChar(50)
+  status           String    @db.VarChar(50)
+  createdAt        DateTime? @default(now()) @db.Timestamptz(6)
+  url              String?   @db.VarChar(255)
+  draft_url        String?   @db.VarChar(255)
+  coverImage       String?   @db.VarChar(255)
+  x_amz_meta_title String?   @db.VarChar(255)
+  userId           String?   @db.VarChar(255)
+  ebookId          Int?
+  user             User?     @relation(fields: [userId], references: [id], map: "fk_user")
+  ebook            ebooks?   @relation(fields: [ebookId], references: [id], map: "fk_ebook")
+}
+
+enum Role {
+  admin
+  demo
+  free
+  payd
+  premium
+}
+
 enum SourceType {
   WEB
   PDF
 }
-// Koniec dodanych elementów
 
 enum SocialProfileType {
   INSTAGRAM_ONLY

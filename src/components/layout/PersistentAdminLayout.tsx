@@ -183,14 +183,14 @@ const menuItems: MenuItem[] = [
     IconComponent: BookOpen,
     label: 'Ebooki',
     path: '/ebooki',
-    roles: ['ADMIN', 'USER', 'GOD'],
+    roles: ['ADMIN', 'USER', 'GOD', 'free'],
     requiredStatus: ['active']
   },
   {
     IconComponent: FileSignature,
     label: 'Strony Zapisu',
     path: '/strony-zapisu',
-    roles: ['ADMIN', 'USER', 'GOD'],
+    roles: ['ADMIN', 'USER', 'GOD', 'free'],
     requiredStatus: ['active']
   },
   {
@@ -204,7 +204,7 @@ const menuItems: MenuItem[] = [
     IconComponent: Settings,
     label: 'Ustawienia',
     path: '/ustawienia',
-    roles: ['ADMIN', 'USER', 'GOD'],
+    roles: ['ADMIN', 'USER', 'GOD','free'],
     requiredStatus: ['active']
   }
 
