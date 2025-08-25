@@ -3,8 +3,8 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
   directUrl = env("DATABASE_URL")
 }
 
@@ -44,6 +44,9 @@ model User {
   apiKeys             UserApiKey[]
   instagramProfile    InstagramProfileCheck?       @relation(fields: [instagramProfileId], references: [id])
   linkedinProfile     LinkedInProfileCheck?        @relation(fields: [linkedinProfileId], references: [id])
+
+  // AKTUALIZACJA: Dodano relację zwrotną do nowej tabeli page_content
+  page_contents       page_content[]
 
   @@map("users")
 }
@@ -256,6 +259,9 @@ model ebooks {
   pages                           pages[]
   user                            User?            @relation(fields: [userId], references: [id])
 
+  // AKTUALIZACJA: Dodano relację zwrotną do nowej tabeli page_content
+  page_contents                   page_content[]
+
   @@index([x_amz_meta_user_id], map: "idx_ebooks_user_id")
 }
 
@@ -298,6 +304,83 @@ model pages {
   ebookId          Int?
   user             User?     @relation(fields: [userId], references: [id], map: "fk_user")
   ebook            ebooks?   @relation(fields: [ebookId], references: [id], map: "fk_ebook")
+
+  // AKTUALIZACJA: Dodano relację do nowej tabeli page_content
+  content          page_content?
+}
+
+// =================================================================
+// NOWY MODEL: przechowuje wygenerowaną zawartość dla strony
+// =================================================================
+model page_content {
+  id        String   @id @default(cuid())
+
+  // --- Relacje ---
+  pageId    String   @unique // Relacja 1-do-1 z tabelą 'pages'
+  page      pages    @relation(fields: [pageId], references: [id], onDelete: Cascade)
+
+  userId    String   // Oznaczenie użytkownika, który jest właścicielem
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  ebookId   Int?     // Opcjonalne oznaczenie e-booka
+  ebook     ebooks?  @relation(fields: [ebookId], references: [id], onDelete: SetNull)
+
+  // --- Zawartość strony (płaska struktura) ---
+
+  // Sekcja Hero
+  hero_headline     String?
+  hero_subheadline  String?
+  hero_description  String? @db.Text
+
+  // Sekcja Benefits (dla 4 elementów)
+  benefits_item_0_title String?
+  benefits_item_0_text  String?
+  benefits_item_1_title String?
+  benefits_item_1_text  String?
+  benefits_item_2_title String?
+  benefits_item_2_text  String?
+  benefits_item_3_title String?
+  benefits_item_3_text  String?
+
+  // Sekcja Testimonials (dla 3 elementów)
+  testimonials_item_0_text   String? @db.Text
+  testimonials_item_0_author String?
+  testimonials_item_0_role   String?
+  testimonials_item_1_text   String? @db.Text
+  testimonials_item_1_author String?
+  testimonials_item_1_role   String?
+  testimonials_item_2_text   String? @db.Text
+  testimonials_item_2_author String?
+  testimonials_item_2_role   String?
+
+  // Sekcja Content Chapters (dla 3 rozdziałów)
+  content_chapter_0_title      String?
+  content_chapter_0_description String?
+  content_chapter_1_title      String?
+  content_chapter_1_description String?
+  content_chapter_2_title      String?
+  content_chapter_2_description String?
+
+  // Sekcja Form
+  form_title String?
+
+  // Sekcja FAQ (dla 3 pytań)
+  faq_item_0_question String?
+  faq_item_0_answer   String? @db.Text
+  faq_item_1_question String?
+  faq_item_1_answer   String? @db.Text
+  faq_item_2_question String?
+  faq_item_2_answer   String? @db.Text
+
+  // --- Znaczniki czasu ---
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // --- Indeksy dla wydajności zapytań ---
+  @@index([pageId])
+  @@index([userId])
+  @@index([ebookId])
+  @@map("page_contents")
 }
 
 enum Role {

@@ -287,25 +287,144 @@ export default function EbookiContent() {
     }
   };
 
+  // ZAKTUALIZOWANA FUNKCJA: Tworzenie strony z automatycznym generowaniem treści AI
   const handleCreatePage = async (ebookId: number) => {
-      setCreatingPageId(ebookId);
-      setLocalError(null);
-      try {
-          const response = await fetch('/api/pages', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ ebookId: ebookId })
-          });
-          const data = await response.json();
-          if (!response.ok) {
-              throw new Error(data.error || 'Nie udało się utworzyć strony.');
-          }
-          await fetchAllEbooks(); // Odśwież listę, aby pokazać zmianę
-      } catch (err) {
-          setLocalError(err instanceof Error ? err.message : 'Wystąpił nieznany błąd.');
-      } finally {
-          setCreatingPageId(null);
+    setCreatingPageId(ebookId);
+    setLocalError(null);
+
+    try {
+      // Krok 1: Utworzenie strony w tabeli pages
+      console.log('Tworzenie strony dla e-booka ID:', ebookId);
+      const pageResponse = await fetch('/api/pages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ebookId: ebookId })
+      });
+
+      const pageData = await pageResponse.json();
+
+      if (!pageResponse.ok) {
+        throw new Error(pageData.error || 'Nie udało się utworzyć strony.');
       }
+
+      console.log('Strona utworzona pomyślnie z ID:', pageData.id);
+
+      // Krok 2: Generowanie treści AI dla utworzonej strony
+      try {
+        console.log('Rozpoczynam generowanie treści AI...');
+
+        // Timeout dla długich operacji (30 sekund)
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+        const contentResponse = await fetch('/api/pages/ai-content', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            pageId: pageData.id,
+            ebookId: ebookId
+          }),
+          signal: controller.signal
+        });
+
+        clearTimeout(timeoutId);
+
+        const contentData = await contentResponse.json();
+
+        if (!contentResponse.ok) {
+          // Strona została utworzona, ale treść AI nie została wygenerowana
+          console.error('Błąd generowania treści AI:', contentData.error);
+
+          if (contentResponse.status === 409) {
+            console.log('Treść dla tej strony już istnieje');
+          } else {
+            setLocalError(
+              `Strona została utworzona, ale automatyczne generowanie treści nie powiodło się. ` +
+              `Możesz spróbować wygenerować treść ręcznie później. ` +
+              `(Błąd: ${contentData.error})`
+            );
+          }
+        } else {
+          console.log('Treść AI wygenerowana pomyślnie!');
+          console.log(`Wygenerowano ${contentData.fieldsGenerated} pól treści`);
+        }
+
+      } catch (contentError) {
+        // Obsługa błędów sieciowych lub timeout
+        if (contentError instanceof Error) {
+          if (contentError.name === 'AbortError') {
+            console.error('Timeout podczas generowania treści AI');
+            setLocalError(
+              'Strona została utworzona, ale generowanie treści trwa zbyt długo. ' +
+              'Treść może być wciąż generowana w tle lub możesz spróbować ponownie później.'
+            );
+          } else {
+            console.error('Błąd podczas generowania treści AI:', contentError);
+            setLocalError(
+              'Strona została utworzona, ale wystąpił błąd podczas generowania treści AI. ' +
+              'Możesz spróbować wygenerować treść ręcznie później.'
+            );
+          }
+        }
+      }
+
+      // Krok 3: Odświeżenie listy e-booków
+      await fetchAllEbooks();
+
+    } catch (err) {
+      // Błąd podczas tworzenia strony (krok 1)
+      console.error('Błąd podczas tworzenia strony:', err);
+      setLocalError(err instanceof Error ? err.message : 'Wystąpił nieznany błąd podczas tworzenia strony.');
+    } finally {
+      // Zawsze resetujemy stan ładowania
+      setCreatingPageId(null);
+    }
+  };
+
+  // NOWA FUNKCJA: Ręczne generowanie treści AI dla istniejących stron
+  const handleGenerateAIContent = async (pageId: string, ebookId: number) => {
+    setLocalError(null);
+
+    try {
+      console.log('Ręczne generowanie treści AI dla strony:', pageId);
+
+      const response = await fetch('/api/pages/ai-content', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          pageId: pageId,
+          ebookId: ebookId
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Nie udało się wygenerować treści AI.');
+      }
+
+      console.log('Treść AI wygenerowana pomyślnie!');
+      await fetchAllEbooks();
+
+      // Opcjonalnie: pokazanie sukcesu
+      alert(`Treść została wygenerowana pomyślnie! Wygenerowano ${data.fieldsGenerated} pól.`);
+
+    } catch (err) {
+      console.error('Błąd podczas generowania treści AI:', err);
+      setLocalError(err instanceof Error ? err.message : 'Wystąpił błąd podczas generowania treści AI.');
+    }
+  };
+
+  // NOWA FUNKCJA: Sprawdzanie czy treść AI już istnieje
+  const checkAIContentExists = async (pageId: string): Promise<boolean> => {
+    try {
+      const response = await fetch(`/api/pages/ai-content?pageId=${pageId}`);
+      const data = await response.json();
+      return data.exists === true;
+    } catch (error) {
+      console.error('Błąd sprawdzania istnienia treści AI:', error);
+      return false;
+    }
   };
 
   const handleEbookCreated = () => {
@@ -370,14 +489,12 @@ export default function EbookiContent() {
     setPreviewImageTitle('');
     setPreviewImageName('');
     setIsConverting(false);
-    setPreviewTocItems(null); // Clear table of contents data
+    setPreviewTocItems(null);
   };
 
   const handleDownloadAsPng = async (baseFileName: string) => {
-    // Sprawdzamy, czy ref jest podłączony do elementu <img>
     if (!previewImageRef.current) return;
 
-    // Pobieramy AKTUALNY adres URL bezpośrednio z atrybutu src obrazka
     const currentImageUrl = previewImageRef.current.src;
     if (!currentImageUrl) return;
 
@@ -390,7 +507,6 @@ export default function EbookiContent() {
       await new Promise((resolve, reject) => {
         image.onload = resolve;
         image.onerror = reject;
-        // Używamy aktualnego, poprawnego adresu URL
         image.src = currentImageUrl;
       });
 
@@ -429,21 +545,13 @@ export default function EbookiContent() {
   };
 
   const handleCloseGenerator = async () => {
-  // 1. Natychmiast zamknij modal, aby UI był responsywny.
-  setIsGeneratorModalOpen(false);
-
-  // 2. Poczekaj ułamek sekundy (50 milisekund).
-  //    To daje czas na uruchomienie funkcji czyszczącej w modalu i wysłanie żądania DELETE.
-  await new Promise(resolve => setTimeout(resolve, 300));
-
-  // 3. Dopiero teraz pobierz świeżą listę ebooków.
-  fetchAllEbooks();
-
-  // 4. Zresetuj pozostałe stany.
-  setActiveFilter('all');
-  setCurrentPage(1);
-  setEditingEbookId(null);
-};
+    setIsGeneratorModalOpen(false);
+    await new Promise(resolve => setTimeout(resolve, 300));
+    fetchAllEbooks();
+    setActiveFilter('all');
+    setCurrentPage(1);
+    setEditingEbookId(null);
+  };
 
   return (
     <div className="space-y-4 sm:space-y-6">
@@ -594,9 +702,11 @@ export default function EbookiContent() {
                         {ebook.subtitle && <p className="text-sm text-gray-500 truncate">{ebook.subtitle}</p>}
                         <div className="flex items-center flex-wrap gap-x-4 gap-y-2 mt-2">
                           <span className={`text-xs px-2 py-1 rounded-full ${getStatusColor(ebook.status)}`}>{getStatusLabel(ebook.status)}</span>
+                          {/* ZAKTUALIZOWANY UI DLA PRZYCISK TWORZENIA STRONY */}
                           {creatingPageId === ebook.id ? (
                               <span className="text-xs flex items-center gap-1 bg-gray-100 text-gray-700 px-2 py-1 rounded">
-                                  <RefreshCw size={12} className="animate-spin" /> Creating...
+                                  <RefreshCw size={12} className="animate-spin" />
+                                  Creating & Generating AI...
                               </span>
                           ) : ebook.hasLandingPage ? (
                               <span className="text-xs flex items-center gap-1 bg-blue-100 text-blue-700 px-2 py-1 rounded">
@@ -609,8 +719,9 @@ export default function EbookiContent() {
                                       handleCreatePage(ebook.id);
                                   }}
                                   className="text-xs flex items-center gap-1 bg-yellow-100 text-yellow-700 px-2 py-1 rounded hover:bg-yellow-200 transition-colors"
+                                  title="Utworzy stronę i automatycznie wygeneruje treść AI"
                               >
-                                  <Plus size={12} /> Create LandingPage
+                                  <Plus size={12} /> Create LandingPage with AI
                               </button>
                           )}
                           <span className="text-xs text-gray-400">{formatDate(ebook.created_at)}</span>
@@ -681,9 +792,7 @@ export default function EbookiContent() {
             {/* Main Content: Image + Table of Contents */}
             <div className="flex-1 flex flex-row gap-6 p-4 min-h-0">
               {/* Left Side: Image */}
-              {/* Left Side: Image */}
               <div className="w-2/3 flex items-center justify-center">
-                {/* 1. Dodajemy wrapper do przycinania i stylizacji */}
                 <div
                   className="max-w-full max-h-full rounded-lg shadow-2xl overflow-hidden"
                   style={{ height: 'calc(95vh - 160px)' }}
@@ -692,7 +801,6 @@ export default function EbookiContent() {
                     ref={previewImageRef}
                     src={previewImage}
                     alt={previewImageTitle}
-                    // 2. Obraz teraz wypełnia wrapper, a object-contain dba o proporcje
                     className="w-full h-full object-contain"
                     onError={(e) => {
                       e.currentTarget.onerror = null;
@@ -739,7 +847,7 @@ export default function EbookiContent() {
                 Close
               </button>
               <button
-                onClick={() => handleDownloadAsPng(previewImageName)} // Usunięty argument 'previewImage'
+                onClick={() => handleDownloadAsPng(previewImageName)}
                 disabled={isConverting}
                 className={`flex items-center space-x-2 px-6 py-2 rounded-lg font-medium transition-colors ${
                   isConverting
@@ -777,7 +885,7 @@ export default function EbookiContent() {
         </div>
       )}
 
-      {/* Style definition for scrollbar (if it doesn't already exist in the file) */}
+      {/* Style definition for scrollbar */}
       <style jsx global>{`
         .custom-scrollbar::-webkit-scrollbar {
           width: 8px;
