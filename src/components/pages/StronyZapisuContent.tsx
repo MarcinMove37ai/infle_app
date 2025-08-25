@@ -68,20 +68,58 @@ const PagesView = () => {
   const [qrCodeData, setQrCodeData] = useState<{url: string, title: string, creator: string, logoUrl?: string} | null>(null);
   const [copyingQr, setCopyingQr] = useState(false);
   const [qrCopied, setQrCopied] = useState(false);
-  const [previewLoading, setPreviewLoading] = useState<string | null>(null);
-  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const qrCodeRef = React.useRef<SVGSVGElement>(null);
   const previewModalRef = useRef<HTMLDivElement>(null);
 
-const getAssetUrl = (coverImagePath: string | null | undefined) => {
-  if (!coverImagePath) return '';
-  if (coverImagePath.startsWith('/uploads/')) {
-    const filename = coverImagePath.substring('/uploads/'.length);
-    return `/api/assets/uploads/${filename}`;
-  }
-  return `/api/assets/uploads/${coverImagePath}`;
-};
+  const getOrCreatePreviewUrl = useCallback(async (pageId: string, existingDraftUrl?: string): Promise<string | null> => {
+    if (existingDraftUrl) {
+      return `${window.location.origin}${existingDraftUrl}`;
+    }
+
+    try {
+      setActionLoading(pageId);
+      setActionError(null);
+
+      const response = await fetch(`/api/pages/${pageId}/preview`, { method: 'POST' });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to generate preview link');
+      }
+
+      const data = await response.json();
+
+      if (data.success && data.preview_url) {
+        setPages(prevPages =>
+          prevPages.map(p =>
+            p.id === pageId ? { ...p, draft_url: data.draft_url } : p
+          )
+        );
+        return data.preview_url;
+      } else {
+        throw new Error('Invalid response from preview API');
+      }
+    } catch (error) {
+      console.error('Error in getOrCreatePreviewUrl:', error);
+      setActionError(error instanceof Error ? error.message : 'Unknown error');
+      setTimeout(() => setActionError(null), 5000);
+      return null;
+    } finally {
+      setActionLoading(null);
+    }
+  }, []);
+
+  const getAssetUrl = (coverImagePath: string | null | undefined) => {
+    if (!coverImagePath) return '';
+    if (coverImagePath.startsWith('/uploads/')) {
+      const filename = coverImagePath.substring('/uploads/'.length);
+      return `/api/assets/uploads/${filename}`;
+    }
+    return `/api/assets/uploads/${coverImagePath}`;
+  };
 
   const VideoCoverPlaceholder = ({ width, height, className = "" }: { width: number | string; height: number | string; className?: string; }) => (
     <div className={`bg-gray-100 rounded-md flex flex-col items-center justify-center border border-gray-200 ${className}`} style={{ width, height }}>
@@ -235,66 +273,24 @@ const getAssetUrl = (coverImagePath: string | null | undefined) => {
     }
   }, [isAuthLoading, fetchPages]);
 
-  const openEditor = (draftUrl: string) => {
-    if(draftUrl) window.location.href = `${window.location.origin}${draftUrl}?mode=edit`;
+  const openEditor = async (pageId: string, draftUrl?: string) => {
+    const finalUrl = await getOrCreatePreviewUrl(pageId, draftUrl);
+    if (finalUrl) {
+      const editUrl = finalUrl.split('?')[0] + '?mode=edit';
+      window.location.href = editUrl;
+    }
   };
 
-  const openPreview = async (pageId: string, existingDraftUrl?: string) => {
-      try {
-        setPreviewLoading(pageId);
-        setPreviewError(null);
+  const openPreview = async (pageId: string, draftUrl?: string) => {
+    const finalUrl = await getOrCreatePreviewUrl(pageId, draftUrl);
+    if (finalUrl) {
+      const previewUrl = new URL(finalUrl);
+      previewUrl.searchParams.set('view_mode', 'preview');
 
-        // Jeśli już ma draft_url, użyj go od razu
-        if (existingDraftUrl) {
-          const previewUrl = `${window.location.origin}${existingDraftUrl}?view_mode=preview`;
-          setPreviewNotification(true);
-          setTimeout(() => setPreviewNotification(false), 2000);
-          window.open(previewUrl, '_blank');
-          return;
-        }
-
-        // Wygeneruj/pobierz link podglądu
-        const response = await fetch(`/api/pages/${pageId}/preview`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          }
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || 'Failed to generate preview link');
-        }
-
-        const data = await response.json();
-
-        if (data.success && data.preview_url) {
-          // Aktualizuj stan strony z nowym draft_url
-          setPages(prevPages =>
-            prevPages.map(page =>
-              page.id === pageId
-                ? { ...page, draft_url: data.draft_url }
-                : page
-            )
-          );
-
-          // Otwórz podgląd
-          setPreviewNotification(true);
-          setTimeout(() => setPreviewNotification(false), 2000);
-          window.open(data.preview_url, '_blank');
-        } else {
-          throw new Error('Failed to generate preview link');
-        }
-
-      } catch (error) {
-        console.error('Error opening preview:', error);
-        setPreviewError(error instanceof Error ? error.message : 'Unknown error');
-
-        // Pokaż błąd w UI
-        setTimeout(() => setPreviewError(null), 5000);
-      } finally {
-        setPreviewLoading(null);
-      }
+      setPreviewNotification(true);
+      setTimeout(() => setPreviewNotification(false), 2000);
+      window.open(previewUrl.toString(), '_blank');
+    }
   };
 
   const handleDeletePage = (page: PageItem) => {
@@ -579,24 +575,30 @@ const getAssetUrl = (coverImagePath: string | null | undefined) => {
                         {page.url && (<div className="hidden sm:flex mt-4 items-center relative bg-gray-50 rounded-md p-2"><p className="text-xs text-gray-500 truncate flex-grow"><span className="text-gray-400 mr-1">Link:</span><span className="text-sky-600 font-medium">{page.url}</span></p><div className="flex items-center ml-2"><button onClick={() => openQrCode(page.url, page.headline || page.title, page.creator)} className="p-1 text-gray-500 hover:text-sky-600 hover:bg-gray-200 rounded transition-colors cursor-pointer mr-1" title="Generate QR Code"><QrCode className="h-4 w-4" /></button><button onClick={() => copyUrlToClipboard(page.id, page.url)} className="p-1 text-gray-500 hover:text-sky-600 hover:bg-gray-200 rounded transition-colors cursor-pointer" title="Copy link to clipboard"><Copy className="h-4 w-4" /></button></div>{copiedUrl === page.id && (<div className="absolute right-0 top-8 bg-green-100 text-green-800 px-2 py-1 rounded-md shadow-sm text-xs z-10 animate-pulse">URL copied!</div>)}</div>)}
                         <div className="mt-5 pt-3 border-t border-gray-100 flex justify-between">
                             <div className="space-x-3">
-                            <button className="text-sm text-sky-600 hover:text-sky-700 cursor-pointer bg-sky-50 hover:bg-sky-100 px-2.5 py-1.5 rounded transition-colors" onClick={() => openEditor(page.draft_url)}><Edit size={14} className="inline mr-1.5" />Edit</button>
+                            <button className="text-sm text-sky-600 hover:text-sky-700 cursor-pointer bg-sky-50 hover:bg-sky-100 px-2.5 py-1.5 rounded transition-colors" onClick={() => openEditor(page.id, page.draft_url)} disabled={actionLoading === page.id}>
+                                {actionLoading === page.id ? (
+                                <div className="inline-block h-3 w-3 animate-spin rounded-full border border-gray-500 border-t-transparent mr-1.5"></div>
+                                ) : (
+                                <Edit size={14} className="inline mr-1.5" />
+                                )}
+                                Edit
+                            </button>
                             <button
-                              className="text-sm text-gray-600 hover:text-gray-700 cursor-pointer bg-gray-50 hover:bg-gray-100 px-2.5 py-1.5 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                              onClick={() => openPreview(page.id, page.draft_url)}
-                              disabled={previewLoading === page.id}
-                              title={page.draft_url ? "Open existing preview" : "Generate and open preview"}
+                                className="text-sm text-gray-600 hover:text-gray-700 cursor-pointer bg-gray-50 hover:bg-gray-100 px-2.5 py-1.5 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                onClick={() => openPreview(page.id, page.draft_url)}
+                                disabled={actionLoading === page.id}
                             >
-                              {previewLoading === page.id ? (
+                                {actionLoading === page.id ? (
                                 <>
-                                  <div className="inline-block h-3 w-3 animate-spin rounded-full border border-gray-500 border-t-transparent mr-1.5"></div>
-                                  Loading...
+                                    <div className="inline-block h-3 w-3 animate-spin rounded-full border border-gray-500 border-t-transparent mr-1.5"></div>
+                                    Loading...
                                 </>
-                              ) : (
+                                ) : (
                                 <>
-                                  <Eye size={14} className="inline mr-1.5" />
-                                  Preview {!page.draft_url && <span className="text-xs">(new)</span>}
+                                    <Eye size={14} className="inline mr-1.5" />
+                                    Preview
                                 </>
-                              )}
+                                )}
                             </button>
                             </div>
                             <button className="text-sm text-red-600 hover:text-red-700 cursor-pointer bg-red-50 hover:bg-red-100 px-2.5 py-1.5 rounded transition-colors" onClick={() => handleDeletePage(page)} title="Delete page"><Trash2 size={14} className="inline mr-1.5" />Delete</button>
@@ -620,22 +622,21 @@ const getAssetUrl = (coverImagePath: string | null | undefined) => {
         </div>
       </div>
 
-      {previewError && (
+      {actionError && (
       <div className="fixed bottom-4 left-4 bg-red-600 text-white px-4 py-3 rounded-lg shadow-lg z-50 flex items-center max-w-md">
         <AlertTriangle className="h-5 w-5 mr-3 flex-shrink-0" />
         <div>
-          <p className="font-medium">Preview Error</p>
-          <p className="text-sm opacity-90">{previewError}</p>
+          <p className="font-medium">Action Error</p>
+          <p className="text-sm opacity-90">{actionError}</p>
         </div>
         <button
-          onClick={() => setPreviewError(null)}
+          onClick={() => setActionError(null)}
           className="ml-3 text-white hover:text-gray-200"
         >
           <X size={16} />
         </button>
       </div>
     )}
-
 
       {isDeleteModalOpen && pageToDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
