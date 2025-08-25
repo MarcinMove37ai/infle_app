@@ -295,6 +295,7 @@ model pages {
   leads            Int?      @default(0)
   type             String?   @db.VarChar(50)
   status           String    @db.VarChar(50)
+  color            String?   @db.VarChar(50)
   createdAt        DateTime? @default(now()) @db.Timestamptz(6)
   url              String?   @db.VarChar(255)
   draft_url        String?   @db.VarChar(255)
@@ -303,9 +304,9 @@ model pages {
   userId           String?   @db.VarChar(255)
   ebookId          Int?
   user             User?     @relation(fields: [userId], references: [id], map: "fk_user")
-  ebook            ebooks?   @relation(fields: [ebookId], references: [id], map: "fk_ebook")
+  ebook            ebooks?   @relation(fields: [ebookId], references: [id], map: "fk_ebook", onDelete: Cascade)
 
-  // AKTUALIZACJA: Dodano relację do nowej tabeli page_content
+  // Relacja do page_content
   content          page_content?
 }
 

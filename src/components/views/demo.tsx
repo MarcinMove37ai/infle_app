@@ -545,7 +545,7 @@ const DemoView: React.FC<DemoViewProps> = ({
           </span>
           <div className="w-full h-px bg-gray-200 my-0.5"></div>
           <span className="text-xs text-gray-600">
-            Premium Partner
+            made with inflee.app
           </span>
         </div>
       </div>

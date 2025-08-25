@@ -236,7 +236,7 @@ const getAssetUrl = (coverImagePath: string | null | undefined) => {
   }, [isAuthLoading, fetchPages]);
 
   const openEditor = (draftUrl: string) => {
-    if(draftUrl) window.location.href = `${window.location.origin}/${draftUrl}`;
+    if(draftUrl) window.location.href = `${window.location.origin}${draftUrl}?mode=edit`;
   };
 
   const openPreview = async (pageId: string, existingDraftUrl?: string) => {

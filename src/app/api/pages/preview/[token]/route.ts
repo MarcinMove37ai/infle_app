@@ -57,6 +57,7 @@ export async function GET(
         },
         user: {         // Dane użytkownika
           select: {
+            id: true,
             firstName: true,
             lastName: true,
             role: true
@@ -135,6 +136,8 @@ function mapPageContentToFrontend(page: any) {
     id: page.id,
     status: page.status,
     type: page.type || 'ebook',
+    color: page.color,
+    userId: page.user?.id,
     x_amz_meta_title: page.title,
     x_amz_meta_page_type: page.type || 'ebook',
 
