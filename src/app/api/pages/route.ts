@@ -113,7 +113,7 @@ export async function GET(request: NextRequest) {
         creator: creatorName || page.creator || 'Nieznany autor',
         supervisorCode: '',
         visits: page.visits || 0,
-        leads: page.leads || 0,
+        leads: page.leadsCount || 0,
         type: page.type || '',
         status: page.status,
         createdAt: page.createdAt?.toISOString() ?? new Date().toISOString(),

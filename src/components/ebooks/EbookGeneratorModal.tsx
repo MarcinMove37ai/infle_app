@@ -2590,44 +2590,59 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
 
   // ✅ NOWA FUNKCJA DO ZAPISU SZKICU
   const handleSaveDraft = async () => {
-    if (!currentEbookId || !title.trim()) {
-      setError('Tytuł jest wymagany, aby zapisać szkic.');
-      return;
-    }
-
-    setIsSavingDraft(true);
-    setError(null);
-
-    try {
-      const response = await fetch(`/api/ebooks/${currentEbookId}`, {
-        method: 'PUT',
-        headers: getUserHeaders(),
-        body: JSON.stringify({
-          title,
-          subtitle: subtitle.trim() || null,
-          description: description.trim() || null,
-          status: "draft"
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Błąd podczas zapisywania szkicu ebooka.');
+      if (!currentEbookId || !title.trim()) {
+        setError('Tytuł jest wymagany, aby zapisać szkic.');
+        return;
       }
 
-      const data = await response.json();
-      if (data.success) {
-        console.log(`✅ Szkic ebooka (ID: ${currentEbookId}) został zapisany i modal jest zamykany.`);
+      setIsSavingDraft(true);
+      setError(null);
+
+      try {
+        // 1. Zapisz dane ebooka
+        const response = await fetch(`/api/ebooks/${currentEbookId}`, {
+          method: 'PUT',
+          headers: getUserHeaders(),
+          body: JSON.stringify({
+            title,
+            subtitle: subtitle.trim() || null,
+            description: description.trim() || null,
+            status: "draft"
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error('Błąd podczas zapisywania szkicu ebooka.');
+        }
+
+        // 2. Sprawdź czy mockupy wymagają aktualizacji
+        const titleChanged = title !== originalTitle;
+        const subtitleChanged = subtitle !== originalSubtitle;
+
+        if (titleChanged || subtitleChanged) {
+          console.log('📸 Aktualizuję mockupy...');
+
+          // Wywołaj nowy lekki endpoint
+          const mockupResponse = await fetch(`/api/ebooks/${currentEbookId}/generate-mockups`, {
+            method: 'POST',
+            headers: getUserHeaders(),
+          });
+
+          if (mockupResponse.ok) {
+            console.log('✅ Mockupy zostały zaktualizowane');
+          } else {
+            console.warn('⚠️ Nie udało się zaktualizować mockupów');
+          }
+        }
+
         draftSavedByUser.current = true;
-        onClose(); // ✅ ZAMKNIJ MODAL PO ZAPISIE
-      } else {
-        throw new Error('Odpowiedź serwera wskazuje na błąd zapisu.');
-      }
+        onClose();
 
-    } catch (err) {
-      handleApiError(err, 'Wystąpił nieoczekiwany błąd podczas zapisywania szkicu.');
-    } finally {
-      setIsSavingDraft(false);
-    }
+      } catch (err) {
+        handleApiError(err, 'Wystąpił błąd podczas zapisywania szkicu.');
+      } finally {
+        setIsSavingDraft(false);
+      }
   };
 
   // EXTENDED renderStep1 with new fields
@@ -2849,7 +2864,8 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
           {isSavingDraft ? (
             <>
               <Loader size={20} className="animate-spin mr-3" />
-              Saving...
+              {/* âœ… DODAJ INFORMACJĘ O AKTUALIZACJI MOCKUPÓW */}
+              {(title !== originalTitle || subtitle !== originalSubtitle) ? 'Aktualizuję mockupy...' : 'Saving...'}
             </>
           ) : (
             <>
@@ -2857,7 +2873,7 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
               Save & Close
             </>
           )}
-          </button>
+        </button>
           <button
             onClick={tocGenerated ? updateEbookTitle : generateTableOfContents}
             disabled={!title.trim() || isGeneratingToc || isSaving || isScrapingUrls}
@@ -2880,7 +2896,7 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
           ) : tocGenerated ? (
             <>
               <Save size={20} className="mr-3" />
-              Save changes
+              Go to TOC
             </>
           ) : (
             <>

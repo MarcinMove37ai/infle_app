@@ -44,9 +44,8 @@ model User {
   apiKeys             UserApiKey[]
   instagramProfile    InstagramProfileCheck?       @relation(fields: [instagramProfileId], references: [id])
   linkedinProfile     LinkedInProfileCheck?        @relation(fields: [linkedinProfileId], references: [id])
-
-  // AKTUALIZACJA: Dodano relację zwrotną do nowej tabeli page_content
   page_contents       page_content[]
+  leads               leads[] // Relacja zwrotna do leadów
 
   @@map("users")
 }
@@ -258,8 +257,6 @@ model ebooks {
   sources                         EbookSource[]
   pages                           pages[]
   user                            User?            @relation(fields: [userId], references: [id])
-
-  // AKTUALIZACJA: Dodano relację zwrotną do nowej tabeli page_content
   page_contents                   page_content[]
 
   @@index([x_amz_meta_user_id], map: "idx_ebooks_user_id")
@@ -287,102 +284,105 @@ model EbookSource {
 }
 
 model pages {
-  id               String    @id @db.VarChar(255)
-  title            String    @db.VarChar(255)
+  id               String        @id @db.VarChar(255)
+  title            String        @db.VarChar(255)
   headline         String?
-  creator          String?   @db.VarChar(255)
-  visits           Int?      @default(0)
-  leads            Int?      @default(0)
-  type             String?   @db.VarChar(50)
-  status           String    @db.VarChar(50)
-  color            String?   @db.VarChar(50)
-  createdAt        DateTime? @default(now()) @db.Timestamptz(6)
-  url              String?   @db.VarChar(255)
-  draft_url        String?   @db.VarChar(255)
-  coverImage       String?   @db.VarChar(255)
-  x_amz_meta_title String?   @db.VarChar(255)
-  userId           String?   @db.VarChar(255)
+  creator          String?       @db.VarChar(255)
+  visits           Int?          @default(0)
+  leadsCount       Int?          @default(0) @map("leads")
+  type             String?       @db.VarChar(50)
+  status           String        @db.VarChar(50)
+  color            String?       @db.VarChar(50)
+  createdAt        DateTime?     @default(now()) @db.Timestamptz(6)
+  url              String?       @db.VarChar(255)
+  draft_url        String?       @db.VarChar(255)
+  coverImage       String?       @db.VarChar(255)
+  x_amz_meta_title String?       @db.VarChar(255)
+  userId           String?       @db.VarChar(255)
   ebookId          Int?
-  user             User?     @relation(fields: [userId], references: [id], map: "fk_user")
-  ebook            ebooks?   @relation(fields: [ebookId], references: [id], map: "fk_ebook", onDelete: Cascade)
-
-  // Relacja do page_content
+  user             User?         @relation(fields: [userId], references: [id], map: "fk_user")
+  ebook            ebooks?       @relation(fields: [ebookId], references: [id], map: "fk_ebook", onDelete: Cascade)
   content          page_content?
+  leads            leads[] // Relacja zwrotna do leadów
 }
 
-// =================================================================
-// NOWY MODEL: przechowuje wygenerowaną zawartość dla strony
-// =================================================================
 model page_content {
-  id        String   @id @default(cuid())
-
-  // --- Relacje ---
-  pageId    String   @unique // Relacja 1-do-1 z tabelą 'pages'
-  page      pages    @relation(fields: [pageId], references: [id], onDelete: Cascade)
-
-  userId    String   // Oznaczenie użytkownika, który jest właścicielem
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  ebookId   Int?     // Opcjonalne oznaczenie e-booka
-  ebook     ebooks?  @relation(fields: [ebookId], references: [id], onDelete: SetNull)
-
-  // --- Zawartość strony (płaska struktura) ---
-
-  // Sekcja Hero
-  hero_headline     String?
-  hero_subheadline  String?
-  hero_description  String? @db.Text
-
-  // Sekcja Benefits (dla 4 elementów)
-  benefits_item_0_title String?
-  benefits_item_0_text  String?
-  benefits_item_1_title String?
-  benefits_item_1_text  String?
-  benefits_item_2_title String?
-  benefits_item_2_text  String?
-  benefits_item_3_title String?
-  benefits_item_3_text  String?
-
-  // Sekcja Testimonials (dla 3 elementów)
-  testimonials_item_0_text   String? @db.Text
-  testimonials_item_0_author String?
-  testimonials_item_0_role   String?
-  testimonials_item_1_text   String? @db.Text
-  testimonials_item_1_author String?
-  testimonials_item_1_role   String?
-  testimonials_item_2_text   String? @db.Text
-  testimonials_item_2_author String?
-  testimonials_item_2_role   String?
-
-  // Sekcja Content Chapters (dla 3 rozdziałów)
-  content_chapter_0_title      String?
+  id                          String   @id @default(cuid())
+  pageId                      String   @unique
+  page                        pages    @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  userId                      String
+  user                        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ebookId                     Int?
+  ebook                       ebooks?  @relation(fields: [ebookId], references: [id], onDelete: SetNull)
+  hero_headline               String?
+  hero_subheadline            String?
+  hero_description            String?  @db.Text
+  benefits_item_0_title       String?
+  benefits_item_0_text        String?
+  benefits_item_1_title       String?
+  benefits_item_1_text        String?
+  benefits_item_2_title       String?
+  benefits_item_2_text        String?
+  benefits_item_3_title       String?
+  benefits_item_3_text        String?
+  testimonials_item_0_text    String?  @db.Text
+  testimonials_item_0_author  String?
+  testimonials_item_0_role    String?
+  testimonials_item_1_text    String?  @db.Text
+  testimonials_item_1_author  String?
+  testimonials_item_1_role    String?
+  testimonials_item_2_text    String?  @db.Text
+  testimonials_item_2_author  String?
+  testimonials_item_2_role    String?
+  content_chapter_0_title     String?
   content_chapter_0_description String?
-  content_chapter_1_title      String?
+  content_chapter_1_title     String?
   content_chapter_1_description String?
-  content_chapter_2_title      String?
+  content_chapter_2_title     String?
   content_chapter_2_description String?
+  form_title                  String?
+  faq_item_0_question         String?
+  faq_item_0_answer           String?  @db.Text
+  faq_item_1_question         String?
+  faq_item_1_answer           String?  @db.Text
+  faq_item_2_question         String?
+  faq_item_2_answer           String?  @db.Text
+  createdAt                   DateTime @default(now())
+  updatedAt                   DateTime @updatedAt
 
-  // Sekcja Form
-  form_title String?
-
-  // Sekcja FAQ (dla 3 pytań)
-  faq_item_0_question String?
-  faq_item_0_answer   String? @db.Text
-  faq_item_1_question String?
-  faq_item_1_answer   String? @db.Text
-  faq_item_2_question String?
-  faq_item_2_answer   String? @db.Text
-
-  // --- Znaczniki czasu ---
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // --- Indeksy dla wydajności zapytań ---
   @@index([pageId])
   @@index([userId])
   @@index([ebookId])
   @@map("page_contents")
 }
+
+// =================================================================
+// NOWY MODEL: przechowuje zebrane leady
+// =================================================================
+model leads {
+  id              Int       @id @default(autoincrement()) @map("lead_id")
+  pageId          String    @map("page_id") // Zmieniono na String, aby pasowało do `pages.id`
+  pageName        String?   @map("page_name")
+  leadType        String?   @map("lead_type")
+  userId          String?   @map("user_id") // Zmieniono na String, aby pasowało do `User.id`
+  supervisorCode  String?   @map("supervisor_code") @db.VarChar(255)
+  leadDate        DateTime? @map("lead_date") @db.Date
+  leadTime        DateTime? @map("lead_time") @db.Time
+  leadName        String    @map("lead_name")
+  leadEmail       String    @map("lead_email")
+  leadPhone       String?   @map("lead_phone")
+  leadTimestamp   DateTime? @default(now()) @map("lead_timestamp") @db.Timestamptz
+  buyNow          Boolean?  @default(false) @map("buy_now")
+  status          String?   @default("b_contact")
+  comment         String?
+
+  // Definiowanie relacji z innymi tabelami
+  page            pages     @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  user            User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@map("leads")
+}
+
 
 enum Role {
   admin
