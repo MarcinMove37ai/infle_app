@@ -7,7 +7,7 @@ import { prisma } from '@/lib/prisma';
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     // 1. Weryfikacja sesji i uprawnień użytkownika
@@ -16,7 +16,9 @@ export async function PATCH(
       return NextResponse.json({ error: 'Brak autoryzacji' }, { status: 401 });
     }
 
-    const pageId = params.id;
+    // Await params to get the actual parameters
+    const resolvedParams = await params;
+    const pageId = resolvedParams.id;
     const changes = await request.json();
     const userId = session.user.id;
     const userRole = (session.user as any)?.role || 'USER';
