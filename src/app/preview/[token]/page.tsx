@@ -17,6 +17,7 @@ interface PageData {
   type: string;
   color?: string; // Dodane dla kolorystyki
   userId?: string; // Dodane dla sprawdzania właściciela
+  url?: string;
   x_amz_meta_title: string;
   x_amz_meta_page_type: string;
   s3_file_key: string;
@@ -434,55 +435,39 @@ const PreviewPageContent = () => {
   };
 
   // Funkcja pomocnicza do określania możliwości zmiany statusu
-  const getStatusChangeInfo = () => {
+  // src/app/preview/[token]/page.tsx
+
+// Zamień całą starą funkcję na tę poniżej:
+const getStatusChangeInfo = () => {
+    // 1. Podstawowa weryfikacja - bez zmian
     if (!pageData || status !== 'authenticated' || !session?.user || isPreviewMode) {
       return { enabled: false, buttonText: '', newStatus: null };
     }
 
+    // 2. Kluczowa zmiana: Sprawdzamy uprawnienia do edycji zamiast roli
+    const canUserEdit = canEdit();
     const currentStatus = pageData.status || 'draft';
-    const userRole = (session.user as any)?.role?.toUpperCase() || 'USER';
-    const isAdmin = userRole === 'ADMIN';
-    const isUser = userRole === 'USER';
 
-    // Dla administratorów i zwykłych użytkowników w trybie edycji
-    if (isTextEditMode) {
-      if (isAdmin) {
-        if (currentStatus === 'draft') {
-          return { enabled: true, buttonText: 'Publikuj', newStatus: 'published' };
-        } else if (currentStatus === 'pending') {
-          return { enabled: true, buttonText: 'Akceptuj', newStatus: 'published' };
-        } else if (currentStatus === 'published') {
-          return { enabled: false, buttonText: 'Tryb edycji', newStatus: null };
-        }
-      } else if (isUser) {
-        if (currentStatus === 'draft') {
-          return { enabled: true, buttonText: 'Do akceptacji', newStatus: 'pending' };
-        } else {
-          return { enabled: false, buttonText: 'W trybie edycji', newStatus: null };
-        }
-      }
+    // Jeśli użytkownik nie ma uprawnień do edycji, nic nie może zrobić
+    if (!canUserEdit) {
+      return { enabled: false, buttonText: 'Brak uprawnień', newStatus: null };
     }
 
-    // Standardowa logika dla przypadków, gdy nie jesteśmy w trybie edycji
-    if (isAdmin) {
-      if (currentStatus === 'draft') {
+    // 3. Uproszczona logika dla każdego, kto może edytować
+    switch (currentStatus) {
+      case 'draft':
+      case 'pending':
+        // Jeśli strona jest wersją roboczą lub czeka na akceptację, można ją opublikować
         return { enabled: true, buttonText: 'Publikuj', newStatus: 'published' };
-      } else if (currentStatus === 'pending') {
-        return { enabled: true, buttonText: 'Akceptuj', newStatus: 'published' };
-      } else if (currentStatus === 'published') {
-        return { enabled: true, buttonText: 'Edytuj', newStatus: 'draft' };
-      }
-    } else if (isUser) {
-      if (currentStatus === 'draft') {
-        return { enabled: true, buttonText: 'Do akceptacji', newStatus: 'pending' };
-      } else if (currentStatus === 'pending') {
-        return { enabled: false, buttonText: 'Oczekuje na akceptację', newStatus: null };
-      } else if (currentStatus === 'published') {
-        return { enabled: true, buttonText: 'Edytuj', newStatus: 'draft' };
-      }
-    }
 
-    return { enabled: false, buttonText: 'Zmień status', newStatus: null };
+      case 'published':
+        // Jeśli strona jest opublikowana, można ją cofnąć do edycji
+        return { enabled: true, buttonText: 'Cofnij do edycji', newStatus: 'draft' };
+
+      default:
+        // Domyślny stan, na wszelki wypadek
+        return { enabled: false, buttonText: 'Zmień status', newStatus: null };
+    }
   };
 
   // Obsługa zmiany kolorystyki
@@ -679,17 +664,26 @@ const PreviewPageContent = () => {
 
       // Jeśli publikujemy stronę, generujemy publiczny URL
       if (status === 'published') {
-        const tokenWithoutDigits = token.replace(/\d{3}$/, '');
-        const processedTitle = pageData.x_amz_meta_title
-          ? pageData.x_amz_meta_title.toLowerCase()
-              .replace(/[^\w\s-]/gi, '')
-              .replace(/-*\d+(-*)$/, '')
-              .replace(/\s+/g, '-')
-              .replace(/-+/g, '-')
-              .replace(/^-+|-+$/g, '')
-          : '';
+        // 1. Pobierz nazwę autora i tytuł
+        const creatorName = pageData.author_display_name || 'autor';
+        const title = pageData.x_amz_meta_title || 'ebook';
 
-        const pathUrl = `/p/${tokenWithoutDigits}${processedTitle ? `/${processedTitle}` : ''}`;
+        // 2. "Wyczyść" obie wartości na potrzeby linku (małe litery, myślniki, bez polskich znaków)
+        const sanitize = (text: string) => text
+          .toLowerCase().trim()
+          .replace(/ł/g, 'l').replace(/ą/g, 'a').replace(/ę/g, 'e')
+          .replace(/ś/g, 's').replace(/ć/g, 'c').replace(/ń/g, 'n')
+          .replace(/ó/g, 'o').replace(/ż/g, 'z').replace(/ź/g, 'z')
+          .replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+
+        const sanitizedCreator = sanitize(creatorName);
+        const sanitizedTitle = sanitize(title);
+
+        // 3. Stwórz unikalny indeks z 3 ostatnich znaków ID strony
+        const uniqueIndex = pageData.id.slice(-3);
+
+        // 4. Zbuduj finalny URL według nowego wzoru
+        const pathUrl = `/ebookpage/by-${sanitizedCreator}/${sanitizedTitle}-${uniqueIndex}`;
         const fullUrl = `${window.location.origin}${pathUrl}`;
 
         updateData.url = fullUrl;
@@ -708,10 +702,13 @@ const PreviewPageContent = () => {
       }
 
       const updatedPage = await response.json();
-      setPageData(updatedPage || {
-        ...pageData,
-        status: status,
-        url: updateData.url
+      setPageData(prevData => {
+          if (!prevData) return null;
+          return {
+              ...prevData,
+              status: status,
+              url: updatedPage.url || prevData.url,
+          };
       });
 
       let statusText = '';
