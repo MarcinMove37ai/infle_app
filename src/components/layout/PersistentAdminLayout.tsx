@@ -12,10 +12,10 @@ import {
   X,
   Power,
   AlertTriangle,
+  UserCheck,
   Lock,
   BookOpen,
   TrendingUp,
-  UserCheck,
   BarChart3,
   FileSignature,
   Settings
@@ -190,6 +190,13 @@ const menuItems: MenuItem[] = [
     IconComponent: FileSignature,
     label: 'Strony Zapisu',
     path: '/strony-zapisu',
+    roles: ['ADMIN', 'USER', 'GOD', 'free'],
+    requiredStatus: ['active']
+  },
+  {
+    IconComponent: UserCheck,
+    label: 'Leady',
+    path: '/leady',
     roles: ['ADMIN', 'USER', 'GOD', 'free'],
     requiredStatus: ['active']
   },

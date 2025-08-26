@@ -1,4 +1,6 @@
 // src/app/api/ebooks/[ebookId]/export-pdf/route.ts
+//zmiany w formacie konieczne również w src/lib/pdfGenerator.ts (user side)
+
 import { NextRequest, NextResponse } from 'next/server';
 import sharp from 'sharp';
 import { getServerSession } from 'next-auth/next';

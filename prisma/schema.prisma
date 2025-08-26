@@ -361,7 +361,7 @@ model page_content {
 // =================================================================
 model leads {
   id              Int       @id @default(autoincrement()) @map("lead_id")
-  pageId          String    @map("page_id") // Zmieniono na String, aby pasowało do `pages.id`
+  pageId          String?   @map("page_id") // Zmieniono na String, aby pasowało do `pages.id`
   pageName        String?   @map("page_name")
   leadType        String?   @map("lead_type")
   userId          String?   @map("user_id") // Zmieniono na String, aby pasowało do `User.id`
@@ -377,7 +377,7 @@ model leads {
   comment         String?
 
   // Definiowanie relacji z innymi tabelami
-  page            pages     @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  page            pages?     @relation(fields: [pageId], references: [id], onDelete: SetNull)
   user            User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@map("leads")

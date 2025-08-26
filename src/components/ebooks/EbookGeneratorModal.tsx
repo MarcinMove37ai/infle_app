@@ -2620,7 +2620,7 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
         const subtitleChanged = subtitle !== originalSubtitle;
 
         if (titleChanged || subtitleChanged) {
-          console.log('📸 Aktualizuję mockupy...');
+          console.log('📸 Saving...');
 
           // Wywołaj nowy lekki endpoint
           const mockupResponse = await fetch(`/api/ebooks/${currentEbookId}/generate-mockups`, {
@@ -2865,7 +2865,7 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
             <>
               <Loader size={20} className="animate-spin mr-3" />
               {/* âœ… DODAJ INFORMACJĘ O AKTUALIZACJI MOCKUPÓW */}
-              {(title !== originalTitle || subtitle !== originalSubtitle) ? 'Aktualizuję mockupy...' : 'Saving...'}
+              {(title !== originalTitle || subtitle !== originalSubtitle) ? 'Saving...' : 'Saving...'}
             </>
           ) : (
             <>

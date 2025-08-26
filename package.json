@@ -14,12 +14,17 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.57.0",
+    "@headlessui/react": "^2.2.7",
     "@prisma/client": "^6.9.0",
     "@react-pdf/renderer": "^4.3.0",
     "@sparticuz/chromium": "^132.0.0",
+    "@types/jspdf": "^2.0.0",
     "axios": "^1.11.0",
     "bcryptjs": "^3.0.2",
     "jsdom": "^26.1.0",
+    "jspdf": "^3.0.2",
+    "jspdf-autotable": "^5.0.2",
+    "jspdf-fontkit": "^0.0.7",
     "lucide-react": "^0.513.0",
     "next": "15.3.3",
     "next-auth": "^4.24.11",
@@ -32,7 +37,8 @@
     "qrcode.react": "^4.2.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "resend": "^4.5.2"
+    "resend": "^4.5.2",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",

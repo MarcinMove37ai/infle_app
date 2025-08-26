@@ -417,12 +417,8 @@ const DemoView: React.FC<DemoViewProps> = ({
 
   // Funkcja do pobierania ebooka
   const handleDownloadEbook = async () => {
-    if (isPreviewMode) {
-      return; // Nie wykonuj akcji w trybie podglądu
-    }
-
-    if (!pageId || !pageContent.s3_file_key) {
-      setDownloadError("Brak informacji potrzebnych do pobrania ebooka");
+    if (isPreviewMode || !pageId) {
+      setDownloadError("Akcja niedostępna w trybie podglądu.");
       return;
     }
 
@@ -430,7 +426,6 @@ const DemoView: React.FC<DemoViewProps> = ({
       setIsDownloading(true);
       setDownloadError(null);
 
-      // Wywołanie API do pobrania ebooka
       const response = await fetch(`/api/download-ebook`, {
         method: 'POST',
         headers: {
@@ -438,28 +433,44 @@ const DemoView: React.FC<DemoViewProps> = ({
         },
         body: JSON.stringify({
           pageId: pageId,
-          s3Key: pageContent.s3_file_key,
-          email: email // wysyłamy email użytkownika do logowania pobrań
+          email: email, // Przesyłamy email leada do weryfikacji
         }),
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Wystąpił problem podczas pobierania ebooka');
+        // Jeśli serwer zwrócił błąd w formacie JSON
+        if (response.headers.get('content-type')?.includes('application/json')) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Wystąpił problem podczas przygotowywania pliku.');
+        } else {
+            // Jeśli to inny błąd serwera
+            throw new Error(`Błąd serwera: ${response.status} ${response.statusText}`);
+        }
       }
 
-      // Pobierz url do pobierania
-      const data = await response.json();
+      // Otrzymaliśmy plik PDF, teraz musimy zainicjować jego pobieranie
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
 
-      if (data.downloadUrl) {
-        // Inicjujemy pobieranie pliku w przeglądarce
-        window.location.href = data.downloadUrl;
-
-        // Oznaczamy, że pobieranie się rozpoczęło
-        setDownloadStarted(true);
-      } else {
-        throw new Error('Nie otrzymano adresu URL do pobrania');
+      // Spróbuj odczytać nazwę pliku z nagłówka
+      const contentDisposition = response.headers.get('content-disposition');
+      let fileName = 'ebook.pdf';
+      if (contentDisposition) {
+        const fileNameMatch = contentDisposition.match(/filename="(.+)"/);
+        if (fileNameMatch && fileNameMatch.length === 2) {
+          fileName = fileNameMatch[1];
+        }
       }
+
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+
+      setDownloadStarted(true);
 
     } catch (error) {
       console.error('Błąd podczas pobierania ebooka:', error);
