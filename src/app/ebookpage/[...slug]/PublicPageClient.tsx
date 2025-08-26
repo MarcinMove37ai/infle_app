@@ -1,6 +1,6 @@
 "use client";
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import DemoView, { colorSchemes } from '@/components/views/demo';
 import DemoVideo from '@/components/views/demoVideo';
 
@@ -148,6 +148,25 @@ const PublicPageClient = ({ initialPageData }: { initialPageData: any }) => {
   if (!initialPageData) {
     return <div>Błąd: Nie udało się załadować danych strony.</div>;
   }
+
+  // ====================================================================================
+  // ✅ POCZĄTEK ZMIAN: DODANIE LOGIKI ZLICZANIA WIZYT
+  // ====================================================================================
+  useEffect(() => {
+    // Uruchamiamy zliczanie tylko w środowisku produkcyjnym, aby nie zliczać wizyt deweloperskich
+    if (initialPageData && initialPageData.id) { // Usunięto warunek 'process.env.NODE_ENV'
+      fetch('/api/pages/visits', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ pageId: initialPageData.id }),
+      }).catch(err => console.error("Błąd podczas zliczania wizyty:", err));
+    }
+  }, [initialPageData]); // Tablica zależności sprawia, że efekt uruchomi się tylko raz po załadowaniu danych
+  // ====================================================================================
+  // ✅ KONIEC ZMIAN
+  // ====================================================================================
 
   const pageContent = formatPageContent(initialPageData);
   const pageType = initialPageData.type || 'ebook';

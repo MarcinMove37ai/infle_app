@@ -83,21 +83,5 @@ export default async function PublicPage({ params }: PublicPageProps) {
   if (!pageData) {
     notFound();
   }
-
-  // Zliczanie odwiedzin (bez zmian)
-  if (process.env.NODE_ENV === 'production') {
-    try {
-      const apiUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/api/pages/visits`;
-      fetch(apiUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pageId: pageData.id }),
-        cache: 'no-store',
-      }).catch(console.error);
-    } catch (error) {
-      console.error('Nie udało się wywołać API licznika odwiedzin:', error);
-    }
-  }
-
   return <PublicPageClient initialPageData={JSON.parse(JSON.stringify(pageData))} />;
 }

@@ -1,3 +1,5 @@
+//src/app/api/pages/visits/route.ts
+
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma'; // Zakładam, że używasz Prisma
 
