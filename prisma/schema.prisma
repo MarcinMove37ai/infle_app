@@ -29,8 +29,8 @@ model User {
   instagramUsername   String?
   authorDisplayName   String?
   authorLogoUrl       String?
-  imageAiModel        String?                      @default("dall-e-3")
-  imageAiProvider     String?                      @default("openai")
+  imageAiModel        String?                      @default("imagen-3")
+  imageAiProvider     String?                      @default("google")
   textAiModel         String?                      @default("claude-3-haiku")
   textAiProvider      String?                      @default("anthropic")
   role                Role                         @default(free)
