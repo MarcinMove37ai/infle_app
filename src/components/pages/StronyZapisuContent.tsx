@@ -388,7 +388,6 @@ const PagesView = () => {
 
   return (
     <div className="space-y-6">
-      <div className="p-4">
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-700 p-4 mb-6 rounded-md">
             <p>{error}</p>
@@ -396,21 +395,26 @@ const PagesView = () => {
         )}
 
         <div className="flex flex-col lg:flex-row gap-4 items-stretch lg:items-center lg:justify-end pb-3 mb-5">
-            <form onSubmit={handleSearch} className="flex gap-2 lg:flex-1 lg:max-w-md lg:justify-end">
-                <input
-                    type="text"
-                    placeholder="Search pages..."
-                    className="flex-1 lg:min-w-0 px-4 py-2 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:border-gray-400"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                />
+            <form onSubmit={handleSearch} className="flex gap-2 lg:flex-1 lg:max-w-md lg:justify-end min-w-0">
+                <div className="relative flex-1 lg:min-w-0">
+                    <input
+                        type="text"
+                        placeholder="Search pages..."
+                        className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:border-gray-400"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                </div>
+
                 <button
                     type="submit"
                     disabled={isLoading}
-                    className="px-6 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors disabled:opacity-50 whitespace-nowrap cursor-pointer disabled:cursor-not-allowed"
+                    className="hidden lg:block px-3 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors disabled:opacity-50 whitespace-nowrap cursor-pointer disabled:cursor-not-allowed"
                 >
                     Search
                 </button>
+
                 {searchTerm && (
                     <button
                         type="button"
@@ -461,8 +465,8 @@ const PagesView = () => {
             >
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-orange-600 text-sm font-medium">Drafts</p>
-                  <p className="text-xl sm:text-2xl font-bold text-orange-900">{stats.draft}</p>
+                  <p className="text-orange-600 text-sm font-medium">Pending</p>
+                  <p className="text-xl sm:text-2xl font-bold text-orange-900">{stats.pending}</p>
                 </div>
                 <Edit className="text-orange-600" size={28} />
               </div>
@@ -470,7 +474,7 @@ const PagesView = () => {
           </div>
         )}
 
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div className="bg-white rounded-none border-0 sm:rounded-xl sm:border border-gray-200 overflow-hidden -mx-4 sm:mx-0">
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50">
                 <h2 className="text-lg font-semibold text-gray-800">Your Pages</h2>
                 {stats && stats.total > 0 && (
@@ -496,113 +500,185 @@ const PagesView = () => {
                 ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-4">
                     {pages.map(page => (
-                    <div key={page.id} className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden hover:shadow-md transition-shadow duration-200">
+                    <div key={page.id} className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden hover:shadow-md transition-shadow duration-200 flex flex-col">
+                        {/* Pasek statusu - bez zmian */}
                         <div className={`h-2 ${page.status === 'published' ? 'bg-green-500' : page.status === 'pending' ? 'bg-amber-400' : 'bg-gray-400'}`}></div>
-                        <div className="p-5">
-                        <div className="flex mb-4">
-                            <div className="flex justify-between items-start w-full">
-                            <h3 className="font-medium text-gray-900 text-lg line-clamp-2 max-w-[65%] min-h-[3rem]">{page.title}</h3>
-                            <div className="flex flex-nowrap space-x-1.5 min-w-fit ml-2">
-                                <span className={`text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap ${page.type === 'ebook' ? 'bg-indigo-100 text-indigo-700' : 'bg-purple-100 text-purple-700'}`}>{page.type === 'ebook' ? 'e-book' : 'sales'}</span>
-                                <span className={`text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap ${page.status === 'published' ? 'bg-green-100 text-green-700' : page.status === 'pending' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-700'}`}>{page.status}</span>
+
+                        {/* === FINALNY UKŁAD MOBILNY === */}
+                        <div className="block sm:hidden p-4 flex flex-col flex-grow">
+                            {/* Nagłówek */}
+                            <div>
+                                <h3 className="font-semibold text-gray-900 text-lg leading-tight line-clamp-3">{page.title}</h3>
+                                {page.subtitle && <p className="text-sm text-gray-500 mt-1 line-clamp-2">{page.subtitle}</p>}
                             </div>
-                            </div>
-                        </div>
-                        <div className="border-t border-gray-100 mb-4"></div>
-                        <div className="block sm:flex sm:gap-4">
-                            <div className="flex flex-row gap-1 sm:hidden mb-4">
-                            <div className="w-3/5">
-                                <div className="bg-gray-50 rounded-lg p-3 space-y-2.5">
-                                <div className="flex items-center"><div className="w-20 text-gray-400 text-xs whitespace-nowrap">Subtitle:</div><div className="text-gray-600 font-medium flex-1 truncate text-xs">{page.subtitle || ""}</div></div>
-                                <div className="flex items-center"><div className="w-20 text-gray-400 text-xs whitespace-nowrap">Author:</div><div className="text-gray-800 font-medium flex-1 truncate text-xs">{page.creator}</div></div>
-                                <div className="border-t border-gray-200 my-1.5"></div>
-                                {page.supervisorCode && !isGodRole && (<div className="flex items-center"><div className="w-20 text-gray-400 text-xs whitespace-nowrap">Supervisor:</div><div className="text-gray-800 font-medium flex-1 truncate text-xs">{getSupervisorDescription(page.supervisorCode)}</div></div>)}
-                                <div className="flex items-center"><div className="w-20 text-gray-400 text-xs whitespace-nowrap">Date:</div><div className="text-gray-800 flex-1 truncate text-xs">{formatDate(page.createdAt)}</div></div>
-                                {page.isOwnedByUser && page.videoPassword && (<><div className="border-t border-gray-200 my-1.5"></div><div className="flex items-center"><div className="w-20 text-gray-400 text-xs whitespace-nowrap flex items-center"><Lock size={12} className="mr-1 text-amber-500" /> Password:</div><div className="text-amber-600 font-medium flex-1 truncate text-xs">{page.videoPassword}</div></div></>)}
+
+                            <div className="border-t border-gray-200 my-4"></div>
+
+                            {/* Główna treść: Grafika po lewej, Info po prawej */}
+                            <div className="flex gap-2">
+                                <div className="w-3/5 flex-shrink-0">
+                                    {page.coverImage ? (
+                                        <img src={getAssetUrl(page.coverImage)} alt={`Cover for ${page.title}`} className="w-full h-auto object-contain cursor-pointer rounded-md max-h-48" onClick={() => openCoverPreview(getAssetUrl(page.coverImage), page.headline || page.title, page.subtitle)}/>
+                                    ) : (
+                                        <VideoCoverPlaceholder width="100%" height="160px" />
+                                    )}
                                 </div>
-                                {page.url && (<div className="mt-2.5 flex items-center relative bg-gray-50 rounded-lg p-3"><p className="text-xs text-gray-500 truncate w-full"><span className="text-gray-400 mr-1 hidden sm:inline">Link:</span><span className="text-sky-600 font-medium truncate">{page.url}</span></p><div className="flex items-center ml-2"><button onClick={() => openQrCode(page.url, page.headline || page.title, page.creator)} className="flex-shrink-0 p-1 text-gray-500 hover:text-sky-600 hover:bg-gray-200 rounded transition-colors cursor-pointer mr-1" title="Generate QR Code"><QrCode className="h-4 w-4" /></button><button onClick={() => copyUrlToClipboard(page.id, page.url)} className="flex-shrink-0 p-1 text-gray-500 hover:text-sky-600 hover:bg-gray-200 rounded transition-colors cursor-pointer" title="Copy link to clipboard"><Copy className="h-4 w-4" /></button></div>{copiedUrl === page.id && (<div className="absolute right-0 -top-7 bg-green-100 text-green-800 px-2 py-1 rounded-md shadow-sm text-xs z-10 animate-pulse">URL copied!</div>)}</div>)}
-                            </div>
-                            <div className="w-2/5 flex items-center p-0">
-                                {page.coverImage ? (
-                                    <img
-                                        src={getAssetUrl(page.coverImage)}
-                                        alt={`Cover for ${page.title}`}
-                                        className="w-full h-auto object-cover cursor-pointer rounded-md"
-                                        style={{ maxHeight: `${coverImageSize * 0.7}px`, objectFit: 'contain' }}
-                                        onClick={() => openCoverPreview(getAssetUrl(page.coverImage), page.headline || page.title, page.subtitle)}
-                                    />
-                                ) : (
-                                    <VideoCoverPlaceholder width="100%" height={`${coverImageSize * 0.7}px`} />
-                                )}
+                                <div className="w-2/5 flex flex-col justify-center gap-2">
+
+                                <div className="bg-blue-50 rounded-lg p-2 border border-blue-100">
+                                    <p className="text-blue-600 text-lg font-semibold">{page.visits}</p>
+                                    <p className="text-blue-500 text-xs uppercase tracking-wide font-medium">visits</p>
+                                </div>
+                                <div className="bg-green-50 rounded-lg p-2 border border-green-100">
+                                    <p className="text-green-600 text-lg font-semibold">{page.leads}</p>
+                                    <p className="text-green-500 text-xs uppercase tracking-wide font-medium">leads</p>
+                                </div>
                             </div>
                             </div>
-                            <div className="hidden sm:block sm:w-3/5 sm:space-y-4 sm:pr-4">
-                            <div className="bg-gray-50 rounded-lg p-3 space-y-2.5">
-                                <div className="flex items-center text-sm"><div className="w-24 text-gray-400">Subtitle:</div><div className="text-gray-800 font-medium flex-1 truncate">{page.subtitle || ""}</div></div>
-                                <div className="flex items-center text-sm"><div className="w-24 text-gray-400">Author:</div><div className="text-gray-800 font-medium flex-1 truncate">{page.creator}</div></div>
-                                <div className="border-t border-gray-200 my-1.5"></div>
-                                {page.supervisorCode && !isGodRole && (<div className="flex items-center text-sm"><div className="w-24 text-gray-400">Supervisor:</div><div className="text-gray-800 font-medium flex-1 truncate">{getSupervisorDescription(page.supervisorCode)}</div></div>)}
-                                <div className="flex items-center text-sm"><div className="w-24 text-gray-400">Created At:</div><div className="text-gray-800 flex-1 truncate">{formatDate(page.createdAt)}</div></div>
-                                {page.isOwnedByUser && page.videoPassword && (<><div className="border-t border-gray-200 my-1.5"></div><div className="flex items-center text-sm"><div className="w-24 text-gray-400 flex items-center"><Lock size={14} className="mr-1.5 text-amber-500" /> Password:</div><div className="text-amber-600 font-medium flex-1 truncate">{page.videoPassword}</div></div></>)}
+
+                            {/* Metadane */}
+                            <div className="bg-gray-50 rounded-lg p-3 mt-4 space-y-2 border border-gray-100">
+                                <dl className="text-xs space-y-2">
+                                    <div className="flex"><dt className="w-1/3 text-gray-500">Author:</dt><dd className="w-2/3 font-medium text-gray-800 truncate">{page.creator}</dd></div>
+                                    <div className="border-t border-gray-200"></div>
+                                    <div className="flex pt-1"><dt className="w-1/3 text-gray-500">Created:</dt><dd className="w-2/3 font-medium text-gray-800 truncate">{formatDate(page.createdAt)}</dd></div>
+                                    {page.supervisorCode && !isGodRole && <div className="flex"><dt className="w-1/3 text-gray-500">Supervisor:</dt><dd className="w-2/3 font-medium text-gray-800 truncate">{getSupervisorDescription(page.supervisorCode)}</dd></div>}
+                                    {page.isOwnedByUser && page.videoPassword && <div className="flex items-center"><dt className="w-1/3 text-gray-500 flex items-center"><Lock size={12} className="mr-1 text-amber-500"/>Password:</dt><dd className="w-2/3 font-medium text-amber-600 truncate">{page.videoPassword}</dd></div>}
+                                </dl>
                             </div>
-                            <div className="flex gap-3">
-                                <div className="flex-1 bg-blue-50 rounded-lg p-3 border border-blue-100 hover:border-blue-200 transition-colors"><p className="text-blue-600 text-xl font-semibold">{page.visits}</p><p className="text-blue-500 text-xs uppercase tracking-wide font-medium">visits</p></div>
-                                <div className="flex-1 bg-green-50 rounded-lg p-3 border border-green-100 hover:border-green-200 transition-colors"><p className="text-green-600 text-xl font-semibold">{page.leads}</p><p className="text-green-500 text-xs uppercase tracking-wide font-medium">leads</p></div>
+
+                            {/* Strefa linku/statusu (analogiczna do desktop) */}
+                            <div className="mt-auto pt-4">
+                                <div className="bg-gray-50 rounded-lg p-2.5 border border-gray-100">
+                                    {page.url && (
+                                        <div className="flex items-center relative">
+                                            <p className="text-xs text-gray-500 truncate flex-grow"><span className="text-sky-600 font-medium">{page.url}</span></p>
+                                            <div className="flex items-center ml-2 flex-shrink-0">
+                                                <button onClick={() => openQrCode(page.url, page.headline || page.title, page.creator)} className="p-1 text-gray-500 hover:text-sky-600 rounded" title="Generate QR Code"><QrCode className="h-4 w-4" /></button>
+                                                <button onClick={() => copyUrlToClipboard(page.id, page.url)} className="p-1 text-gray-500 hover:text-sky-600 rounded" title="Copy link"><Copy className="h-4 w-4" /></button>
+                                            </div>
+                                            {copiedUrl === page.id && <div className="absolute right-0 -top-7 bg-green-100 text-green-800 px-2 py-1 rounded-md text-xs z-10">Copied!</div>}
+                                        </div>
+                                    )}
+                                    {page.status === 'pending' && <div className="text-amber-600 flex items-center text-sm mt-2"><Clock size={16} className="mr-2" />Awaiting moderation</div>}
+                                </div>
                             </div>
-                            {page.status === 'pending' && (<div className="text-amber-500 flex items-center text-sm"><Clock size={16} className="mr-2" />Awaiting publication</div>)}
-                            </div>
-                            <div className="hidden sm:flex sm:w-2/5 sm:items-center sm:justify-center">
-                                {page.coverImage ? (
-                                    <img
-                                        src={getAssetUrl(page.coverImage)}
-                                        alt={`Cover for ${page.title}`}
-                                        style={{ maxWidth: `${coverImageSize * 0.75}px`, maxHeight: `${coverImageSize}px`, objectFit: 'contain' }}
-                                        className="mx-auto rounded-md cursor-pointer"
-                                        onClick={() => openCoverPreview(getAssetUrl(page.coverImage), page.headline || page.title, page.subtitle)}
-                                    />
-                                ) : (
-                                    <VideoCoverPlaceholder width={`${coverImageSize * 0.75}px`} height={`${coverImageSize}px`} className="mx-auto" />
-                                )}
-                            </div>
-                            <div className="block sm:hidden w-full">
-                            <div className="flex gap-3">
-                                <div className="flex-1 bg-blue-50 rounded-lg p-3 border border-blue-100 hover:border-blue-200 transition-colors"><p className="text-blue-600 text-xl font-semibold">{page.visits}</p><p className="text-blue-500 text-xs uppercase tracking-wide font-medium">visits</p></div>
-                                <div className="flex-1 bg-green-50 rounded-lg p-3 border border-green-100 hover:border-green-200 transition-colors"><p className="text-green-600 text-xl font-semibold">{page.leads}</p><p className="text-green-500 text-xs uppercase tracking-wide font-medium">leads</p></div>
-                            </div>
-                            </div>
-                            {page.status === 'pending' && (<div className="block sm:hidden text-amber-500 flex items-center text-sm mt-3"><Clock size={16} className="mr-2" />Awaiting moderation</div>)}
                         </div>
-                        {page.url && (<div className="hidden sm:flex mt-4 items-center relative bg-gray-50 rounded-md p-2"><p className="text-xs text-gray-500 truncate flex-grow"><span className="text-gray-400 mr-1">Link:</span><span className="text-sky-600 font-medium">{page.url}</span></p><div className="flex items-center ml-2"><button onClick={() => openQrCode(page.url, page.headline || page.title, page.creator)} className="p-1 text-gray-500 hover:text-sky-600 hover:bg-gray-200 rounded transition-colors cursor-pointer mr-1" title="Generate QR Code"><QrCode className="h-4 w-4" /></button><button onClick={() => copyUrlToClipboard(page.id, page.url)} className="p-1 text-gray-500 hover:text-sky-600 hover:bg-gray-200 rounded transition-colors cursor-pointer" title="Copy link to clipboard"><Copy className="h-4 w-4" /></button></div>{copiedUrl === page.id && (<div className="absolute right-0 top-8 bg-green-100 text-green-800 px-2 py-1 rounded-md shadow-sm text-xs z-10 animate-pulse">URL copied!</div>)}</div>)}
-                        <div className="mt-5 pt-3 border-t border-gray-100 flex justify-between">
-                            <div className="space-x-3">
-                            <button className="text-sm text-sky-600 hover:text-sky-700 cursor-pointer bg-sky-50 hover:bg-sky-100 px-2.5 py-1.5 rounded transition-colors" onClick={() => openEditor(page.id, page.draft_url)} disabled={actionLoading === page.id}>
-                                {actionLoading === page.id ? (
-                                <div className="inline-block h-3 w-3 animate-spin rounded-full border border-gray-500 border-t-transparent mr-1.5"></div>
-                                ) : (
-                                <Edit size={14} className="inline mr-1.5" />
-                                )}
-                                Edit
-                            </button>
-                            <button
-                                className="text-sm text-gray-600 hover:text-gray-700 cursor-pointer bg-gray-50 hover:bg-gray-100 px-2.5 py-1.5 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                onClick={() => openPreview(page.id, page.draft_url)}
-                                disabled={actionLoading === page.id}
-                            >
-                                {actionLoading === page.id ? (
-                                <>
-                                    <div className="inline-block h-3 w-3 animate-spin rounded-full border border-gray-500 border-t-transparent mr-1.5"></div>
-                                    Loading...
-                                </>
-                                ) : (
-                                <>
-                                    <Eye size={14} className="inline mr-1.5" />
+
+                        {/* === FINALNY UKŁAD DESKTOPOWY === */}
+                        <div className="hidden sm:flex flex-col p-5 flex-grow">
+                            {/* Nagłówek - pełna szerokość */}
+                            <div className="flex flex-col justify-center min-h-[100px]">
+                                <h3 className="font-semibold text-gray-900 text-xl leading-tight line-clamp-2">{page.title}</h3>
+                                {page.subtitle && <p className="text-sm text-gray-500 mt-1 line-clamp-1">{page.subtitle}</p>}
+                            </div>
+
+                            <div className="border-t border-gray-200 my-4"></div>
+
+                            {/* Sekcja dwukolumnowa */}
+                            <div className="flex gap-6">
+                                {/* Lewa kolumna: Tylko Grafika */}
+                                <div className="w-1/2 flex-shrink-0">
+                                    {page.coverImage ? (
+                                        <img src={getAssetUrl(page.coverImage)} alt={`Cover for ${page.title}`} className="w-full h-full object-contain cursor-pointer rounded-md" onClick={() => openCoverPreview(getAssetUrl(page.coverImage), page.headline || page.title, page.subtitle)} />
+                                    ) : (
+                                        <VideoCoverPlaceholder width="100%" height="100%" />
+                                    )}
+                                </div>
+
+                                {/* Prawa kolumna: Nowy układ */}
+                                <div className="w-1/2 flex flex-col justify-center">
+                                    {/* 1. Statusy */}
+                                    <div className="flex flex-nowrap space-x-1.5 min-w-fit justify-end">
+                                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap ${page.type === 'ebook' ? 'bg-indigo-100 text-indigo-700' : 'bg-purple-100 text-purple-700'}`}>{page.type === 'ebook' ? 'e-book' : 'sales'}</span>
+                                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap ${page.status === 'published' ? 'bg-green-100 text-green-700' : page.status === 'pending' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-700'}`}>{page.status}</span>
+                                    </div>
+
+                                    {/* 2. Linia podziału */}
+                                    <div className="border-t border-gray-200 my-4"></div>
+
+                                    {/* 3. Blok Author/Created */}
+                                    <dl className="text-sm space-y-2.5">
+                                        <div className="flex">
+                                            {/* Etykieta, która się nie kurczy */}
+                                            <dt className="w-1/2 text-gray-500 flex-shrink-0">Author:</dt>
+                                            {/* Wartość, która MOŻE się kurczyć i obcinać tekst */}
+                                            <dd className="w-1/2 font-medium text-gray-800 truncate min-w-0">{page.creator}</dd>
+                                        </div>
+                                        <div className="border-t border-gray-200"></div>
+                                        <div className="flex pt-2">
+                                            {/* Etykieta, która się nie kurczy */}
+                                            <dt className="w-1/2 text-gray-500 flex-shrink-0">Created:</dt>
+                                            {/* Wartość, która MOŻE się kurczyć i obcinać tekst */}
+                                            <dd className="w-1/2 font-medium text-gray-800 truncate min-w-0">{formatDate(page.createdAt)}</dd>
+                                        </div>
+                                        {page.supervisorCode && !isGodRole &&
+                                            <div className="flex">
+                                                <dt className="w-1/4 text-gray-500 flex-shrink-0">Supervisor:</dt>
+                                                <dd className="w-3/4 font-medium text-gray-800 truncate min-w-0">{getSupervisorDescription(page.supervisorCode)}</dd>
+                                            </div>
+                                        }
+                                        {page.isOwnedByUser && page.videoPassword &&
+                                            <div className="flex items-center">
+                                                <dt className="w-1/2 text-gray-500 flex items-center flex-shrink-0">
+                                                    <Lock size={14} className="mr-1.5 text-amber-500"/>Password:
+                                                </dt>
+                                                <dd className="w-1/2 font-medium text-amber-600 truncate min-w-0">{page.videoPassword}</dd>
+                                            </div>
+                                        }
+                                    </dl>
+
+                                    {/* 4. Linia podziału */}
+                                    <div className="border-t border-gray-200 my-4"></div>
+
+                                    {/* 5. Visits/Leads */}
+                                    <div className="flex gap-4">
+                                        <div className="flex-1 bg-blue-50 rounded-lg p-3 border border-blue-100 hover:border-blue-200 transition-colors">
+                                            <p className="text-blue-600 text-2xl font-semibold">{page.visits}</p>
+                                            <p className="text-blue-500 text-xs uppercase tracking-wide font-medium">visits</p>
+                                        </div>
+                                        <div className="flex-1 bg-green-50 rounded-lg p-3 border border-green-100 hover:border-green-200 transition-colors">
+                                            <p className="text-green-600 text-2xl font-semibold">{page.leads}</p>
+                                            <p className="text-green-500 text-xs uppercase tracking-wide font-medium">leads</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Strefa linku/statusu - pełna szerokość */}
+                            <div className="mt-auto pt-4">
+                                 <div className="bg-gray-50 rounded-lg p-2.5 border border-gray-100">
+                                    {page.url && (
+                                        <div className="flex items-center relative">
+                                            <p className="text-xs text-gray-500 truncate flex-grow"><span className="text-gray-400 mr-1">Link:</span><span className="text-sky-600 font-medium">{page.url}</span></p>
+                                            <div className="flex items-center ml-2 flex-shrink-0">
+                                                <button onClick={() => openQrCode(page.url, page.headline || page.title, page.creator)} className="p-1 text-gray-500 hover:text-sky-600 rounded" title="Generate QR Code"><QrCode className="h-4 w-4" /></button>
+                                                <button onClick={() => copyUrlToClipboard(page.id, page.url)} className="p-1 text-gray-500 hover:text-sky-600 rounded" title="Copy link"><Copy className="h-4 w-4" /></button>
+                                            </div>
+                                            {copiedUrl === page.id && <div className="absolute right-0 -top-7 bg-green-100 text-green-800 px-2 py-1 rounded-md text-xs z-10">Copied!</div>}
+                                        </div>
+                                    )}
+                                    {page.status === 'pending' && <div className="text-amber-600 flex items-center text-sm mt-2"><Clock size={16} className="mr-2" />Awaiting publication</div>}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Stopka z przyciskami - wspólna dla obu widoków */}
+                        <div className="px-4 py-3 border-t border-gray-100 flex justify-between items-center bg-gray-50/50">
+                            <div className="space-x-2">
+                                <button className="text-sm text-sky-600 hover:text-sky-700 font-medium bg-sky-50 hover:bg-sky-100 px-3 py-1.5 rounded-md transition-colors inline-flex items-center" onClick={() => openEditor(page.id, page.draft_url)} disabled={actionLoading === page.id}>
+                                    {actionLoading === page.id ? <div className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent mr-1.5"></div> : <Edit size={14} className="inline mr-1.5" />}
+                                    Edit
+                                </button>
+                                <button className="text-sm text-gray-600 hover:text-gray-700 font-medium bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-md transition-colors inline-flex items-center disabled:opacity-50" onClick={() => openPreview(page.id, page.draft_url)} disabled={actionLoading === page.id}>
+                                    {actionLoading === page.id ? <div className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent mr-1.5"></div> : <Eye size={14} className="inline mr-1.5" />}
                                     Preview
-                                </>
-                                )}
-                            </button>
+                                </button>
                             </div>
-                            <button className="text-sm text-red-600 hover:text-red-700 cursor-pointer bg-red-50 hover:bg-red-100 px-2.5 py-1.5 rounded transition-colors" onClick={() => handleDeletePage(page)} title="Delete page"><Trash2 size={14} className="inline mr-1.5" />Delete</button>
-                        </div>
+                            <button className="text-sm text-red-600 hover:text-red-700 font-medium bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-md transition-colors inline-flex items-center" onClick={() => handleDeletePage(page)} title="Delete page">
+                                <Trash2 size={14} className="inline mr-1.5" />
+                                Delete
+                            </button>
                         </div>
                     </div>
                     ))}
@@ -610,17 +686,8 @@ const PagesView = () => {
                 )}
             </>
             )}
-
-            <div className="px-4 sm:px-6 py-4 border-t border-gray-200 bg-gray-50">
-                <div className="flex justify-center">
-                    <button className="flex items-center border border-gray-200 bg-white hover:bg-gray-50 text-gray-600 px-4 py-2 rounded-md text-sm cursor-pointer">
-                        <Plus size={16} className="mr-2" />
-                        Show more pages
-                    </button>
-                </div>
-            </div>
         </div>
-      </div>
+
 
       {actionError && (
       <div className="fixed bottom-4 left-4 bg-red-600 text-white px-4 py-3 rounded-lg shadow-lg z-50 flex items-center max-w-md">
@@ -667,30 +734,36 @@ const PagesView = () => {
       )}
 
       {previewImage && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[70] p-4 backdrop-blur-sm">
-            <div ref={previewModalRef} className="relative w-full max-w-screen-xl max-h-[95vh] flex flex-col bg-black/50 rounded-lg animate-fadeIn">
+        // ZMIANA 1: Zmniejszony padding (marginesy) z p-4 na p-2
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[70] p-2 backdrop-blur-sm">
+            {/* ZMIANA 2: Usunięto w-full i max-w-screen-xl, dodano w-auto, aby modal dopasował się do zawartości */}
+            <div ref={previewModalRef} className="relative w-auto max-h-[95vh] flex flex-col bg-black/50 rounded-lg animate-fadeIn">
                 <div className="flex items-center justify-between p-4 flex-shrink-0 border-b border-white/10">
                     <div className="flex items-center space-x-3 min-w-0">
                         <ImageIcon className="h-5 w-5 text-white flex-shrink-0" />
-                        <h3 className="text-white font-medium truncate">Cover Preview</h3>
+                        <h3 className="text-white font-medium truncate">ebook cover preview</h3>
                     </div>
                     <button onClick={closeCoverPreview} className="text-white hover:text-gray-300 transition-colors flex-shrink-0 ml-4">
                         <X size={24} />
                     </button>
                 </div>
 
-                <div className="flex-1 flex flex-col md:flex-row gap-6 p-4 min-h-0">
-                    <div className="md:w-2/3 flex items-center justify-center">
-                        <div className="max-w-full max-h-full rounded-lg shadow-2xl overflow-hidden" style={{ height: 'calc(95vh - 160px)' }}>
+                {/* Sekcja body bez zmian w logice, ale zmiana w kontenerze obrazka wpłynie na jej wygląd */}
+                <div className="flex-1 flex flex-col md:flex-row gap-6 px-4 py-2 md:p-4 min-h-0">
+                    <div className="flex items-center justify-center">
+                        {/* ZMIANA 3: Usunięto sztywny styl 'height' z kontenera obrazka */}
+                        <div className="max-w-full max-h-full shadow-2xl">
+                            {/* ZMIANA 4: Dodano max-h-[85vh] bezpośrednio do obrazka */}
                             <img
                                 src={previewImage.url}
                                 alt={`Cover for: ${previewImage.title}`}
-                                className="w-full h-full object-contain"
+                                className="w-auto h-auto object-contain max-h-[85vh] rounded-lg"
                             />
                         </div>
                     </div>
 
-                    <div className="md:w-1/3 bg-black/20 rounded-lg flex flex-col overflow-hidden border border-white/10">
+                    {/* Ten element nie jest widoczny na Twoim zrzucie, ale dla spójności zostaje bez zmian */}
+                    <div className="hidden md:w-1/3 md:bg-black/20 md:rounded-lg md:flex md:flex-col md:overflow-hidden md:border md:border-white/10">
                         <div className="p-3 flex-shrink-0 bg-black/20">
                         <h4 className="font-semibold text-white flex items-center">
                             <FileText size={18} className="mr-2 text-gray-300"/>
@@ -714,7 +787,7 @@ const PagesView = () => {
                     </div>
                 </div>
 
-                <div className="flex justify-center items-center p-4 flex-shrink-0 space-x-3 border-t border-white/10">
+                <div className="flex justify-center items-center p-4 flex-shrink-0 space-x-3">
                     <button onClick={closeCoverPreview} className="px-6 py-2 bg-white/10 text-white rounded-lg hover:bg-white/20 transition-colors font-medium">
                         Close
                     </button>

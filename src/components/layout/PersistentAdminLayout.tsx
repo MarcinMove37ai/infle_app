@@ -661,6 +661,7 @@ const PersistentAdminLayout: React.FC<PersistentAdminLayoutProps> = ({
   const [isMobile, setIsMobile] = useState(false);
   const [isClient, setIsClient] = useState(false);
   const [isScreenSizeDetected, setIsScreenSizeDetected] = useState(false);
+  const [isVerySmallScreen, setIsVerySmallScreen] = useState(false);
 
   useEffect(() => {
     setIsClient(true);
@@ -669,6 +670,7 @@ const PersistentAdminLayout: React.FC<PersistentAdminLayoutProps> = ({
   useEffect(() => {
     const handleResize = () => {
       setIsMobile(window.innerWidth < 768);
+      setIsVerySmallScreen(window.innerWidth < 460);
       setIsScreenSizeDetected(true);
     };
     handleResize();
@@ -700,7 +702,7 @@ const PersistentAdminLayout: React.FC<PersistentAdminLayoutProps> = ({
       >
         <Header />
 
-        <main className="flex-1 px-4 pb-4 pt-1.5 overflow-auto bg-gray-100 relative">
+        <main className="flex-1 px-2 pb-4 pt-1.5 overflow-auto bg-gray-100 relative">
           {isNavigating && (
             <div className="absolute inset-0 z-[100] bg-white/80 backdrop-blur-sm flex items-center justify-center rounded-xl">
               <LoadingSpinner message="Przechodzę do strony" fullScreen={false} size="md" />
@@ -742,9 +744,11 @@ const PersistentAdminLayout: React.FC<PersistentAdminLayoutProps> = ({
 
           <div className={`
             transition-all duration-300 ease-out
-            ${isFullWidthPage || disableMenu
-              ? 'bg-white rounded-xl shadow-sm p-0 min-h-full overflow-hidden border border-gray-200 hover:shadow-md'
-              : 'bg-white rounded-xl shadow-sm p-6 md:p-8 min-h-full border border-gray-200 hover:shadow-md'
+            ${isVerySmallScreen
+              ? 'bg-gray-100 p-0 min-h-full' // Na bardzo małych ekranach: szare tło, zero paddingu
+              : isFullWidthPage || disableMenu
+                ? 'bg-white rounded-xl shadow-sm p-0 min-h-full overflow-hidden border border-gray-200 hover:shadow-md'
+                : 'bg-white rounded-xl shadow-sm p-6 md:p-8 min-h-full border border-gray-200 hover:shadow-md'
             }`}
           >
             {children}
