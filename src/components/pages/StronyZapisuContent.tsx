@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { FileText, Search, Plus, Eye, Edit, Trash2, Clock, Check, AlertTriangle,
-         BookOpen, ShoppingCart, Copy, X, Video, QrCode, Lock, Sparkles, ImageIcon, LayoutGrid, List } from 'lucide-react';
+         BookOpen, ShoppingCart, Copy, X, Video, QrCode, Lock, Sparkles, ImageIcon } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -70,8 +70,6 @@ const PagesView = () => {
   const [qrCopied, setQrCopied] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-
 
   const qrCodeRef = React.useRef<SVGSVGElement>(null);
   const previewModalRef = useRef<HTMLDivElement>(null);
@@ -478,22 +476,12 @@ const PagesView = () => {
 
         <div className="bg-white rounded-none border-0 sm:rounded-xl sm:border border-gray-200 overflow-hidden -mx-4 sm:mx-0">
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50">
-              <div className='flex items-center gap-4'>
                 <h2 className="text-lg font-semibold text-gray-800">Your Pages</h2>
-                  {stats && stats.total > 0 && (
-                  <p className="text-sm text-gray-600 hidden sm:block">
-                      Showing {pages.length} of {stats.total} pages
-                  </p>
-                  )}
-              </div>
-              <div className="flex items-center gap-1 bg-gray-200 p-1 rounded-lg">
-                  <button onClick={() => setViewMode('grid')} className={`p-2 rounded-md ${viewMode === 'grid' ? 'bg-white text-sky-600 shadow-sm' : 'text-gray-500 hover:bg-gray-100'}`} title="Grid View">
-                      <LayoutGrid size={18}/>
-                  </button>
-                  <button onClick={() => setViewMode('list')} className={`p-2 rounded-md ${viewMode === 'list' ? 'bg-white text-sky-600 shadow-sm' : 'text-gray-500 hover:bg-gray-100'}`} title="List View">
-                      <List size={18}/>
-                  </button>
-              </div>
+                {stats && stats.total > 0 && (
+                <p className="text-sm text-gray-600">
+                    Showing {pages.length} of {stats.total} pages
+                </p>
+                )}
             </div>
 
             {isLoading ? (
@@ -510,303 +498,191 @@ const PagesView = () => {
                     <p>No pages were found that meet the search criteria.</p>
                 </div>
                 ) : (
-                <>
-                  {viewMode === 'grid' && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-4">
-                        {pages.map(page => (
-                        <div key={page.id} className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden hover:shadow-md transition-shadow duration-200 flex flex-col">
-                            {/* Pasek statusu - bez zmian */}
-                            <div className={`h-2 ${page.status === 'published' ? 'bg-green-500' : page.status === 'pending' ? 'bg-amber-400' : 'bg-gray-400'}`}></div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-4">
+                    {pages.map(page => (
+                    <div key={page.id} className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden hover:shadow-md transition-shadow duration-200 flex flex-col">
+                        {/* Pasek statusu - bez zmian */}
+                        <div className={`h-2 ${page.status === 'published' ? 'bg-green-500' : page.status === 'pending' ? 'bg-amber-400' : 'bg-gray-400'}`}></div>
 
-                            {/* === FINALNY UKŁAD MOBILNY === */}
-                            <div className="block sm:hidden p-4 flex flex-col flex-grow">
-                                {/* Nagłówek */}
-                                <div>
-                                    <h3 className="font-semibold text-gray-900 text-lg leading-tight line-clamp-3">{page.title}</h3>
-                                    {page.subtitle && <p className="text-sm text-gray-500 mt-1 line-clamp-2">{page.subtitle}</p>}
-                                </div>
-
-                                <div className="border-t border-gray-200 my-4"></div>
-
-                                {/* Główna treść: Grafika po lewej, Info po prawej */}
-                                <div className="flex gap-2">
-                                    <div className="w-3/5 flex-shrink-0">
-                                        {page.coverImage ? (
-                                            <img src={getAssetUrl(page.coverImage)} alt={`Cover for ${page.title}`} className="w-full h-auto object-contain cursor-pointer rounded-md max-h-48" onClick={() => openCoverPreview(getAssetUrl(page.coverImage), page.headline || page.title, page.subtitle)}/>
-                                        ) : (
-                                            <VideoCoverPlaceholder width="100%" height="160px" />
-                                        )}
-                                    </div>
-                                    <div className="w-2/5 flex flex-col justify-center gap-2">
-
-                                    <div className="bg-blue-50 rounded-lg p-2 border border-blue-100">
-                                        <p className="text-blue-600 text-lg font-semibold">{page.visits}</p>
-                                        <p className="text-blue-500 text-xs uppercase tracking-wide font-medium">visits</p>
-                                    </div>
-                                    <div className="bg-green-50 rounded-lg p-2 border border-green-100">
-                                        <p className="text-green-600 text-lg font-semibold">{page.leads}</p>
-                                        <p className="text-green-500 text-xs uppercase tracking-wide font-medium">leads</p>
-                                    </div>
-                                </div>
-                                </div>
-
-                                {/* Metadane */}
-                                <div className="bg-gray-50 rounded-lg p-3 mt-4 space-y-2 border border-gray-100">
-                                    <dl className="text-xs space-y-2">
-                                        <div className="flex"><dt className="w-1/3 text-gray-500">Author:</dt><dd className="w-2/3 font-medium text-gray-800 truncate">{page.creator}</dd></div>
-                                        <div className="border-t border-gray-200"></div>
-                                        <div className="flex pt-1"><dt className="w-1/3 text-gray-500">Created:</dt><dd className="w-2/3 font-medium text-gray-800 truncate">{formatDate(page.createdAt)}</dd></div>
-                                        {page.supervisorCode && !isGodRole && <div className="flex"><dt className="w-1/3 text-gray-500">Supervisor:</dt><dd className="w-2/3 font-medium text-gray-800 truncate">{getSupervisorDescription(page.supervisorCode)}</dd></div>}
-                                        {page.isOwnedByUser && page.videoPassword && <div className="flex items-center"><dt className="w-1/3 text-gray-500 flex items-center"><Lock size={12} className="mr-1 text-amber-500"/>Password:</dt><dd className="w-2/3 font-medium text-amber-600 truncate">{page.videoPassword}</dd></div>}
-                                    </dl>
-                                </div>
-
-                                {/* Strefa linku/statusu (analogiczna do desktop) */}
-                                <div className="mt-auto pt-4">
-                                    <div className="bg-gray-50 rounded-lg p-2.5 border border-gray-100">
-                                        {page.url && (
-                                            <div className="flex items-center relative">
-                                                <p className="text-xs text-gray-500 truncate flex-grow"><span className="text-sky-600 font-medium">{page.url}</span></p>
-                                                <div className="flex items-center ml-2 flex-shrink-0">
-                                                    <button onClick={() => openQrCode(page.url, page.headline || page.title, page.creator)} className="p-1 text-gray-500 hover:text-sky-600 rounded" title="Generate QR Code"><QrCode className="h-4 w-4" /></button>
-                                                    <button onClick={() => copyUrlToClipboard(page.id, page.url)} className="p-1 text-gray-500 hover:text-sky-600 rounded" title="Copy link"><Copy className="h-4 w-4" /></button>
-                                                </div>
-                                                {copiedUrl === page.id && <div className="absolute right-0 -top-7 bg-green-100 text-green-800 px-2 py-1 rounded-md text-xs z-10">Copied!</div>}
-                                            </div>
-                                        )}
-                                        {page.status === 'pending' && <div className="text-amber-600 flex items-center text-sm mt-2"><Clock size={16} className="mr-2" />Awaiting moderation</div>}
-                                    </div>
-                                </div>
+                        {/* === FINALNY UKŁAD MOBILNY === */}
+                        <div className="block sm:hidden p-4 flex flex-col flex-grow">
+                            {/* Nagłówek */}
+                            <div>
+                                <h3 className="font-semibold text-gray-900 text-lg leading-tight line-clamp-3">{page.title}</h3>
+                                {page.subtitle && <p className="text-sm text-gray-500 mt-1 line-clamp-2">{page.subtitle}</p>}
                             </div>
 
-                            {/* === FINALNY UKŁAD DESKTOPOWY === */}
-                            <div className="hidden sm:flex flex-col p-5 flex-grow">
-                                {/* Nagłówek - pełna szerokość */}
-                                <div className="flex flex-col justify-center min-h-[100px]">
-                                    <h3 className="font-semibold text-gray-900 text-xl leading-tight line-clamp-2">{page.title}</h3>
-                                    {page.subtitle && <p className="text-sm text-gray-500 mt-1 line-clamp-1">{page.subtitle}</p>}
-                                </div>
+                            <div className="border-t border-gray-200 my-4"></div>
 
-                                <div className="border-t border-gray-200 my-4"></div>
-
-                                {/* Sekcja dwukolumnowa */}
-                                <div className="flex gap-6">
-                                    {/* Lewa kolumna: Tylko Grafika */}
-                                    <div className="w-1/2 flex-shrink-0">
-                                        {page.coverImage ? (
-                                            <img src={getAssetUrl(page.coverImage)} alt={`Cover for ${page.title}`} className="w-full h-full object-contain cursor-pointer rounded-md" onClick={() => openCoverPreview(getAssetUrl(page.coverImage), page.headline || page.title, page.subtitle)} />
-                                        ) : (
-                                            <VideoCoverPlaceholder width="100%" height="100%" />
-                                        )}
-                                    </div>
-
-                                    {/* Prawa kolumna: Nowy układ */}
-                                    <div className="w-1/2 flex flex-col justify-center">
-                                        {/* 1. Statusy */}
-                                        <div className="flex flex-nowrap space-x-1.5 min-w-fit justify-end">
-                                            <span className={`text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap ${page.type === 'ebook' ? 'bg-indigo-100 text-indigo-700' : 'bg-purple-100 text-purple-700'}`}>{page.type === 'ebook' ? 'e-book' : 'sales'}</span>
-                                            <span className={`text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap ${page.status === 'published' ? 'bg-green-100 text-green-700' : page.status === 'pending' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-700'}`}>{page.status}</span>
-                                        </div>
-
-                                        {/* 2. Linia podziału */}
-                                        <div className="border-t border-gray-200 my-4"></div>
-
-                                        {/* 3. Blok Author/Created */}
-                                        <dl className="text-sm space-y-2.5">
-                                            <div className="flex">
-                                                {/* Etykieta, która się nie kurczy */}
-                                                <dt className="w-1/2 text-gray-500 flex-shrink-0">Author:</dt>
-                                                {/* Wartość, która MOŻE się kurczyć i obcinać tekst */}
-                                                <dd className="w-1/2 font-medium text-gray-800 truncate min-w-0">{page.creator}</dd>
-                                            </div>
-                                            <div className="border-t border-gray-200"></div>
-                                            <div className="flex pt-2">
-                                                {/* Etykieta, która się nie kurczy */}
-                                                <dt className="w-1/2 text-gray-500 flex-shrink-0">Created:</dt>
-                                                {/* Wartość, która MOŻE się kurczyć i obcinać tekst */}
-                                                <dd className="w-1/2 font-medium text-gray-800 truncate min-w-0">{formatDate(page.createdAt)}</dd>
-                                            </div>
-                                            {page.supervisorCode && !isGodRole &&
-                                                <div className="flex">
-                                                    <dt className="w-1/4 text-gray-500 flex-shrink-0">Supervisor:</dt>
-                                                    <dd className="w-3/4 font-medium text-gray-800 truncate min-w-0">{getSupervisorDescription(page.supervisorCode)}</dd>
-                                                </div>
-                                            }
-                                            {page.isOwnedByUser && page.videoPassword &&
-                                                <div className="flex items-center">
-                                                    <dt className="w-1/2 text-gray-500 flex items-center flex-shrink-0">
-                                                        <Lock size={14} className="mr-1.5 text-amber-500"/>Password:
-                                                    </dt>
-                                                    <dd className="w-1/2 font-medium text-amber-600 truncate min-w-0">{page.videoPassword}</dd>
-                                                </div>
-                                            }
-                                        </dl>
-
-                                        {/* 4. Linia podziału */}
-                                        <div className="border-t border-gray-200 my-4"></div>
-
-                                        {/* 5. Visits/Leads */}
-                                        <div className="flex gap-4">
-                                            <div className="flex-1 bg-blue-50 rounded-lg p-3 border border-blue-100 hover:border-blue-200 transition-colors">
-                                                <p className="text-blue-600 text-2xl font-semibold">{page.visits}</p>
-                                                <p className="text-blue-500 text-xs uppercase tracking-wide font-medium">visits</p>
-                                            </div>
-                                            <div className="flex-1 bg-green-50 rounded-lg p-3 border border-green-100 hover:border-green-200 transition-colors">
-                                                <p className="text-green-600 text-2xl font-semibold">{page.leads}</p>
-                                                <p className="text-green-500 text-xs uppercase tracking-wide font-medium">leads</p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Strefa linku/statusu - pełna szerokość */}
-                                <div className="mt-auto pt-4">
-                                    <div className="bg-gray-50 rounded-lg p-2.5 border border-gray-100">
-                                        {page.url && (
-                                            <div className="flex items-center relative">
-                                                <p className="text-xs text-gray-500 truncate flex-grow"><span className="text-gray-400 mr-1">Link:</span><span className="text-sky-600 font-medium">{page.url}</span></p>
-                                                <div className="flex items-center ml-2 flex-shrink-0">
-                                                    <button onClick={() => openQrCode(page.url, page.headline || page.title, page.creator)} className="p-1 text-gray-500 hover:text-sky-600 rounded" title="Generate QR Code"><QrCode className="h-4 w-4" /></button>
-                                                    <button onClick={() => copyUrlToClipboard(page.id, page.url)} className="p-1 text-gray-500 hover:text-sky-600 rounded" title="Copy link"><Copy className="h-4 w-4" /></button>
-                                                </div>
-                                                {copiedUrl === page.id && <div className="absolute right-0 -top-7 bg-green-100 text-green-800 px-2 py-1 rounded-md text-xs z-10">Copied!</div>}
-                                            </div>
-                                        )}
-                                        {page.status === 'pending' && <div className="text-amber-600 flex items-center text-sm mt-2"><Clock size={16} className="mr-2" />Awaiting publication</div>}
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Stopka z przyciskami - wspólna dla obu widoków */}
-                            <div className="px-4 py-3 border-t border-gray-100 flex justify-between items-center bg-gray-50/50">
-                                <div className="space-x-2">
-                                    <button className="text-sm text-sky-600 hover:text-sky-700 font-medium bg-sky-50 hover:bg-sky-100 px-3 py-1.5 rounded-md transition-colors inline-flex items-center" onClick={() => openEditor(page.id, page.draft_url)} disabled={actionLoading === page.id}>
-                                        {actionLoading === page.id ? <div className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent mr-1.5"></div> : <Edit size={14} className="inline mr-1.5" />}
-                                        Edit
-                                    </button>
-                                    <button className="text-sm text-gray-600 hover:text-gray-700 font-medium bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-md transition-colors inline-flex items-center disabled:opacity-50" onClick={() => openPreview(page.id, page.draft_url)} disabled={actionLoading === page.id}>
-                                        {actionLoading === page.id ? <div className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent mr-1.5"></div> : <Eye size={14} className="inline mr-1.5" />}
-                                        Preview
-                                    </button>
-                                </div>
-                                <button className="text-sm text-red-600 hover:text-red-700 font-medium bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-md transition-colors inline-flex items-center" onClick={() => handleDeletePage(page)} title="Delete page">
-                                    <Trash2 size={14} className="inline mr-1.5" />
-                                    Delete
-                                </button>
-                            </div>
-                        </div>
-                        ))}
-                    </div>
-                  )}
-
-                  {viewMode === 'list' && (
-                    <div className="flow-root">
-                      <div className="inline-block min-w-full align-middle">
-                        <div className="hidden sm:grid grid-cols-12 gap-x-6 border-b border-gray-200 px-6 py-3">
-                          <div className="col-span-6 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Page</div>
-                          <div className="col-span-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stats</div>
-                          <div className="col-span-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Author</div>
-                          <div className="col-span-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</div>
-                        </div>
-                        <div className='divide-y divide-gray-200'>
-                          {pages.map(page => (
-                            <div key={page.id} className="group hover:bg-gray-50/50">
-                              {/* Mobile List View */}
-                              <div className='block sm:hidden p-4 border-b border-gray-200'>
-                                <div className="flex gap-4">
-                                  <div className="w-1/4 flex-shrink-0">
+                            {/* Główna treść: Grafika po lewej, Info po prawej */}
+                            <div className="flex gap-2">
+                                <div className="w-3/5 flex-shrink-0">
                                     {page.coverImage ? (
-                                      <img src={getAssetUrl(page.coverImage)} alt={`Cover for ${page.title}`} className="w-full h-auto object-cover cursor-pointer rounded-md" onClick={() => openCoverPreview(getAssetUrl(page.coverImage), page.headline || page.title, page.subtitle)} />
+                                        <img src={getAssetUrl(page.coverImage)} alt={`Cover for ${page.title}`} className="w-full h-auto object-contain cursor-pointer rounded-md max-h-48" onClick={() => openCoverPreview(getAssetUrl(page.coverImage), page.headline || page.title, page.subtitle)}/>
                                     ) : (
-                                      <VideoCoverPlaceholder width="100%" height="80px" />
+                                        <VideoCoverPlaceholder width="100%" height="160px" />
                                     )}
-                                  </div>
-                                  <div className="w-3/4 flex flex-col justify-center">
-                                    <h3 className="font-semibold text-gray-900 leading-tight line-clamp-2">{page.title}</h3>
-                                    <p className="text-sm text-gray-500 mt-1 line-clamp-1">{page.creator} &middot; {formatDate(page.createdAt)}</p>
-                                  </div>
                                 </div>
-                                <div className="flex gap-2 mt-3">
-                                  <div className="flex-1 bg-blue-50 rounded-lg p-2 text-center">
+                                <div className="w-2/5 flex flex-col justify-center gap-2">
+
+                                <div className="bg-blue-50 rounded-lg p-2 border border-blue-100">
                                     <p className="text-blue-600 text-lg font-semibold">{page.visits}</p>
                                     <p className="text-blue-500 text-xs uppercase tracking-wide font-medium">visits</p>
-                                  </div>
-                                  <div className="flex-1 bg-green-50 rounded-lg p-2 text-center">
+                                </div>
+                                <div className="bg-green-50 rounded-lg p-2 border border-green-100">
                                     <p className="text-green-600 text-lg font-semibold">{page.leads}</p>
                                     <p className="text-green-500 text-xs uppercase tracking-wide font-medium">leads</p>
-                                  </div>
                                 </div>
-                                <div className="mt-3">
-                                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap ${page.status === 'published' ? 'bg-green-100 text-green-700' : page.status === 'pending' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-700'}`}>{page.status}</span>
-                                </div>
-                                <div className="mt-3 border-t border-gray-100 pt-3 flex justify-between items-center">
-                                  <div className="space-x-2">
-                                    <button className="text-sm text-sky-600 hover:text-sky-700 font-medium bg-sky-50 hover:bg-sky-100 px-3 py-1.5 rounded-md transition-colors inline-flex items-center" onClick={() => openEditor(page.id, page.draft_url)} disabled={actionLoading === page.id}>
-                                      {actionLoading === page.id ? <div className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent mr-1.5"></div> : <Edit size={14} className="inline mr-1.5" />} Edit
-                                    </button>
-                                    <button className="text-sm text-gray-600 hover:text-gray-700 font-medium bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-md transition-colors inline-flex items-center disabled:opacity-50" onClick={() => openPreview(page.id, page.draft_url)} disabled={actionLoading === page.id}>
-                                      <Eye size={14} className="inline mr-1.5" /> Preview
-                                    </button>
-                                  </div>
-                                  <button className="text-sm text-red-600 hover:text-red-700 font-medium bg-red-50 hover:bg-red-100 px-2 py-1.5 rounded-md transition-colors inline-flex items-center" onClick={() => handleDeletePage(page)} title="Delete page">
-                                    <Trash2 size={14} />
-                                  </button>
-                                </div>
-                              </div>
+                            </div>
+                            </div>
 
-                              {/* Desktop List View */}
-                              <div className="hidden sm:grid grid-cols-12 gap-x-6 items-center px-6 py-4 text-sm">
-                                <div className="col-span-6 flex items-center gap-4">
-                                  {page.coverImage ? (
-                                    <img src={getAssetUrl(page.coverImage)} alt="" className="h-14 w-24 object-cover rounded-md cursor-pointer flex-shrink-0" onClick={() => openCoverPreview(getAssetUrl(page.coverImage), page.headline || page.title, page.subtitle)} />
-                                  ) : (
-                                    <VideoCoverPlaceholder width="96px" height="56px" className="flex-shrink-0"/>
-                                  )}
-                                  <div className="min-w-0">
-                                    <div className="font-semibold text-gray-900 truncate">{page.title}</div>
-                                    <div className="text-gray-500 truncate">{page.subtitle}</div>
-                                  </div>
-                                </div>
-                                <div className="col-span-2 flex items-center gap-2">
-                                  <div className='text-center'>
-                                      <p className="text-blue-600 font-semibold">{page.visits}</p>
-                                      <p className="text-blue-500 text-xs uppercase">visits</p>
-                                  </div>
-                                  <div className='text-center'>
-                                      <p className="text-green-600 font-semibold">{page.leads}</p>
-                                      <p className="text-green-500 text-xs uppercase">leads</p>
-                                  </div>
-                                </div>
-                                <div className="col-span-2 min-w-0">
-                                  <div className="text-gray-800 font-medium truncate">{page.creator}</div>
-                                  <div className="text-gray-500">{formatDate(page.createdAt)}</div>
-                                </div>
-                                <div className="col-span-2">
-                                    <div className="flex items-center justify-between">
-                                        <div>
-                                            <span className={`text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap ${page.status === 'published' ? 'bg-green-100 text-green-700' : page.status === 'pending' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-700'}`}>{page.status}</span>
+                            {/* Metadane */}
+                            <div className="bg-gray-50 rounded-lg p-3 mt-4 space-y-2 border border-gray-100">
+                                <dl className="text-xs space-y-2">
+                                    <div className="flex"><dt className="w-1/3 text-gray-500">Author:</dt><dd className="w-2/3 font-medium text-gray-800 truncate">{page.creator}</dd></div>
+                                    <div className="border-t border-gray-200"></div>
+                                    <div className="flex pt-1"><dt className="w-1/3 text-gray-500">Created:</dt><dd className="w-2/3 font-medium text-gray-800 truncate">{formatDate(page.createdAt)}</dd></div>
+                                    {page.supervisorCode && !isGodRole && <div className="flex"><dt className="w-1/3 text-gray-500">Supervisor:</dt><dd className="w-2/3 font-medium text-gray-800 truncate">{getSupervisorDescription(page.supervisorCode)}</dd></div>}
+                                    {page.isOwnedByUser && page.videoPassword && <div className="flex items-center"><dt className="w-1/3 text-gray-500 flex items-center"><Lock size={12} className="mr-1 text-amber-500"/>Password:</dt><dd className="w-2/3 font-medium text-amber-600 truncate">{page.videoPassword}</dd></div>}
+                                </dl>
+                            </div>
+
+                            {/* Strefa linku/statusu (analogiczna do desktop) */}
+                            <div className="mt-auto pt-4">
+                                <div className="bg-gray-50 rounded-lg p-2.5 border border-gray-100">
+                                    {page.url && (
+                                        <div className="flex items-center relative">
+                                            <p className="text-xs text-gray-500 truncate flex-grow"><span className="text-sky-600 font-medium">{page.url}</span></p>
+                                            <div className="flex items-center ml-2 flex-shrink-0">
+                                                <button onClick={() => openQrCode(page.url, page.headline || page.title, page.creator)} className="p-1 text-gray-500 hover:text-sky-600 rounded" title="Generate QR Code"><QrCode className="h-4 w-4" /></button>
+                                                <button onClick={() => copyUrlToClipboard(page.id, page.url)} className="p-1 text-gray-500 hover:text-sky-600 rounded" title="Copy link"><Copy className="h-4 w-4" /></button>
+                                            </div>
+                                            {copiedUrl === page.id && <div className="absolute right-0 -top-7 bg-green-100 text-green-800 px-2 py-1 rounded-md text-xs z-10">Copied!</div>}
                                         </div>
-                                        <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity space-x-1">
-                                            <button className="p-1.5 text-gray-500 hover:text-sky-600 rounded-md hover:bg-gray-200" onClick={() => openEditor(page.id, page.draft_url)} disabled={actionLoading === page.id} title="Edit">
-                                                <Edit size={16} />
-                                            </button>
-                                            <button className="p-1.5 text-gray-500 hover:text-sky-600 rounded-md hover:bg-gray-200" onClick={() => openPreview(page.id, page.draft_url)} disabled={actionLoading === page.id} title="Preview">
-                                                <Eye size={16} />
-                                            </button>
-                                            <button className="p-1.5 text-gray-500 hover:text-red-600 rounded-md hover:bg-gray-200" onClick={() => handleDeletePage(page)} title="Delete">
-                                                <Trash2 size={16} />
-                                            </button>
+                                    )}
+                                    {page.status === 'pending' && <div className="text-amber-600 flex items-center text-sm mt-2"><Clock size={16} className="mr-2" />Awaiting moderation</div>}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* === FINALNY UKŁAD DESKTOPOWY === */}
+                        <div className="hidden sm:flex flex-col p-5 flex-grow">
+                            {/* Nagłówek - pełna szerokość */}
+                            <div className="flex flex-col justify-center min-h-[100px]">
+                                <h3 className="font-semibold text-gray-900 text-xl leading-tight line-clamp-2">{page.title}</h3>
+                                {page.subtitle && <p className="text-sm text-gray-500 mt-1 line-clamp-1">{page.subtitle}</p>}
+                            </div>
+
+                            <div className="border-t border-gray-200 my-4"></div>
+
+                            {/* Sekcja dwukolumnowa */}
+                            <div className="flex gap-6">
+                                {/* Lewa kolumna: Tylko Grafika */}
+                                <div className="w-1/2 flex-shrink-0">
+                                    {page.coverImage ? (
+                                        <img src={getAssetUrl(page.coverImage)} alt={`Cover for ${page.title}`} className="w-full h-full object-contain cursor-pointer rounded-md" onClick={() => openCoverPreview(getAssetUrl(page.coverImage), page.headline || page.title, page.subtitle)} />
+                                    ) : (
+                                        <VideoCoverPlaceholder width="100%" height="100%" />
+                                    )}
+                                </div>
+
+                                {/* Prawa kolumna: Nowy układ */}
+                                <div className="w-1/2 flex flex-col justify-center">
+                                    {/* 1. Statusy */}
+                                    <div className="flex flex-nowrap space-x-1.5 min-w-fit justify-end">
+                                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap ${page.type === 'ebook' ? 'bg-indigo-100 text-indigo-700' : 'bg-purple-100 text-purple-700'}`}>{page.type === 'ebook' ? 'e-book' : 'sales'}</span>
+                                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap ${page.status === 'published' ? 'bg-green-100 text-green-700' : page.status === 'pending' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-700'}`}>{page.status}</span>
+                                    </div>
+
+                                    {/* 2. Linia podziału */}
+                                    <div className="border-t border-gray-200 my-4"></div>
+
+                                    {/* 3. Blok Author/Created */}
+                                    <dl className="text-sm space-y-2.5">
+                                        <div className="flex">
+                                            {/* Etykieta, która się nie kurczy */}
+                                            <dt className="w-1/2 text-gray-500 flex-shrink-0">Author:</dt>
+                                            {/* Wartość, która MOŻE się kurczyć i obcinać tekst */}
+                                            <dd className="w-1/2 font-medium text-gray-800 truncate min-w-0">{page.creator}</dd>
+                                        </div>
+                                        <div className="border-t border-gray-200"></div>
+                                        <div className="flex pt-2">
+                                            {/* Etykieta, która się nie kurczy */}
+                                            <dt className="w-1/2 text-gray-500 flex-shrink-0">Created:</dt>
+                                            {/* Wartość, która MOŻE się kurczyć i obcinać tekst */}
+                                            <dd className="w-1/2 font-medium text-gray-800 truncate min-w-0">{formatDate(page.createdAt)}</dd>
+                                        </div>
+                                        {page.supervisorCode && !isGodRole &&
+                                            <div className="flex">
+                                                <dt className="w-1/4 text-gray-500 flex-shrink-0">Supervisor:</dt>
+                                                <dd className="w-3/4 font-medium text-gray-800 truncate min-w-0">{getSupervisorDescription(page.supervisorCode)}</dd>
+                                            </div>
+                                        }
+                                        {page.isOwnedByUser && page.videoPassword &&
+                                            <div className="flex items-center">
+                                                <dt className="w-1/2 text-gray-500 flex items-center flex-shrink-0">
+                                                    <Lock size={14} className="mr-1.5 text-amber-500"/>Password:
+                                                </dt>
+                                                <dd className="w-1/2 font-medium text-amber-600 truncate min-w-0">{page.videoPassword}</dd>
+                                            </div>
+                                        }
+                                    </dl>
+
+                                    {/* 4. Linia podziału */}
+                                    <div className="border-t border-gray-200 my-4"></div>
+
+                                    {/* 5. Visits/Leads */}
+                                    <div className="flex gap-4">
+                                        <div className="flex-1 bg-blue-50 rounded-lg p-3 border border-blue-100 hover:border-blue-200 transition-colors">
+                                            <p className="text-blue-600 text-2xl font-semibold">{page.visits}</p>
+                                            <p className="text-blue-500 text-xs uppercase tracking-wide font-medium">visits</p>
+                                        </div>
+                                        <div className="flex-1 bg-green-50 rounded-lg p-3 border border-green-100 hover:border-green-200 transition-colors">
+                                            <p className="text-green-600 text-2xl font-semibold">{page.leads}</p>
+                                            <p className="text-green-500 text-xs uppercase tracking-wide font-medium">leads</p>
                                         </div>
                                     </div>
                                 </div>
-                              </div>
                             </div>
-                          ))}
+
+                            {/* Strefa linku/statusu - pełna szerokość */}
+                            <div className="mt-auto pt-4">
+                                 <div className="bg-gray-50 rounded-lg p-2.5 border border-gray-100">
+                                    {page.url && (
+                                        <div className="flex items-center relative">
+                                            <p className="text-xs text-gray-500 truncate flex-grow"><span className="text-gray-400 mr-1">Link:</span><span className="text-sky-600 font-medium">{page.url}</span></p>
+                                            <div className="flex items-center ml-2 flex-shrink-0">
+                                                <button onClick={() => openQrCode(page.url, page.headline || page.title, page.creator)} className="p-1 text-gray-500 hover:text-sky-600 rounded" title="Generate QR Code"><QrCode className="h-4 w-4" /></button>
+                                                <button onClick={() => copyUrlToClipboard(page.id, page.url)} className="p-1 text-gray-500 hover:text-sky-600 rounded" title="Copy link"><Copy className="h-4 w-4" /></button>
+                                            </div>
+                                            {copiedUrl === page.id && <div className="absolute right-0 -top-7 bg-green-100 text-green-800 px-2 py-1 rounded-md text-xs z-10">Copied!</div>}
+                                        </div>
+                                    )}
+                                    {page.status === 'pending' && <div className="text-amber-600 flex items-center text-sm mt-2"><Clock size={16} className="mr-2" />Awaiting publication</div>}
+                                </div>
+                            </div>
                         </div>
-                      </div>
+
+                        {/* Stopka z przyciskami - wspólna dla obu widoków */}
+                        <div className="px-4 py-3 border-t border-gray-100 flex justify-between items-center bg-gray-50/50">
+                            <div className="space-x-2">
+                                <button className="text-sm text-sky-600 hover:text-sky-700 font-medium bg-sky-50 hover:bg-sky-100 px-3 py-1.5 rounded-md transition-colors inline-flex items-center" onClick={() => openEditor(page.id, page.draft_url)} disabled={actionLoading === page.id}>
+                                    {actionLoading === page.id ? <div className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent mr-1.5"></div> : <Edit size={14} className="inline mr-1.5" />}
+                                    Edit
+                                </button>
+                                <button className="text-sm text-gray-600 hover:text-gray-700 font-medium bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-md transition-colors inline-flex items-center disabled:opacity-50" onClick={() => openPreview(page.id, page.draft_url)} disabled={actionLoading === page.id}>
+                                    {actionLoading === page.id ? <div className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent mr-1.5"></div> : <Eye size={14} className="inline mr-1.5" />}
+                                    Preview
+                                </button>
+                            </div>
+                            <button className="text-sm text-red-600 hover:text-red-700 font-medium bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-md transition-colors inline-flex items-center" onClick={() => handleDeletePage(page)} title="Delete page">
+                                <Trash2 size={14} className="inline mr-1.5" />
+                                Delete
+                            </button>
+                        </div>
                     </div>
-                  )}
-                </>
+                    ))}
+                </div>
                 )}
             </>
             )}
