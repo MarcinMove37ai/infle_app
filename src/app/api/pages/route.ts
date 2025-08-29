@@ -4,14 +4,16 @@ import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { Prisma } from '@prisma/client';
+import { randomUUID } from 'crypto';
 
-// Interfejsy odpowiedzi API (bez zmian)
+// Interfejsy odpowiedzi API
 interface PagesApiResponse {
   pages: {
     role: string;
     id: string;
     title: string;
     headline?: string;
+    subtitle?: string;
     creator: string;
     supervisorCode?: string;
     visits: number;
@@ -50,40 +52,17 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get('status');
     const type = searchParams.get('type');
     const search = searchParams.get('search');
+    const limit = searchParams.get('limit');
 
-    let whereClause: Prisma.pagesWhereInput = {};
-    const filters: Prisma.pagesWhereInput[] = [];
-
+    // FIXED: Base clause dla użytkownika (zawsze aktywne)
+    let baseWhereClause: Prisma.pagesWhereInput = {};
     if (userRole !== 'admin') {
-      filters.push({ userId: userId });
+      baseWhereClause = { userId: userId };
     }
 
-    if (status) {
-        const dbStatus = status === 'published' ? 'published' : status;
-        filters.push({ status: dbStatus });
-    }
-    if (type) {
-        filters.push({ type: type });
-    }
-    if (search) {
-      filters.push({
-        OR: [
-          { title: { contains: search, mode: 'insensitive' } },
-          { headline: { contains: search, mode: 'insensitive' } },
-          { creator: { contains: search, mode: 'insensitive' } },
-        ],
-      });
-    }
-
-    if (filters.length > 0) {
-      whereClause = { AND: filters };
-    }
-
-    const dbPages = await prisma.pages.findMany({
-      where: whereClause,
-      orderBy: {
-        createdAt: 'desc',
-      },
+    // FIXED: Pobierz WSZYSTKIE strony użytkownika dla statystyk (bez filtrów)
+    const allUserPages = await prisma.pages.findMany({
+      where: baseWhereClause,
       include: {
         user: {
           select: {
@@ -92,7 +71,6 @@ export async function GET(request: NextRequest) {
             role: true
           }
         },
-        // DODAJEMY TEN FRAGMENT, ABY DOŁĄCZYĆ DANE E-BOOKA
         ebook: {
           select: {
             subtitle: true
@@ -100,6 +78,63 @@ export async function GET(request: NextRequest) {
         }
       }
     });
+
+    // FIXED: Jeśli limit=9999 lub brak filtrów, zwróć wszystkie strony (client-side filtering)
+    const shouldReturnAll = limit === '9999' || (!status && !type && !search);
+
+    let dbPages = allUserPages;
+
+    // FIXED: Aplikuj filtry tylko jeśli nie ma limit=9999
+    if (!shouldReturnAll) {
+      const filters: Prisma.pagesWhereInput[] = [baseWhereClause];
+
+      if (status) {
+        const dbStatus = status === 'published' ? 'published' : status;
+        filters.push({ status: dbStatus });
+      }
+      if (type) {
+        filters.push({ type: type });
+      }
+      if (search) {
+        filters.push({
+          OR: [
+            { title: { contains: search, mode: 'insensitive' } },
+            { headline: { contains: search, mode: 'insensitive' } },
+            { creator: { contains: search, mode: 'insensitive' } },
+          ],
+        });
+      }
+
+      const whereClause: Prisma.pagesWhereInput = { AND: filters };
+
+      dbPages = await prisma.pages.findMany({
+        where: whereClause,
+        orderBy: {
+          createdAt: 'desc',
+        },
+        include: {
+          user: {
+            select: {
+              firstName: true,
+              lastName: true,
+              role: true
+            }
+          },
+          ebook: {
+            select: {
+              subtitle: true
+            }
+          }
+        }
+      });
+    } else {
+      // Sort all pages by creation date
+      dbPages.sort((a, b) => {
+        const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return bTime - aTime;
+      });
+    }
 
     const pages = dbPages.map(page => {
       const creatorName = `${page.user?.firstName || ''} ${page.user?.lastName || ''}`.trim();
@@ -125,13 +160,38 @@ export async function GET(request: NextRequest) {
       };
     });
 
+    // FIXED: Statystyki ZAWSZE z wszystkich stron użytkownika
+    const allUserPagesForStats = allUserPages.map(page => {
+      const creatorName = `${page.user?.firstName || ''} ${page.user?.lastName || ''}`.trim();
+
+      return {
+        role: page.user?.role?.toString() ?? 'free',
+        id: page.id,
+        title: page.title || '',
+        headline: page.headline || '',
+        subtitle: page.ebook?.subtitle || '',
+        creator: creatorName || page.creator || 'Nieznany autor',
+        supervisorCode: '',
+        visits: page.visits || 0,
+        leads: page.leadsCount || 0,
+        type: page.type || '',
+        status: page.status,
+        createdAt: page.createdAt?.toISOString() ?? new Date().toISOString(),
+        url: page.url || '',
+        draft_url: page.draft_url || '',
+        coverImage: page.coverImage || '',
+        videoPassword: '',
+        isOwnedByUser: page.userId === userId,
+      };
+    });
+
     const stats = {
-      total: pages.length,
-      published: pages.filter(p => p.status === 'published').length,
-      pending: pages.filter(p => p.status === 'pending').length,
-      draft: pages.filter(p => p.status === 'draft').length,
-      ebook: pages.filter(p => p.type === 'ebook').length,
-      sales: pages.filter(p => p.type === 'sales').length,
+      total: allUserPagesForStats.length,
+      published: allUserPagesForStats.filter(p => p.status === 'published').length,
+      pending: allUserPagesForStats.filter(p => p.status === 'pending').length,
+      draft: allUserPagesForStats.filter(p => p.status === 'draft').length,
+      ebook: allUserPagesForStats.filter(p => p.type === 'ebook').length,
+      sales: allUserPagesForStats.filter(p => p.type === 'sales').length,
     };
 
     const response: PagesApiResponse = { pages, stats };
@@ -145,7 +205,7 @@ export async function GET(request: NextRequest) {
 }
 
 // =================================================================
-// NOWA FUNKCJA: Usuwanie rekordu z tabeli 'pages'
+// FUNKCJA: Usuwanie rekordu z tabeli 'pages'
 // =================================================================
 export async function DELETE(request: NextRequest) {
   try {
@@ -196,12 +256,8 @@ export async function DELETE(request: NextRequest) {
   }
 }
 
-// Wklej ten kod w pliku src/app/api/pages/route.ts, pod funkcją DELETE
-
-import { randomUUID } from 'crypto'; // Upewnij się, że ten import jest na górze pliku
-
 // =================================================================
-// NOWA FUNKCJA: Tworzenie strony zapisu dla e-booka
+// FUNKCJA: Tworzenie strony zapisu dla e-booka
 // =================================================================
 export async function POST(request: NextRequest) {
   try {

@@ -405,7 +405,7 @@ const LeadsContent = () => {
 
             {/* Action Bar */}
             <div className="flex flex-col sm:flex-row gap-4 justify-between items-center">
-                <form onSubmit={(e) => { e.preventDefault(); fetchLeads(); }} className="flex w-full items-center gap-2">
+                <form onSubmit={(e) => { e.preventDefault(); fetchLeads(); }} className="flex w-full sm:max-w-md items-center gap-2">
                     <div className="relative flex-1">
                         <input
                             type="text"

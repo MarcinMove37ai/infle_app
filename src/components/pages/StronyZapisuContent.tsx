@@ -128,6 +128,46 @@ const PagesView = () => {
     </div>
   );
 
+  const PlaceholderCard = () => (
+    <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden animate-pulse">
+      <div className="h-2 bg-gray-300"></div>
+      <div className="p-5 space-y-4">
+        <div className="space-y-2">
+          <div className="h-6 bg-gray-300 rounded"></div>
+          <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+        </div>
+        <div className="border-t border-gray-200"></div>
+        <div className="flex gap-6">
+          <div className="w-1/2 h-32 bg-gray-300 rounded"></div>
+          <div className="w-1/2 space-y-3">
+            <div className="flex space-x-2 justify-end">
+              <div className="h-5 w-12 bg-gray-200 rounded-full"></div>
+              <div className="h-5 w-16 bg-gray-200 rounded-full"></div>
+            </div>
+            <div className="border-t border-gray-200"></div>
+            <div className="space-y-2">
+              <div className="h-4 bg-gray-200 rounded"></div>
+              <div className="h-4 bg-gray-200 rounded w-2/3"></div>
+            </div>
+            <div className="border-t border-gray-200"></div>
+            <div className="flex gap-4">
+              <div className="flex-1 h-16 bg-gray-200 rounded-lg"></div>
+              <div className="flex-1 h-16 bg-gray-200 rounded-lg"></div>
+            </div>
+          </div>
+        </div>
+        <div className="h-8 bg-gray-200 rounded"></div>
+      </div>
+      <div className="px-4 py-3 bg-gray-50 border-t border-gray-100 flex justify-between">
+        <div className="space-x-2 flex">
+          <div className="h-7 w-12 bg-gray-200 rounded"></div>
+          <div className="h-7 w-16 bg-gray-200 rounded"></div>
+        </div>
+        <div className="h-7 w-14 bg-gray-200 rounded"></div>
+      </div>
+    </div>
+  );
+
   const fetchSupervisorDescription = useCallback(async (code: string) => {
     if (!code) return null;
     try {
@@ -239,14 +279,22 @@ const PagesView = () => {
       setIsLoading(false);
       return;
     }
-    try {
-      setIsLoading(true);
-      setError(null);
-      const params = new URLSearchParams();
-      if (activeFilter === 'published') params.append('status', 'published');
-      else if (activeFilter === 'draft') params.append('status', 'draft');
 
-      if (searchTerm) params.append('search', searchTerm);
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const params = new URLSearchParams();
+
+      if (activeFilter === 'published') {
+        params.append('status', 'published');
+      } else if (activeFilter === 'draft') {
+        params.append('status', 'draft');
+      }
+
+      if (searchTerm.trim()) {
+        params.append('search', searchTerm);
+      }
 
       const response = await fetch(`/api/pages?${params.toString()}`);
 
@@ -256,11 +304,15 @@ const PagesView = () => {
       }
 
       const data = await response.json() as PagesApiResponse;
-      setPages(data.pages);
-      setStats(data.stats);
-      fetchAllSupervisorDescriptions(data.pages);
+
+      // Aktualizuj dane tylko po udanym zapytaniu
+      setPages(data.pages || []);
+      setStats(data.stats || { total: 0, published: 0, pending: 0, draft: 0, ebook: 0, sales: 0 });
+
+      await fetchAllSupervisorDescriptions(data.pages || []);
 
     } catch (err) {
+      console.error('Error fetching pages:', err);
       setError(err instanceof Error ? err.message : 'Unknown error');
     } finally {
       setIsLoading(false);
@@ -268,10 +320,16 @@ const PagesView = () => {
   }, [isAuthenticated, activeFilter, searchTerm, fetchAllSupervisorDescriptions]);
 
   useEffect(() => {
-    if (!isAuthLoading) {
+    if (!isAuthLoading && isAuthenticated) {
       fetchPages();
     }
-  }, [isAuthLoading, fetchPages]);
+  }, [isAuthLoading, isAuthenticated]);
+
+  useEffect(() => {
+    if (!isAuthLoading && isAuthenticated) {
+      fetchPages();
+    }
+  }, [activeFilter, fetchPages]);
 
   const openEditor = async (pageId: string, draftUrl?: string) => {
     const finalUrl = await getOrCreatePreviewUrl(pageId, draftUrl);
@@ -305,7 +363,10 @@ const PagesView = () => {
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    fetchPages();
+  };
+
+  const handleClearSearch = () => {
+    setSearchTerm('');
   };
 
   const confirmDeletePage = async () => {
@@ -367,6 +428,7 @@ const PagesView = () => {
       day: 'numeric',
     });
   };
+
   const getSupervisorDescription = (code?: string) => code ? supervisorDescriptions[code] || code : null;
   const isGodRole = userRole === 'free';
 
@@ -394,9 +456,55 @@ const PagesView = () => {
           </div>
         )}
 
-        <div className="flex flex-col lg:flex-row gap-4 items-stretch lg:items-center lg:justify-end pb-3 mb-5">
-            <form onSubmit={handleSearch} className="flex gap-2 lg:flex-1 lg:max-w-md lg:justify-end min-w-0">
-                <div className="relative flex-1 lg:min-w-0">
+        {/* Filtry zawsze renderowane - tylko liczby się zmieniają */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+          <button
+            onClick={() => handleFilterClick('all')}
+            className={`bg-blue-50 rounded-xl p-4 sm:p-6 border transition-all duration-200 text-left hover:shadow-md cursor-pointer ${
+              activeFilter === 'all' ? 'border-blue-400 ring-2 ring-blue-200 bg-blue-100' : 'border-blue-200 hover:border-blue-300'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-blue-600 text-sm font-medium">All Pages</p>
+                <p className="text-xl sm:text-2xl font-bold text-blue-900">{stats.total}</p>
+              </div>
+              <BookOpen className="text-blue-600" size={28} />
+            </div>
+          </button>
+          <button
+            onClick={() => handleFilterClick('published')}
+            className={`bg-green-50 rounded-xl p-4 sm:p-6 border transition-all duration-200 text-left hover:shadow-md cursor-pointer ${
+              activeFilter === 'published' ? 'border-green-400 ring-2 ring-green-200 bg-green-100' : 'border-green-200 hover:border-green-300'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-green-600 text-sm font-medium">Published</p>
+                <p className="text-xl sm:text-2xl font-bold text-green-900">{stats.published}</p>
+              </div>
+              <Sparkles className="text-green-600" size={28} />
+            </div>
+          </button>
+          <button
+            onClick={() => handleFilterClick('draft')}
+            className={`bg-orange-50 rounded-xl p-4 sm:p-6 border transition-all duration-200 text-left hover:shadow-md sm:col-span-2 lg:col-span-1 cursor-pointer ${
+              activeFilter === 'draft' ? 'border-orange-400 ring-2 ring-orange-200 bg-orange-100' : 'border-orange-200 hover:border-orange-300'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-orange-600 text-sm font-medium">Pending</p>
+                <p className="text-xl sm:text-2xl font-bold text-orange-900">{stats.pending}</p>
+              </div>
+              <Edit className="text-orange-600" size={28} />
+            </div>
+          </button>
+        </div>
+
+        <div className="flex flex-col sm:flex-row gap-4 justify-between items-center">
+            <form onSubmit={handleSearch} className="flex w-full sm:max-w-md items-center gap-2">
+                <div className="relative flex-1">
                     <input
                         type="text"
                         placeholder="Search pages..."
@@ -406,73 +514,24 @@ const PagesView = () => {
                     />
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
                 </div>
-
                 <button
                     type="submit"
                     disabled={isLoading}
-                    className="hidden lg:block px-3 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors disabled:opacity-50 whitespace-nowrap cursor-pointer disabled:cursor-not-allowed"
+                    className="hidden sm:inline-flex px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors disabled:opacity-50 whitespace-nowrap cursor-pointer"
                 >
                     Search
                 </button>
-
                 {searchTerm && (
                     <button
                         type="button"
-                        onClick={() => { setSearchTerm(''); }}
-                        className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors whitespace-nowrap cursor-pointer"
+                        onClick={handleClearSearch}
+                        className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors whitespace-nowrap"
                     >
                         Clear
                     </button>
                 )}
             </form>
         </div>
-
-        {!isLoading && stats && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 mb-6">
-            <button
-              onClick={() => handleFilterClick('all')}
-              className={`bg-blue-50 rounded-xl p-4 sm:p-6 border transition-all duration-200 text-left hover:shadow-md cursor-pointer ${
-                activeFilter === 'all' ? 'border-blue-400 ring-2 ring-blue-200 bg-blue-100' : 'border-blue-200 hover:border-blue-300'
-              }`}
-            >
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-blue-600 text-sm font-medium">All Pages</p>
-                  <p className="text-xl sm:text-2xl font-bold text-blue-900">{stats.total}</p>
-                </div>
-                <BookOpen className="text-blue-600" size={28} />
-              </div>
-            </button>
-            <button
-              onClick={() => handleFilterClick('published')}
-              className={`bg-green-50 rounded-xl p-4 sm:p-6 border transition-all duration-200 text-left hover:shadow-md cursor-pointer ${
-                activeFilter === 'published' ? 'border-green-400 ring-2 ring-green-200 bg-green-100' : 'border-green-200 hover:border-green-300'
-              }`}
-            >
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-green-600 text-sm font-medium">Published</p>
-                  <p className="text-xl sm:text-2xl font-bold text-green-900">{stats.published}</p>
-                </div>
-                <Sparkles className="text-green-600" size={28} />
-              </div>
-            </button>
-            <button
-              onClick={() => handleFilterClick('draft')}
-              className={`bg-orange-50 rounded-xl p-4 sm:p-6 border transition-all duration-200 text-left hover:shadow-md sm:col-span-2 lg:col-span-1 cursor-pointer ${
-                activeFilter === 'draft' ? 'border-orange-400 ring-2 ring-orange-200 bg-orange-100' : 'border-orange-200 hover:border-orange-300'
-              }`}
-            >
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-orange-600 text-sm font-medium">Pending</p>
-                  <p className="text-xl sm:text-2xl font-bold text-orange-900">{stats.pending}</p>
-                </div>
-                <Edit className="text-orange-600" size={28} />
-              </div>
-            </button>
-          </div>
-        )}
 
         <div className="bg-white rounded-none border-0 sm:rounded-xl sm:border border-gray-200 overflow-hidden -mx-4 sm:mx-0">
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50">
@@ -484,29 +543,38 @@ const PagesView = () => {
                 )}
             </div>
 
-            {isLoading ? (
-            <div className="text-center py-20">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-sky-500 mx-auto"></div>
-                <p className="mt-4 text-gray-500">Loading pages...</p>
-            </div>
-            ) : (
-            <>
-                {pages.length === 0 ? (
-                <div className="text-center py-20 text-gray-500">
-                    <FileText size={48} className="mx-auto text-gray-300 mb-4" />
-                    <h3 className="text-lg font-medium text-gray-900 mb-2">No Pages</h3>
-                    <p>No pages were found that meet the search criteria.</p>
-                </div>
+            {/* Zawsze renderuj grid - zawartość zmienia się w zależności od stanu */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-4">
+                {isLoading ? (
+                    // Pokaż placeholder karty podczas ładowania
+                    Array.from({ length: 6 }, (_, index) => (
+                        <PlaceholderCard key={`placeholder-${index}`} />
+                    ))
+                ) : error ? (
+                    // Pokaż błąd w jednej karcie
+                    <div className="col-span-full">
+                        <div className="text-center py-20 text-red-600">
+                            <AlertTriangle size={48} className="mx-auto text-red-300 mb-4" />
+                            <h3 className="text-lg font-medium text-red-900 mb-2">Error Loading Pages</h3>
+                            <p>{error}</p>
+                        </div>
+                    </div>
+                ) : pages.length === 0 ? (
+                    // Pokaż "brak wyników" w jednej karcie
+                    <div className="col-span-full">
+                        <div className="text-center py-20 text-gray-500">
+                            <FileText size={48} className="mx-auto text-gray-300 mb-4" />
+                            <h3 className="text-lg font-medium text-gray-900 mb-2">No Pages</h3>
+                            <p>{searchTerm || activeFilter !== 'all' ? 'No pages match the search criteria.' : 'No pages were found.'}</p>
+                        </div>
+                    </div>
                 ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-4">
-                    {pages.map(page => (
+                    // Renderuj prawdziwe karty stron
+                    pages.map(page => (
                     <div key={page.id} className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden hover:shadow-md transition-shadow duration-200 flex flex-col">
-                        {/* Pasek statusu - bez zmian */}
                         <div className={`h-2 ${page.status === 'published' ? 'bg-green-500' : page.status === 'pending' ? 'bg-amber-400' : 'bg-gray-400'}`}></div>
 
-                        {/* === FINALNY UKŁAD MOBILNY === */}
                         <div className="block sm:hidden p-4 flex flex-col flex-grow">
-                            {/* Nagłówek */}
                             <div>
                                 <h3 className="font-semibold text-gray-900 text-lg leading-tight line-clamp-3">{page.title}</h3>
                                 {page.subtitle && <p className="text-sm text-gray-500 mt-1 line-clamp-2">{page.subtitle}</p>}
@@ -514,7 +582,6 @@ const PagesView = () => {
 
                             <div className="border-t border-gray-200 my-4"></div>
 
-                            {/* Główna treść: Grafika po lewej, Info po prawej */}
                             <div className="flex gap-2">
                                 <div className="w-3/5 flex-shrink-0">
                                     {page.coverImage ? (
@@ -524,7 +591,6 @@ const PagesView = () => {
                                     )}
                                 </div>
                                 <div className="w-2/5 flex flex-col justify-center gap-2">
-
                                 <div className="bg-blue-50 rounded-lg p-2 border border-blue-100">
                                     <p className="text-blue-600 text-lg font-semibold">{page.visits}</p>
                                     <p className="text-blue-500 text-xs uppercase tracking-wide font-medium">visits</p>
@@ -536,7 +602,6 @@ const PagesView = () => {
                             </div>
                             </div>
 
-                            {/* Metadane */}
                             <div className="bg-gray-50 rounded-lg p-3 mt-4 space-y-2 border border-gray-100">
                                 <dl className="text-xs space-y-2">
                                     <div className="flex"><dt className="w-1/3 text-gray-500">Author:</dt><dd className="w-2/3 font-medium text-gray-800 truncate">{page.creator}</dd></div>
@@ -547,7 +612,6 @@ const PagesView = () => {
                                 </dl>
                             </div>
 
-                            {/* Strefa linku/statusu (analogiczna do desktop) */}
                             <div className="mt-auto pt-4">
                                 <div className="bg-gray-50 rounded-lg p-2.5 border border-gray-100">
                                     {page.url && (
@@ -565,9 +629,7 @@ const PagesView = () => {
                             </div>
                         </div>
 
-                        {/* === FINALNY UKŁAD DESKTOPOWY === */}
                         <div className="hidden sm:flex flex-col p-5 flex-grow">
-                            {/* Nagłówek - pełna szerokość */}
                             <div className="flex flex-col justify-center min-h-[100px]">
                                 <h3 className="font-semibold text-gray-900 text-xl leading-tight line-clamp-2">{page.title}</h3>
                                 {page.subtitle && <p className="text-sm text-gray-500 mt-1 line-clamp-1">{page.subtitle}</p>}
@@ -575,9 +637,7 @@ const PagesView = () => {
 
                             <div className="border-t border-gray-200 my-4"></div>
 
-                            {/* Sekcja dwukolumnowa */}
                             <div className="flex gap-6">
-                                {/* Lewa kolumna: Tylko Grafika */}
                                 <div className="w-1/2 flex-shrink-0">
                                     {page.coverImage ? (
                                         <img src={getAssetUrl(page.coverImage)} alt={`Cover for ${page.title}`} className="w-full h-full object-contain cursor-pointer rounded-md" onClick={() => openCoverPreview(getAssetUrl(page.coverImage), page.headline || page.title, page.subtitle)} />
@@ -586,30 +646,22 @@ const PagesView = () => {
                                     )}
                                 </div>
 
-                                {/* Prawa kolumna: Nowy układ */}
                                 <div className="w-1/2 flex flex-col justify-center">
-                                    {/* 1. Statusy */}
                                     <div className="flex flex-nowrap space-x-1.5 min-w-fit justify-end">
                                         <span className={`text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap ${page.type === 'ebook' ? 'bg-indigo-100 text-indigo-700' : 'bg-purple-100 text-purple-700'}`}>{page.type === 'ebook' ? 'e-book' : 'sales'}</span>
                                         <span className={`text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap ${page.status === 'published' ? 'bg-green-100 text-green-700' : page.status === 'pending' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-700'}`}>{page.status}</span>
                                     </div>
 
-                                    {/* 2. Linia podziału */}
                                     <div className="border-t border-gray-200 my-4"></div>
 
-                                    {/* 3. Blok Author/Created */}
                                     <dl className="text-sm space-y-2.5">
                                         <div className="flex">
-                                            {/* Etykieta, która się nie kurczy */}
                                             <dt className="w-1/2 text-gray-500 flex-shrink-0">Author:</dt>
-                                            {/* Wartość, która MOŻE się kurczyć i obcinać tekst */}
                                             <dd className="w-1/2 font-medium text-gray-800 truncate min-w-0">{page.creator}</dd>
                                         </div>
                                         <div className="border-t border-gray-200"></div>
                                         <div className="flex pt-2">
-                                            {/* Etykieta, która się nie kurczy */}
                                             <dt className="w-1/2 text-gray-500 flex-shrink-0">Created:</dt>
-                                            {/* Wartość, która MOŻE się kurczyć i obcinać tekst */}
                                             <dd className="w-1/2 font-medium text-gray-800 truncate min-w-0">{formatDate(page.createdAt)}</dd>
                                         </div>
                                         {page.supervisorCode && !isGodRole &&
@@ -628,10 +680,8 @@ const PagesView = () => {
                                         }
                                     </dl>
 
-                                    {/* 4. Linia podziału */}
                                     <div className="border-t border-gray-200 my-4"></div>
 
-                                    {/* 5. Visits/Leads */}
                                     <div className="flex gap-4">
                                         <div className="flex-1 bg-blue-50 rounded-lg p-3 border border-blue-100 hover:border-blue-200 transition-colors">
                                             <p className="text-blue-600 text-2xl font-semibold">{page.visits}</p>
@@ -645,7 +695,6 @@ const PagesView = () => {
                                 </div>
                             </div>
 
-                            {/* Strefa linku/statusu - pełna szerokość */}
                             <div className="mt-auto pt-4">
                                  <div className="bg-gray-50 rounded-lg p-2.5 border border-gray-100">
                                     {page.url && (
@@ -663,7 +712,6 @@ const PagesView = () => {
                             </div>
                         </div>
 
-                        {/* Stopka z przyciskami - wspólna dla obu widoków */}
                         <div className="px-4 py-3 border-t border-gray-100 flex justify-between items-center bg-gray-50/50">
                             <div className="space-x-2">
                                 <button className="text-sm text-sky-600 hover:text-sky-700 font-medium bg-sky-50 hover:bg-sky-100 px-3 py-1.5 rounded-md transition-colors inline-flex items-center" onClick={() => openEditor(page.id, page.draft_url)} disabled={actionLoading === page.id}>
@@ -681,13 +729,10 @@ const PagesView = () => {
                             </button>
                         </div>
                     </div>
-                    ))}
-                </div>
+                    ))
                 )}
-            </>
-            )}
+            </div>
         </div>
-
 
       {actionError && (
       <div className="fixed bottom-4 left-4 bg-red-600 text-white px-4 py-3 rounded-lg shadow-lg z-50 flex items-center max-w-md">
@@ -734,9 +779,7 @@ const PagesView = () => {
       )}
 
       {previewImage && (
-        // ZMIANA 1: Zmniejszony padding (marginesy) z p-4 na p-2
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[70] p-2 backdrop-blur-sm">
-            {/* ZMIANA 2: Usunięto w-full i max-w-screen-xl, dodano w-auto, aby modal dopasował się do zawartości */}
             <div ref={previewModalRef} className="relative w-auto max-h-[95vh] flex flex-col bg-black/50 rounded-lg animate-fadeIn">
                 <div className="flex items-center justify-between p-4 flex-shrink-0 border-b border-white/10">
                     <div className="flex items-center space-x-3 min-w-0">
@@ -748,12 +791,9 @@ const PagesView = () => {
                     </button>
                 </div>
 
-                {/* Sekcja body bez zmian w logice, ale zmiana w kontenerze obrazka wpłynie na jej wygląd */}
                 <div className="flex-1 flex flex-col md:flex-row gap-6 px-4 py-2 md:p-4 min-h-0">
                     <div className="flex items-center justify-center">
-                        {/* ZMIANA 3: Usunięto sztywny styl 'height' z kontenera obrazka */}
                         <div className="max-w-full max-h-full shadow-2xl">
-                            {/* ZMIANA 4: Dodano max-h-[85vh] bezpośrednio do obrazka */}
                             <img
                                 src={previewImage.url}
                                 alt={`Cover for: ${previewImage.title}`}
@@ -762,7 +802,6 @@ const PagesView = () => {
                         </div>
                     </div>
 
-                    {/* Ten element nie jest widoczny na Twoim zrzucie, ale dla spójności zostaje bez zmian */}
                     <div className="hidden md:w-1/3 md:bg-black/20 md:rounded-lg md:flex md:flex-col md:overflow-hidden md:border md:border-white/10">
                         <div className="p-3 flex-shrink-0 bg-black/20">
                         <h4 className="font-semibold text-white flex items-center">

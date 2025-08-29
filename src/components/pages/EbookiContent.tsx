@@ -287,13 +287,11 @@ export default function EbookiContent() {
     }
   };
 
-  // ZAKTUALIZOWANA FUNKCJA: Tworzenie strony z automatycznym generowaniem treści AI
   const handleCreatePage = async (ebookId: number) => {
     setCreatingPageId(ebookId);
     setLocalError(null);
 
     try {
-      // Krok 1: Utworzenie strony w tabeli pages
       console.log('Tworzenie strony dla e-booka ID:', ebookId);
       const pageResponse = await fetch('/api/pages', {
         method: 'POST',
@@ -302,128 +300,46 @@ export default function EbookiContent() {
       });
 
       const pageData = await pageResponse.json();
-
-      if (!pageResponse.ok) {
-        throw new Error(pageData.error || 'Nie udało się utworzyć strony.');
-      }
-
+      if (!pageResponse.ok) throw new Error(pageData.error || 'Nie udało się utworzyć strony.');
       console.log('Strona utworzona pomyślnie z ID:', pageData.id);
 
-      // Krok 2: Generowanie treści AI dla utworzonej strony
       try {
         console.log('Rozpoczynam generowanie treści AI...');
-
-        // Timeout dla długich operacji (30 sekund)
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 30000);
 
         const contentResponse = await fetch('/api/pages/ai-content', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            pageId: pageData.id,
-            ebookId: ebookId
-          }),
+          body: JSON.stringify({ pageId: pageData.id, ebookId: ebookId }),
           signal: controller.signal
         });
 
         clearTimeout(timeoutId);
-
         const contentData = await contentResponse.json();
 
         if (!contentResponse.ok) {
-          // Strona została utworzona, ale treść AI nie została wygenerowana
           console.error('Błąd generowania treści AI:', contentData.error);
-
-          if (contentResponse.status === 409) {
-            console.log('Treść dla tej strony już istnieje');
-          } else {
-            setLocalError(
-              `Strona została utworzona, ale automatyczne generowanie treści nie powiodło się. ` +
-              `Możesz spróbować wygenerować treść ręcznie później. ` +
-              `(Błąd: ${contentData.error})`
-            );
+          if (contentResponse.status !== 409) {
+            setLocalError(`Strona została utworzona, ale automatyczne generowanie treści nie powiodło się. (Błąd: ${contentData.error})`);
           }
         } else {
           console.log('Treść AI wygenerowana pomyślnie!');
-          console.log(`Wygenerowano ${contentData.fieldsGenerated} pól treści`);
         }
-
       } catch (contentError) {
-        // Obsługa błędów sieciowych lub timeout
         if (contentError instanceof Error) {
-          if (contentError.name === 'AbortError') {
-            console.error('Timeout podczas generowania treści AI');
-            setLocalError(
-              'Strona została utworzona, ale generowanie treści trwa zbyt długo. ' +
-              'Treść może być wciąż generowana w tle lub możesz spróbować ponownie później.'
-            );
-          } else {
-            console.error('Błąd podczas generowania treści AI:', contentError);
-            setLocalError(
-              'Strona została utworzona, ale wystąpił błąd podczas generowania treści AI. ' +
-              'Możesz spróbować wygenerować treść ręcznie później.'
-            );
-          }
+          const errorMessage = contentError.name === 'AbortError'
+            ? 'Strona została utworzona, ale generowanie treści trwa zbyt długo.'
+            : 'Strona została utworzona, ale wystąpił błąd podczas generowania treści AI.';
+          setLocalError(errorMessage);
         }
       }
-
-      // Krok 3: Odświeżenie listy e-booków
       await fetchAllEbooks();
-
     } catch (err) {
-      // Błąd podczas tworzenia strony (krok 1)
       console.error('Błąd podczas tworzenia strony:', err);
       setLocalError(err instanceof Error ? err.message : 'Wystąpił nieznany błąd podczas tworzenia strony.');
     } finally {
-      // Zawsze resetujemy stan ładowania
       setCreatingPageId(null);
-    }
-  };
-
-  // NOWA FUNKCJA: Ręczne generowanie treści AI dla istniejących stron
-  const handleGenerateAIContent = async (pageId: string, ebookId: number) => {
-    setLocalError(null);
-
-    try {
-      console.log('Ręczne generowanie treści AI dla strony:', pageId);
-
-      const response = await fetch('/api/pages/ai-content', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          pageId: pageId,
-          ebookId: ebookId
-        })
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Nie udało się wygenerować treści AI.');
-      }
-
-      console.log('Treść AI wygenerowana pomyślnie!');
-      await fetchAllEbooks();
-
-      // Opcjonalnie: pokazanie sukcesu
-      alert(`Treść została wygenerowana pomyślnie! Wygenerowano ${data.fieldsGenerated} pól.`);
-
-    } catch (err) {
-      console.error('Błąd podczas generowania treści AI:', err);
-      setLocalError(err instanceof Error ? err.message : 'Wystąpił błąd podczas generowania treści AI.');
-    }
-  };
-
-  // NOWA FUNKCJA: Sprawdzanie czy treść AI już istnieje
-  const checkAIContentExists = async (pageId: string): Promise<boolean> => {
-    try {
-      const response = await fetch(`/api/pages/ai-content?pageId=${pageId}`);
-      const data = await response.json();
-      return data.exists === true;
-    } catch (error) {
-      console.error('Błąd sprawdzania istnienia treści AI:', error);
-      return false;
     }
   };
 
@@ -461,7 +377,6 @@ export default function EbookiContent() {
         setPreviewImageTitle(`Cover preview: ${ebook.title}`);
         setPreviewImageName(`cover_${ebook.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.png`);
 
-        // Fetching table of contents
         setIsPreviewTocLoading(true);
         setPreviewTocItems(null);
         try {
@@ -494,7 +409,6 @@ export default function EbookiContent() {
 
   const handleDownloadAsPng = async (baseFileName: string) => {
     if (!previewImageRef.current) return;
-
     const currentImageUrl = previewImageRef.current.src;
     if (!currentImageUrl) return;
 
@@ -514,23 +428,18 @@ export default function EbookiContent() {
       canvas.width = image.width;
       canvas.height = image.height;
       const ctx = canvas.getContext('2d');
-
-      if (!ctx) {
-        throw new Error("Could not get canvas context");
-      }
-
+      if (!ctx) throw new Error("Could not get canvas context");
       ctx.drawImage(image, 0, 0);
+
       const pngUrl = canvas.toDataURL('image/png');
       const link = document.createElement('a');
       link.href = pngUrl;
-
       const finalFileName = baseFileName.replace(/\.[^/.]+$/, "") + ".png";
       link.download = finalFileName;
 
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-
     } catch (error) {
       console.error("Error converting image to PNG:", error);
       setLocalError("Could not convert the image. Please try downloading it manually.");
@@ -555,48 +464,6 @@ export default function EbookiContent() {
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      <div className="flex flex-col lg:flex-row gap-4 items-stretch lg:items-center lg:justify-between">
-        <div className="flex items-center space-x-3">
-          <button
-            onClick={handleOpenGenerator}
-            className="flex items-center justify-center px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium shadow-sm cursor-pointer"
-          >
-            <Plus size={20} className="mr-2" />
-            Create new e-book
-          </button>
-        </div>
-        <form onSubmit={handleSearch} className="flex gap-2 lg:flex-1 lg:max-w-md lg:justify-end min-w-0">
-          <div className="relative flex-1 lg:min-w-0">
-            <input
-              type="text"
-              placeholder="Search e-books..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:border-gray-400"
-            />
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
-          </div>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="hidden lg:block px-6 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors disabled:opacity-50 whitespace-nowrap cursor-pointer disabled:cursor-not-allowed"
-          >
-            Search
-          </button>
-
-          {searchTerm && (
-            <button
-              type="button"
-              onClick={() => { setSearchTerm(''); setCurrentPage(1); }}
-              className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors whitespace-nowrap cursor-pointer"
-            >
-              Clear
-            </button>
-          )}
-        </form>
-      </div>
-
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex flex-col sm:flex-row items-start sm:items-center space-y-3 sm:space-y-0 sm:space-x-3">
           <AlertCircle className="text-red-500 flex-shrink-0" size={20} />
@@ -660,6 +527,44 @@ export default function EbookiContent() {
         </div>
       )}
 
+      <div className="flex flex-col sm:flex-row gap-4 justify-between items-center">
+        <form onSubmit={handleSearch} className="flex w-full sm:max-w-md items-center gap-2">
+          <div className="relative flex-1">
+            <input
+              type="text"
+              placeholder="Search e-books..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:border-gray-400"
+            />
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+          </div>
+          <button
+            type="submit"
+            disabled={loading}
+            className="hidden sm:inline-flex px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors disabled:opacity-50 whitespace-nowrap"
+          >
+            Search
+          </button>
+          {searchTerm && (
+            <button
+              type="button"
+              onClick={() => { setSearchTerm(''); setCurrentPage(1); }}
+              className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors whitespace-nowrap"
+            >
+              Clear
+            </button>
+          )}
+        </form>
+        <button
+          onClick={handleOpenGenerator}
+          className="w-full sm:w-auto flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+        >
+          <Plus size={16} className="mr-2" />
+          Create new e-book
+        </button>
+      </div>
+
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50">
             <h2 className="text-lg font-semibold text-gray-800">Your e-books</h2>
@@ -683,35 +588,85 @@ export default function EbookiContent() {
             displayedEbooks.map((ebook) => {
               const isDeleting = deletingIds.has(ebook.id);
               const isDownloading = downloadingIds.has(ebook.id);
+              const isDisabled = isDeleting || isDownloading;
+
               return (
-                <div
-                    key={ebook.id}
-                    className={`px-6 py-4 hover:bg-blue-50/50 hover:border-blue-300 transition-colors group ${isDeleting || isDownloading ? 'opacity-50' : 'cursor-pointer'}`}
-                    onClick={() => {
-                      if (ebook.cover_image_webp_url) {
-                        handlePreviewEbook(ebook);
-                      } else {
-                        handleEditEbook(ebook.id);
-                      }
-                    }}
-                >
-                  <div className="flex items-center justify-between gap-4">
+                <div key={ebook.id} className={`transition-opacity ${isDisabled ? 'opacity-50' : ''}`}>
+                  {/* MOBILE VIEW */}
+                  <div className="p-4 block sm:hidden">
+                    <div className="flex gap-4">
+                      <div className="w-1/3 flex-shrink-0">
+                        {ebook.cover_image_webp_url ? (
+                            <img
+                              src={`/api/assets/${ebook.cover_image_webp_url}`}
+                              alt={`Cover: ${ebook.title}`}
+                              className="w-full h-auto object-cover rounded-md bg-gray-200 cursor-pointer"
+                              loading="lazy"
+                              onClick={() => handlePreviewEbook(ebook)}
+                            />
+                        ) : (
+                            <div className="w-full h-32 flex items-center justify-center bg-gray-100 rounded-md"><ImageIcon className="w-8 h-8 text-gray-400" /></div>
+                        )}
+                      </div>
+                      <div className="w-2/3 flex flex-col">
+                        <h3 className="text-base font-semibold text-gray-900 line-clamp-2">{ebook.title}</h3>
+                        {ebook.subtitle && <p className="text-xs text-gray-500 mt-1 line-clamp-2">{ebook.subtitle}</p>}
+                        <span className={`text-xs px-2 py-1 rounded-full mt-2 self-start ${getStatusColor(ebook.status)}`}>{getStatusLabel(ebook.status)}</span>
+                      </div>
+                    </div>
+                    <div className="mt-3 flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                            <button onClick={() => handleEditEbook(ebook.id)} className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg" disabled={isDisabled}><Edit size={16} /></button>
+                            {isEbookCompleted(ebook) && (
+                                <button onClick={() => downloadPDF(ebook.id, ebook.title)} className="p-2 text-green-600 hover:bg-green-100 rounded-lg" disabled={isDisabled}>
+                                    {isDownloading ? <RefreshCw size={16} className="animate-spin" /> : <Download size={16} />}
+                                </button>
+                            )}
+                            <button onClick={() => handleDeleteEbook(ebook)} className="p-2 text-red-600 hover:bg-red-100 rounded-lg" disabled={isDisabled}>
+                                {isDeleting ? <RefreshCw size={16} className="animate-spin" /> : <Trash2 size={16} />}
+                            </button>
+                        </div>
+                        {creatingPageId === ebook.id ? (
+                            <span className="text-xs flex items-center gap-1 bg-gray-100 text-gray-700 px-2 py-1.5 rounded-md">
+                                <RefreshCw size={12} className="animate-spin" /> Creating...
+                            </span>
+                        ) : ebook.hasLandingPage ? (
+                            <span className="text-xs flex items-center gap-1 bg-blue-100 text-blue-700 px-2 py-1.5 rounded-md">
+                                <FileText size={12} /> LP Ready
+                            </span>
+                        ) : (
+                            <button
+                                onClick={() => handleCreatePage(ebook.id)}
+                                className="text-xs flex items-center gap-1 bg-yellow-100 text-yellow-700 px-2 py-1.5 rounded-md hover:bg-yellow-200"
+                            >
+                                <Plus size={12} /> Create LP
+                            </button>
+                        )}
+                    </div>
+                  </div>
+
+                  {/* DESKTOP VIEW */}
+                  <div className="hidden sm:flex items-center justify-between gap-4 px-6 py-4 hover:bg-gray-50/75">
                     <div className="flex items-center flex-1 min-w-0 gap-4">
                       {ebook.cover_image_webp_url ? (
-                        <img src={`/api/assets/${ebook.cover_image_webp_url}`} alt={`Cover: ${ebook.title}`} className="w-30 h-30 object-cover rounded-md flex-shrink-0 bg-gray-200" loading="lazy"/>
+                        <img
+                          src={`/api/assets/${ebook.cover_image_webp_url}`}
+                          alt={`Cover: ${ebook.title}`}
+                          className="w-14 h-20 object-cover rounded-md flex-shrink-0 bg-gray-200 cursor-pointer"
+                          loading="lazy"
+                          onClick={() => handlePreviewEbook(ebook)}
+                        />
                       ) : (
                         <div className="w-14 h-20 flex items-center justify-center bg-gray-100 rounded-md flex-shrink-0"><ImageIcon className="w-6 h-6 text-gray-400" /></div>
                       )}
                       <div className="flex-1 min-w-0">
-                        <h3 className="text-lg font-medium text-gray-900 truncate group-hover:text-blue-600 transition-colors">{ebook.title}</h3>
+                        <h3 className="text-lg font-medium text-gray-900 truncate">{ebook.title}</h3>
                         {ebook.subtitle && <p className="text-sm text-gray-500 truncate">{ebook.subtitle}</p>}
-                        <div className="flex items-center flex-wrap gap-x-4 gap-y-2 mt-2">
+                        <div className="flex items-center flex-wrap gap-x-3 gap-y-1 mt-2">
                           <span className={`text-xs px-2 py-1 rounded-full ${getStatusColor(ebook.status)}`}>{getStatusLabel(ebook.status)}</span>
-                          {/* ZAKTUALIZOWANY UI DLA PRZYCISK TWORZENIA STRONY */}
                           {creatingPageId === ebook.id ? (
                               <span className="text-xs flex items-center gap-1 bg-gray-100 text-gray-700 px-2 py-1 rounded">
-                                  <RefreshCw size={12} className="animate-spin" />
-                                  Creating & Generating AI...
+                                  <RefreshCw size={12} className="animate-spin" /> Creating & Generating AI...
                               </span>
                           ) : ebook.hasLandingPage ? (
                               <span className="text-xs flex items-center gap-1 bg-blue-100 text-blue-700 px-2 py-1 rounded">
@@ -719,26 +674,27 @@ export default function EbookiContent() {
                               </span>
                           ) : (
                               <button
-                                  onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleCreatePage(ebook.id);
-                                  }}
-                                  className="text-xs flex items-center gap-1 bg-yellow-100 text-yellow-700 px-2 py-1 rounded hover:bg-yellow-200 transition-colors"
-                                  title="Utworzy stronę i automatycznie wygeneruje treść AI"
+                                  onClick={(e) => { e.stopPropagation(); handleCreatePage(ebook.id); }}
+                                  className="text-xs flex items-center gap-1 bg-yellow-100 text-yellow-700 px-2 py-1 rounded hover:bg-yellow-200"
+                                  title="Create a page and automatically generate AI content"
                               >
-                                  <Plus size={12} /> Create LandingPage with AI
+                                  <Plus size={12} /> Create LP with AI
                               </button>
                           )}
                           <span className="text-xs text-gray-400">{formatDate(ebook.created_at)}</span>
-                          {ebook.text_ai_model && (<span className="text-xs flex items-center gap-1 bg-gray-100 text-gray-700 px-2 py-1 rounded"><FileText size={12} className="text-gray-500" />{ebook.text_ai_model}</span>)}
-                          {ebook.image_ai_model && (<span className="text-xs flex items-center gap-1 bg-gray-100 text-gray-700 px-2 py-1 rounded"><ImageIcon size={12} className="text-gray-500" />{ebook.image_ai_model}</span>)}
                         </div>
                       </div>
                     </div>
                     <div className="flex items-center space-x-2">
-                      <button onClick={(e) => { e.stopPropagation(); handleEditEbook(ebook.id); }} className={`p-2 text-blue-600 hover:bg-blue-100 rounded-lg transition-colors disabled:opacity-50 ${isDownloading || isDeleting ? 'cursor-not-allowed' : ''}`} title="Edit" disabled={isDownloading || isDeleting}><Edit size={16} /></button>
-                      {isEbookCompleted(ebook) && (<button onClick={(e) => { e.stopPropagation(); downloadPDF(ebook.id, ebook.title); }} className={`p-2 text-green-600 hover:bg-green-100 rounded-lg transition-colors disabled:opacity-50 ${isDownloading || isDeleting ? 'cursor-not-allowed' : ''}`} title="Download PDF" disabled={isDownloading || isDeleting}>{isDownloading ? <RefreshCw size={16} className="animate-spin" /> : <Download size={16} />}</button>)}
-                      <button onClick={(e) => { e.stopPropagation(); handleDeleteEbook(ebook); }} className={`p-2 text-red-600 hover:bg-red-100 rounded-lg transition-colors disabled:opacity-50 ${isDeleting || isDownloading ? 'cursor-not-allowed' : ''}`} title="Delete" disabled={isDeleting || isDownloading}>{isDeleting ? <RefreshCw size={16} className="animate-spin" /> : <Trash2 size={16} />}</button>
+                      <button onClick={() => handleEditEbook(ebook.id)} className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg" title="Edit" disabled={isDisabled}><Edit size={16} /></button>
+                      {isEbookCompleted(ebook) && (
+                        <button onClick={() => downloadPDF(ebook.id, ebook.title)} className="p-2 text-green-600 hover:bg-green-100 rounded-lg" title="Download PDF" disabled={isDisabled}>
+                          {isDownloading ? <RefreshCw size={16} className="animate-spin" /> : <Download size={16} />}
+                        </button>
+                      )}
+                      <button onClick={() => handleDeleteEbook(ebook)} className="p-2 text-red-600 hover:bg-red-100 rounded-lg" title="Delete" disabled={isDisabled}>
+                        {isDeleting ? <RefreshCw size={16} className="animate-spin" /> : <Trash2 size={16} />}
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -795,9 +751,9 @@ export default function EbookiContent() {
             </div>
 
             {/* Main Content: Image + Table of Contents */}
-            <div className="flex-1 flex flex-row gap-6 p-4 min-h-0">
+            <div className="flex-1 flex flex-col md:flex-row gap-6 p-4 min-h-0">
               {/* Left Side: Image */}
-              <div className="w-2/3 flex items-center justify-center">
+              <div className="w-full md:w-2/3 flex items-center justify-center">
                 <div
                   className="max-w-full max-h-full rounded-lg shadow-2xl overflow-hidden"
                   style={{ height: 'calc(95vh - 160px)' }}
@@ -816,7 +772,7 @@ export default function EbookiContent() {
               </div>
 
               {/* Right Side: Table of Contents */}
-              <div className="w-1/3 bg-black/20 rounded-lg flex flex-col overflow-hidden border border-white/10">
+              <div className="w-full mt-4 md:mt-0 md:w-1/3 bg-black/20 rounded-lg flex flex-col overflow-hidden border border-white/10">
                 <div className="p-3 flex-shrink-0 bg-black/20">
                   <h4 className="font-semibold text-white flex items-center">
                     <FileText size={18} className="mr-2 text-gray-300"/>
@@ -847,7 +803,7 @@ export default function EbookiContent() {
             </div>
 
             {/* Modal Footer */}
-            <div className="flex justify-center items-center p-4 flex-shrink-0 space-x-3 border-t border-white/10">
+            <div className="flex flex-wrap justify-center items-center p-4 flex-shrink-0 space-x-3 border-t border-white/10">
               <button onClick={handleClosePreview} className="px-6 py-2 bg-white/10 text-white rounded-lg hover:bg-white/20 transition-colors font-medium">
                 Close
               </button>
@@ -862,15 +818,9 @@ export default function EbookiContent() {
                 title="Download as PNG"
               >
                 {isConverting ? (
-                  <>
-                    <RefreshCw size={18} className="animate-spin" />
-                    <span>Converting...</span>
-                  </>
+                  <><RefreshCw size={18} className="animate-spin" /><span>Converting...</span></>
                 ) : (
-                  <>
-                    <Download size={18} />
-                    <span>Download PNG</span>
-                  </>
+                  <><Download size={18} /><span>Download PNG</span></>
                 )}
               </button>
               <button
@@ -890,24 +840,12 @@ export default function EbookiContent() {
         </div>
       )}
 
-      {/* Style definition for scrollbar */}
       <style jsx global>{`
-        .custom-scrollbar::-webkit-scrollbar {
-          width: 8px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-track {
-          background: transparent;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-          background-color: rgba(255, 255, 255, 0.2);
-          border-radius: 4px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-          background-color: rgba(255, 255, 255, 0.4);
-        }
-        .animate-fadeIn {
-          animation: fadeIn 0.3s ease-in-out;
-        }
+        .custom-scrollbar::-webkit-scrollbar { width: 8px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background-color: rgba(255, 255, 255, 0.2); border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background-color: rgba(255, 255, 255, 0.4); }
+        .animate-fadeIn { animation: fadeIn 0.3s ease-in-out; }
         @keyframes fadeIn {
           from { opacity: 0; transform: scale(0.98); }
           to { opacity: 1; transform: scale(1); }
