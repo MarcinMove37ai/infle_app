@@ -802,7 +802,6 @@ const DiskExplorerModal: React.FC<DiskExplorerModalProps> = ({ isOpen, onClose }
                 className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
                 style={{
                   maxHeight: 'calc(95vh - 160px)', // Subtract header and footer height
-                  maxWidth: 'calc(100vw - 32px)'   // Account for padding
                 }}
                 onError={() => {
                   setError('Failed to load image');

@@ -1,11 +1,12 @@
-// src/components/pages/UstawieniaContent.tsx
+// src/components/pages/SettingsContent.tsx
 'use client';
 
 import DiskExplorerModal from '@/components/ui/DiskExplorerModal';
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   User, Key, Eye, EyeOff, Save, Trash2, CheckCircle, AlertCircle, Loader2,
-  Palette, Type, ChevronDown, Check, Image as ImageIcon, X, AlertTriangle, FolderOpen
+  Palette, Type, ChevronDown, Check, Image as ImageIcon, X, AlertTriangle, FolderOpen,
+  Shield
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -28,14 +29,14 @@ interface AuthorSettings {
   authorDisplayName: string | null;
   authorLogoUrl: string | null;
   fallbackName: string;
-  // ✅ DODANE: Pola AI z endpointu
+  // ✅ ADDED: AI fields from the endpoint
   textAiProvider: string | null;
   textAiModel: string | null;
   imageAiProvider: string | null;
   imageAiModel: string | null;
 }
 
-// Konfiguracja providerów tekstu
+// Text provider configuration
 const TEXT_PROVIDERS = [
   {
     id: 'anthropic',
@@ -43,7 +44,7 @@ const TEXT_PROVIDERS = [
     icon: '🧠',
     available: true,
     models: [
-      { id: 'claude-3-haiku', name: 'Claude Haiku 3.5', description: 'Dostępny bezpłatnie przez 30 dni', tier: 'basic' },
+      { id: 'claude-3-haiku', name: 'Claude Haiku 3.5', description: 'Available for free for 30 days', tier: 'basic' },
       { id: 'claude-3-sonnet', name: 'Claude Sonnet 4', description: 'Input $3 / MTo | Output $15 / MTok', tier: 'premium', cost: '$0.025' },
     ]
   },
@@ -52,56 +53,56 @@ const TEXT_PROVIDERS = [
     name: 'OpenAI',
     icon: '🤖',
     available: false,
-    models: [{ id: 'gpt-4o', name: 'GPT-4o', description: 'Najnowszy model ($0.030)', tier: 'premium', cost: '$0.030' }]
+    models: [{ id: 'gpt-4o', name: 'GPT-4o', description: 'The latest model ($0.030)', tier: 'premium', cost: '$0.030' }]
   },
   {
     id: 'gemini',
     name: 'Google Gemini',
     icon: '✨',
     available: false,
-    models: [{ id: 'gemini-pro', name: 'Gemini Pro', description: 'Model Google ($0.020)', tier: 'premium', cost: '$0.020' }]
+    models: [{ id: 'gemini-pro', name: 'Gemini Pro', description: 'Google\'s model ($0.020)', tier: 'premium', cost: '$0.020' }]
   },
   {
     id: 'grok',
     name: 'Grok (X.AI)',
     icon: '⚡',
     available: false,
-    models: [{ id: 'grok-2', name: 'Grok 2', description: 'Model X.AI ($0.040)', tier: 'premium', cost: '$0.040' }]
+    models: [{ id: 'grok-2', name: 'Grok 2', description: 'X.AI\'s model ($0.040)', tier: 'premium', cost: '$0.040' }]
   },
   {
     id: 'bielik',
     name: 'Bielik',
     icon: '🦅',
     available: false,
-    models: [{ id: 'bielik-11b', name: 'Bielik 11B', description: 'Polski model ($0.015)', tier: 'premium', cost: '$0.015' }]
+    models: [{ id: 'bielik-11b', name: 'Bielik 11B', description: 'Polish model ($0.015)', tier: 'premium', cost: '$0.015' }]
   }
 ];
 
-// 🆕 ZAKTUALIZOWANA Konfiguracja providerów obrazów z Google
+// 🆕 UPDATED Image provider configuration with Google
 const IMAGE_PROVIDERS = [
   {
     id: 'google',
-    name: 'Google AI',
+    name: 'Google AI Studio',
     icon: '✨',
-    available: true, // 🆕 ODBLOKOWANY
+    available: true, // 🆕 UNLOCKED
     models: [
       {
         id: 'imagen-3',
         name: 'Imagen 3',
-        description: 'Dostępny bezpłatnie przez 30 dni',
+        description: 'Available for free for 30 days',
         tier: 'basic'
       },
       {
         id: 'imagen-4',
         name: 'Imagen 4',
-        description: 'Wysoka jakość ($0.04) - wymaga własnego klucza API',
+        description: 'High quality ($0.04) - requires your own API key',
         tier: 'premium',
         cost: '$0.04'
       },
       {
         id: 'imagen-4-ultra',
         name: 'Imagen 4 Ultra',
-        description: 'Najwyższa jakość ($0.06) - wymaga własnego klucza API',
+        description: 'Highest quality ($0.06) - requires your own API key',
         tier: 'premium',
         cost: '$0.06'
       }
@@ -116,13 +117,13 @@ const IMAGE_PROVIDERS = [
       {
         id: 'dall-e-3',
         name: 'DALL-E 3',
-        description: 'Standardowy - bez klucza',
+        description: 'Standard - no key needed',
         tier: 'basic'
       },
       {
         id: 'gpt-image-1',
         name: 'GPT-Image-1',
-        description: 'Premium ($0.19) - wymaga klucza',
+        description: 'Premium ($0.19) - key required',
         tier: 'premium',
         cost: '$0.19'
       },
@@ -130,17 +131,191 @@ const IMAGE_PROVIDERS = [
   }
 ];
 
-export default function UstawieniaContent() {
+
+// Status helpers
+const getModelDisplayInfo = (model: any, apiKey: any, isSelected: boolean) => {
+  if (!model) {
+    return { text: 'Select a model', indicator: 'default' };
+  }
+
+  if (model.tier === 'basic') {
+    if (isSelected) {
+      return { text: 'Active Model', indicator: 'active' };
+    }
+    return { text: 'Model available', indicator: 'active' };
+  }
+
+  const hasApiKey = apiKey?.isSaved;
+
+  if (hasApiKey) {
+    if (isSelected) {
+      return { text: 'Active Model', indicator: 'active' };
+    }
+    return { text: 'Model available', indicator: 'active' };
+  } else {
+    return { text: 'API key required', indicator: 'key-needed' };
+  }
+};
+
+const StatusIndicator = ({ status, size = 'sm' }: { status: string, size?: 'sm' | 'xs' }) => {
+  const sizeClass = size === 'xs' ? 'w-1.5 h-1.5' : 'w-2 h-2';
+
+  switch (status) {
+    case 'active':
+      return <div className={`${sizeClass} rounded-full bg-emerald-500`} />;
+    case 'key-needed':
+      return <div className={`${sizeClass} rounded-full bg-red-500`} />;
+    default:
+      return <div className={`${sizeClass} rounded-full bg-gray-300`} />;
+  }
+};
+
+const ProviderSelector = ({
+  label,
+  providers,
+  currentProviderId,
+  currentModelId,
+  onProviderChange,
+  onModelChange,
+  apiKey,
+  type,
+  dropdowns,
+  toggleDropdown
+}: {
+  label: string;
+  providers: any[];
+  currentProviderId: string;
+  currentModelId: string;
+  onProviderChange: (providerId: string) => void;
+  onModelChange: (modelId: string) => void;
+  apiKey: any;
+  type: 'text' | 'image';
+  dropdowns: any;
+  toggleDropdown: any;
+}) => {
+  const currentProvider = providers.find(p => p.id === currentProviderId);
+  const currentModel = currentProvider?.models.find(m => m.id === currentModelId);
+  const dropdownKey = `${type}Provider` as keyof typeof dropdowns;
+  const modelDropdownKey = `${type}Model` as keyof typeof dropdowns;
+
+  const currentModelInfo = getModelDisplayInfo(currentModel, apiKey, true);
+
+  return (
+    <div className="space-y-3">
+      {/* Provider Selector */}
+      <div className="relative">
+        <label className="block text-sm font-medium text-gray-700 mb-2">{label}</label>
+        <button
+          onClick={() => toggleDropdown(dropdownKey)}
+          className="w-full px-4 py-3 bg-white border border-gray-200 rounded-lg text-left flex items-center justify-between hover:border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+        >
+          <span className="font-medium text-gray-900">{currentProvider?.name}</span>
+          <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${dropdowns[dropdownKey] ? 'rotate-180' : ''}`} />
+        </button>
+
+        {dropdowns[dropdownKey] && (
+          <div className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg">
+            {providers.map((provider) => (
+              <button
+                key={provider.id}
+                onClick={() => {
+                  if (provider.available !== false) {
+                    onProviderChange(provider.id);
+                    toggleDropdown(dropdownKey);
+                  }
+                }}
+                disabled={provider.available === false}
+                className={`w-full px-4 py-3 text-left flex items-center justify-between first:rounded-t-lg last:rounded-b-lg transition-colors ${
+                  provider.available === false
+                    ? 'cursor-not-allowed opacity-50'
+                    : 'hover:bg-gray-50'
+                } ${currentProviderId === provider.id ? 'bg-blue-50' : ''}`}
+              >
+                <span className="font-medium text-gray-900">{provider.name}</span>
+                {provider.available === false && (
+                  <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full">soon</span>
+                )}
+                {currentProviderId === provider.id && provider.available !== false && (
+                  <Check className="w-4 h-4 text-blue-600" />
+                )}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Model Selector */}
+      <div className="relative">
+        <button
+          onClick={() => toggleDropdown(modelDropdownKey)}
+          className="w-full px-4 py-3 bg-white border border-gray-200 rounded-lg text-left flex items-center justify-between hover:border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+        >
+          <div className="flex items-center space-x-3">
+            <StatusIndicator status={currentModelInfo.indicator} />
+            <div>
+              <div className="font-medium text-gray-900">{currentModel?.name}</div>
+              <div className="text-xs text-gray-500">
+                {currentModelInfo.text}
+              </div>
+            </div>
+          </div>
+          <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${dropdowns[modelDropdownKey] ? 'rotate-180' : ''}`} />
+        </button>
+
+        {dropdowns[modelDropdownKey] && currentProvider && (
+          <div className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-y-auto">
+            {currentProvider.models
+              .filter(model => model.id !== currentModelId) // ✅ ADDED LINE: Filters the list
+              .map((model) => {
+                // Since we've filtered the list, 'isSelected' will always be false.
+                const isSelected = false;
+                const modelInfo = getModelDisplayInfo(model, apiKey, isSelected);
+
+                return (
+                  <button
+                    key={model.id}
+                    onClick={() => {
+                      onModelChange(model.id);
+                      toggleDropdown(modelDropdownKey);
+                    }}
+                    className="w-full px-4 py-3 text-left hover:bg-gray-50 first:rounded-t-lg last:rounded-b-lg transition-colors"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-3">
+                        <StatusIndicator status={modelInfo.indicator} />
+                        <div>
+                          <div className="font-medium text-gray-900">{model.name}</div>
+                          <div className="text-xs text-gray-500">
+                            {modelInfo.text}
+                          </div>
+                        </div>
+                      </div>
+                      {/* This Check element will no longer appear, which is correct */}
+                      {isSelected && <Check className="w-4 h-4 text-blue-600" />}
+                    </div>
+                  </button>
+                );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ===== MAIN COMPONENT =====
+
+export default function SettingsContent() {
   const { user } = useAuth();
 
-  // 🆕 ZMIANA: Domyślny provider na Google i model na Imagen 3
+  // 🆕 CHANGE: Default provider to Google and model to Imagen 3
   const [settings, setSettings] = useState<UserSettings>({
     username: '',
     logo: null,
     textProvider: 'anthropic',
     textModel: 'claude-3-haiku',
-    imageProvider: 'google', // 🆕 ZMIANA: Google domyślny
-    imageModel: 'imagen-3'   // 🆕 ZMIANA: Imagen 3 domyślny
+    imageProvider: 'google', // 🆕 CHANGE: Google default
+    imageModel: 'imagen-3'   // 🆕 CHANGE: Imagen 3 default
   });
 
   const [initialUsername, setInitialUsername] = useState('');
@@ -157,7 +332,7 @@ export default function UstawieniaContent() {
   const [apiKeys, setApiKeys] = useState<Record<string, ApiKey>>({
     anthropic: { value: '', showValue: false, isSaved: false },
     openai: { value: '', showValue: false, isSaved: false },
-    google: { value: '', showValue: false, isSaved: false } // 🆕 ZMIANA: 'google' zamiast 'gemini'
+    google: { value: '', showValue: false, isSaved: false } // 🆕 CHANGE: 'google' instead of 'gemini'
   });
 
   const [dropdowns, setDropdowns] = useState({
@@ -176,7 +351,8 @@ export default function UstawieniaContent() {
 
   const [message, setMessage] = useState<{type: 'success' | 'error', text: string} | null>(null);
   const [isDiskExplorerOpen, setIsDiskExplorerOpen] = useState(false);
-  // ✅ NOWE: Funkcje do zarządzania kluczami API
+
+  // ✅ NEW: Functions for API key management
   const loadApiKeysStatus = useCallback(async () => {
     if (!user?.id) return;
 
@@ -191,9 +367,9 @@ export default function UstawieniaContent() {
 
       if (response.ok) {
         const data = await response.json();
-        console.log('✅ Pobrano status kluczy API:', data);
+        console.log('✅ Fetched API key status:', data);
 
-        // Aktualizuj stan kluczy na podstawie odpowiedzi z serwera
+        // Update key state based on server response
         setApiKeys(prev => {
           const updated = { ...prev };
           Object.keys(data.providers).forEach(provider => {
@@ -207,19 +383,19 @@ export default function UstawieniaContent() {
           return updated;
         });
       } else {
-        console.error('❌ Błąd pobierania statusu kluczy API:', response.status);
-        setMessage({ type: 'error', text: 'Nie udało się pobrać statusu kluczy API' });
+        console.error('❌ Error fetching API key status:', response.status);
+        setMessage({ type: 'error', text: 'Failed to fetch API key status' });
       }
     } catch (error) {
-      console.error('❌ Błąd sieci przy pobieraniu statusu kluczy API:', error);
-      setMessage({ type: 'error', text: 'Błąd połączenia z serwerem' });
+      console.error('❌ Network error fetching API key status:', error);
+      setMessage({ type: 'error', text: 'Server connection error' });
     } finally {
       setIsLoadingApiKeys(false);
       setTimeout(() => setMessage(null), 3000);
     }
   }, [user?.id]);
 
-  // ✅ NOWE: Aktualizacja ustawień AI w tabeli users
+  // ✅ NEW: Update AI settings in the users table
   const updateUserAiSettings = useCallback(async (settings: Partial<UserSettings>) => {
     if (!user?.id || isSavingAiSettings) return;
 
@@ -241,30 +417,30 @@ export default function UstawieniaContent() {
       });
 
       if (response.ok) {
-        console.log('✅ Zaktualizowano ustawienia AI:', updateData);
+        console.log('✅ Updated AI settings:', updateData);
       } else {
-        console.error('❌ Błąd zapisu ustawień AI:', response.status);
+        console.error('❌ Error saving AI settings:', response.status);
       }
     } catch (error) {
-      console.error('❌ Błąd sieci przy zapisie ustawień AI:', error);
+      console.error('❌ Network error while saving AI settings:', error);
     } finally {
       setIsSavingAiSettings(false);
     }
   }, [user?.id, isSavingAiSettings]);
 
-  // ✅ NOWE: Funkcje helper dla aspect ratio - MUSZĄ BYĆ PRZED useEffect
+  // ✅ NEW: Helper functions for aspect ratio - MUST BE BEFORE useEffect
   const handleImageLoad = useCallback((event: React.SyntheticEvent<HTMLImageElement>) => {
     const img = event.currentTarget;
     const aspectRatio = img.naturalWidth / img.naturalHeight;
     setImageAspectRatio(aspectRatio);
-    console.log(`🔍 Proporcje obrazu: ${img.naturalWidth}x${img.naturalHeight}, ratio: ${aspectRatio.toFixed(2)}`);
+    console.log(`📐 Image dimensions: ${img.naturalWidth}x${img.naturalHeight}, ratio: ${aspectRatio.toFixed(2)}`);
   }, []);
 
   const resetImageAspectRatio = useCallback(() => {
     setImageAspectRatio(null);
   }, []);
 
-  // Inicjalizacja username tylko raz gdy user się zmieni
+  // Initialize username only once when the user changes
   useEffect(() => {
     if (user) {
       const fullName = [user.first_name, user.last_name].filter(Boolean).join(' ');
@@ -274,14 +450,14 @@ export default function UstawieniaContent() {
         setLastSavedUsername(fullName);
       }
     }
-  }, [user]); // ✅ USUNIĘTO initialUsername z zależności - zapobiega zapętleniu
+  }, [user]); // ✅ REMOVED initialUsername from dependencies - prevents loop
 
-  // ✅ Pobierz ustawienia autora tylko raz przy załadowaniu
+  // ✅ Fetch author settings only once on load
   useEffect(() => {
-    let isMounted = true; // Zapobiega aktualizacji po unmount
+    let isMounted = true; // Prevents state update on unmounted component
 
     if (user?.id) {
-      // ✅ Inline async function aby uniknąć dependency na fetchAuthorSettings
+      // ✅ Inline async function to avoid dependency on fetchAuthorSettings
       const loadAuthorSettings = async () => {
         setIsLoadingAuthorSettings(true);
         try {
@@ -296,43 +472,43 @@ export default function UstawieniaContent() {
             const data = await response.json();
             const authorSettings: AuthorSettings = data.authorSettings;
 
-            // ✅ Dodaj cache busting do istniejącego avatara
+            // ✅ Add cache busting to the existing avatar
             let logoUrl = authorSettings.authorLogoUrl;
             if (logoUrl) {
               const separator = logoUrl.includes('?') ? '&' : '?';
               logoUrl = `${logoUrl}${separator}t=${Date.now()}`;
             }
 
-            // Aktualizuj settings z danymi z serwera
+            // Update settings with data from the server
             setSettings(prev => ({
               ...prev,
               username: authorSettings.authorDisplayName || authorSettings.fallbackName,
               logo: logoUrl,
-              // ✅ DODANE: Aktualizuj ustawienia AI z serwera - Z GOOGLE DOMYŚLNYM
+              // ✅ ADDED: Update AI settings from server - WITH GOOGLE AS DEFAULT
               textProvider: authorSettings.textAiProvider || 'anthropic',
               textModel: authorSettings.textAiModel || 'claude-3-haiku',
-              imageProvider: authorSettings.imageAiProvider || 'google', // 🆕 ZMIANA
-              imageModel: authorSettings.imageAiModel || 'imagen-3' // 🆕 ZMIANA
+              imageProvider: authorSettings.imageAiProvider || 'google', // 🆕 CHANGE
+              imageModel: authorSettings.imageAiModel || 'imagen-3' // 🆕 CHANGE
             }));
 
-            // Ustaw jako zapisane
+            // Set as saved
             setLastSavedUsername(authorSettings.authorDisplayName || authorSettings.fallbackName);
 
-            console.log('✅ Pobrano ustawienia autora:', authorSettings);
-            console.log('🔧 Załadowane ustawienia AI z serwera:', {
+            console.log('✅ Fetched author settings:', authorSettings);
+            console.log('🔧 Loaded AI settings from server:', {
               textProvider: authorSettings.textAiProvider || 'anthropic (default)',
               textModel: authorSettings.textAiModel || 'claude-3-haiku (default)',
-              imageProvider: authorSettings.imageAiProvider || 'google (default)', // 🆕 ZMIANA
-              imageModel: authorSettings.imageAiModel || 'imagen-3 (default)' // 🆕 ZMIANA
+              imageProvider: authorSettings.imageAiProvider || 'google (default)', // 🆕 CHANGE
+              imageModel: authorSettings.imageAiModel || 'imagen-3 (default)' // 🆕 CHANGE
             });
           } else if (isMounted) {
-            console.error('❌ Błąd pobierania ustawień autora:', response.status);
-            setMessage({ type: 'error', text: 'Nie udało się pobrać ustawień autora' });
+            console.error('❌ Error fetching author settings:', response.status);
+            setMessage({ type: 'error', text: 'Failed to fetch author settings' });
           }
         } catch (error) {
           if (isMounted) {
-            console.error('❌ Błąd sieci przy pobieraniu ustawień autora:', error);
-            setMessage({ type: 'error', text: 'Błąd połączenia z serwerem' });
+            console.error('❌ Network error fetching author settings:', error);
+            setMessage({ type: 'error', text: 'Server connection error' });
           }
         } finally {
           if (isMounted) {
@@ -348,23 +524,23 @@ export default function UstawieniaContent() {
     return () => {
       isMounted = false;
     };
-  }, [user?.id]); // ✅ Tylko user?.id w zależnościach
+  }, [user?.id]); // ✅ Only user?.id in dependencies
 
-  // ✅ NOWE: Ładowanie statusu kluczy API przy inicjalizacji
+  // ✅ NEW: Load API key status on initialization
   useEffect(() => {
     if (user?.id) {
       loadApiKeysStatus();
     }
   }, [user?.id, loadApiKeysStatus]);
 
-  // ✅ Reset aspect ratio gdy logo zostanie usunięte
+  // ✅ Reset aspect ratio when logo is removed
   useEffect(() => {
     if (!settings.logo) {
       resetImageAspectRatio();
     }
   }, [settings.logo, resetImageAspectRatio]);
 
-  // ✅ Cleanup blob URLs przy unmount
+  // ✅ Cleanup blob URLs on unmount
   useEffect(() => {
     return () => {
       if (settings.logo && settings.logo.startsWith('blob:')) {
@@ -373,7 +549,7 @@ export default function UstawieniaContent() {
     };
   }, [settings.logo]);
 
-  // Memoizowane funkcje pomocnicze
+  // Memoized helper functions
   const textProvider = useMemo(() =>
     TEXT_PROVIDERS.find(p => p.id === settings.textProvider),
     [settings.textProvider]
@@ -404,14 +580,14 @@ export default function UstawieniaContent() {
     [imageModel]
   );
 
-  // Memoizowane klucze API
+  // Memoized API keys
   const currentTextApiKey = useMemo(() =>
     apiKeys[settings.textProvider],
     [apiKeys, settings.textProvider]
   );
 
   const currentImageApiKey = useMemo(() => {
-    // 🆕 ZMIANA: Mapowanie provider ID na klucz API
+    // 🆕 CHANGE: Map provider ID to API key
     const providerKeyMap: Record<string, string> = {
       'google': 'google',
       'openai': 'openai'
@@ -420,13 +596,13 @@ export default function UstawieniaContent() {
     return apiKeys[keyName];
   }, [apiKeys, settings.imageProvider]);
 
-  // 🆕 ROZSZERZONA Walidacja API key - obsługuje Google
+  // 🆕 EXPANDED API key validation - handles Google
   const isValidApiKey = useCallback((provider: string, key: string): boolean => {
     if (!key || key.length < 20) return false;
     switch (provider) {
       case 'anthropic': return key.startsWith('sk-ant-');
       case 'openai': return key.startsWith('sk-');
-      case 'google': return key.startsWith('AIza'); // 🆕 DODANE: Google API key validation
+      case 'google': return key.startsWith('AIza'); // 🆕 ADDED: Google API key validation
       default: return false;
     }
   }, []);
@@ -445,17 +621,17 @@ export default function UstawieniaContent() {
     return currentImageApiKey?.value ? isValidApiKey(keyName, currentImageApiKey.value) : false;
   }, [currentImageApiKey?.value, settings.imageProvider, isValidApiKey]);
 
-  // 🆕 ROZSZERZONA funkcja placeholder - obsługuje Google
+  // 🆕 EXPANDED placeholder function - handles Google
   const getApiKeyPlaceholder = useCallback((provider: string) => {
     switch (provider) {
-      case 'anthropic': return 'sk-ant-... lub sk-ant-api03-...';
+      case 'anthropic': return 'sk-ant-... or sk-ant-api03-...';
       case 'openai': return 'sk-...';
-      case 'google': return 'AIza... (z Google AI Studio)'; // 🆕 DODANE
-      default: return 'Wklej klucz API';
+      case 'google': return 'AIza... (from Google AI Studio)'; // 🆕 ADDED
+      default: return 'Paste your API key';
     }
   }, []);
 
-  // Obsługa dropdown
+  // Dropdown handler
   const toggleDropdown = useCallback((dropdown: keyof typeof dropdowns) => {
     setDropdowns(prev => ({
       textProvider: false,
@@ -466,7 +642,7 @@ export default function UstawieniaContent() {
     }));
   }, []);
 
-  // 🆕 POPRAWIONA Obsługa kluczy API - bezpieczna aktualizacja
+  // 🆕 IMPROVED API key handling - safe update
   const updateApiKey = useCallback((provider: string, value: string) => {
     const providerKeyMap: Record<string, string> = {
       'google': 'google',
@@ -479,7 +655,7 @@ export default function UstawieniaContent() {
       ...prev,
       [keyName]: {
         value: value,
-        showValue: prev[keyName]?.showValue || false, // Bezpieczny dostęp do poprzedniej wartości
+        showValue: prev[keyName]?.showValue || false, // Safe access to previous value
         isSaved: false
       }
     }));
@@ -495,9 +671,9 @@ export default function UstawieniaContent() {
 
     setApiKeys(prev => {
       const currentKey = prev[keyName];
-      // ✅ Warunek zabezpieczający przed operacją na undefined
+      // ✅ Guard clause to prevent operations on undefined
       if (!currentKey) {
-        return prev; // Nie rób nic, jeśli klucz nie istnieje
+        return prev; // Do nothing if the key doesn't exist
       }
       return {
         ...prev,
@@ -527,45 +703,75 @@ export default function UstawieniaContent() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          provider: keyName, // Używaj zmapowanego keyName
+          provider: keyName, // Use the mapped keyName
           apiKey: keyInfo.value
         }),
       });
 
       if (response.ok) {
         const data = await response.json();
-        console.log('✅ Klucz API zapisany:', data);
+        console.log('✅ API key saved:', data);
 
-        // Wyczyść wprowadzony klucz i oznacz jako zapisany
+        // Clear the input key and mark as saved
         setApiKeys(prev => ({
           ...prev,
           [keyName]: { ...prev[keyName], value: '', showValue: false, isSaved: true }
         }));
 
-        setMessage({ type: 'success', text: `Klucz API dla ${providerName} został zapisany.` });
+        setMessage({ type: 'success', text: `API key for ${providerName} has been saved.` });
+
+        // --- START OF FIX ---
+        // ✅ EXTRA STEP: SAVE THE PENDING PREMIUM MODEL
+        // Check if the currently selected model for this provider is premium
+        const isTextProvider = TEXT_PROVIDERS.some(p => p.id === provider);
+        const isImageProvider = IMAGE_PROVIDERS.some(p => p.id === provider);
+
+        if (isTextProvider) {
+          const currentTextModel = TEXT_PROVIDERS
+            .find(p => p.id === provider)?.models
+            .find(m => m.id === settings.textModel);
+
+          if (currentTextModel?.tier === 'premium') {
+            console.log(`🚀 Saving pending text model: ${currentTextModel.name}`);
+            updateUserAiSettings({ textModel: settings.textModel });
+          }
+        }
+
+        if (isImageProvider) {
+          const currentImageModel = IMAGE_PROVIDERS
+            .find(p => p.id === provider)?.models
+            .find(m => m.id === settings.imageModel);
+
+          if (currentImageModel?.tier === 'premium') {
+            console.log(`🚀 Saving pending image model: ${currentImageModel.name}`);
+            updateUserAiSettings({ imageModel: settings.imageModel });
+          }
+        }
+        // --- END OF FIX ---
+
       } else {
         const errorData = await response.json();
-        console.error('❌ Błąd zapisywania klucza API:', errorData);
+        console.error('❌ Error saving API key:', errorData);
         setMessage({
           type: 'error',
-          text: errorData.error || `Nie udało się zapisać klucza API dla ${providerName}`
+          text: errorData.error || `Failed to save API key for ${providerName}`
         });
       }
     } catch (error) {
-      console.error('❌ Błąd sieci przy zapisywaniu klucza API:', error);
-      setMessage({ type: 'error', text: 'Błąd połączenia z serwerem' });
+      console.error('❌ Network error while saving API key:', error);
+      setMessage({ type: 'error', text: 'Server connection error' });
     } finally {
       setSavingApiKey(null);
       setTimeout(() => setMessage(null), 3000);
     }
-  }, [apiKeys, isValidApiKey, savingApiKey]);
+  }, [apiKeys, isValidApiKey, savingApiKey, settings.textModel, settings.imageModel, updateUserAiSettings]);
 
   const removeApiKey = useCallback((provider: string) => {
     const providerName = TEXT_PROVIDERS.find(p=>p.id === provider)?.name || IMAGE_PROVIDERS.find(p=>p.id === provider)?.name || provider;
     setConfirmModal({
       isOpen: true,
-      title: 'Usuń klucz API',
-      message: `Czy na pewno chcesz usunąć klucz API ${providerName}?`,
+      title: 'Remove API Key',
+      message: `Are you sure you want to remove the API key for ${providerName}?`,
       onConfirm: async () => {
         try {
           const providerKeyMap: Record<string, string> = {
@@ -585,86 +791,86 @@ export default function UstawieniaContent() {
 
           if (response.ok) {
             const data = await response.json();
-            console.log('✅ Klucz API usunięty:', data);
+            console.log('✅ API key removed:', data);
 
-            // Zaktualizuj stan lokalny
+            // Update local state
             setApiKeys(prev => ({
               ...prev,
               [keyName]: { value: '', showValue: false, isSaved: false }
             }));
 
-            // ✅ NOWE: Automatyczne przełączenie na model basic po usunięciu klucza
+            // ✅ NEW: Automatically switch to a basic model after removing the key
             const settingsToUpdate: Partial<UserSettings> = {};
 
-            // Sprawdź czy usunięty klucz dotyczył text providera
+            // Check if the removed key was for the text provider
             if (settings.textProvider === provider) {
               const currentTextProvider = TEXT_PROVIDERS.find(p => p.id === provider);
               const currentTextModel = currentTextProvider?.models.find(m => m.id === settings.textModel);
 
               if (currentTextModel?.tier === 'premium') {
-                // Znajdź pierwszy dostępny model basic w tym providerze
+                // Find the first available basic model in this provider
                 const basicModel = currentTextProvider?.models.find(m => m.tier === 'basic');
                 if (basicModel) {
                   settingsToUpdate.textModel = basicModel.id;
                   setSettings(prev => ({ ...prev, textModel: basicModel.id }));
-                  console.log(`🔄 Przełączono na model basic: ${basicModel.name}`);
+                  console.log(`🔄 Switched to basic model: ${basicModel.name}`);
                 } else {
-                  // Jeśli provider nie ma modelu basic, przełącz na anthropic (który ma haiku basic)
+                  // If the provider has no basic model, switch to anthropic (which has haiku basic)
                   const anthropicProvider = TEXT_PROVIDERS.find(p => p.id === 'anthropic');
                   const anthropicBasic = anthropicProvider?.models.find(m => m.tier === 'basic');
                   if (anthropicBasic) {
                     settingsToUpdate.textProvider = 'anthropic';
                     settingsToUpdate.textModel = anthropicBasic.id;
                     setSettings(prev => ({ ...prev, textProvider: 'anthropic', textModel: anthropicBasic.id }));
-                    console.log(`🔄 Przełączono na Anthropic: ${anthropicBasic.name}`);
+                    console.log(`🔄 Switched to Anthropic: ${anthropicBasic.name}`);
                   }
                 }
               }
             }
 
-            // Sprawdź czy usunięty klucz dotyczył image providera
+            // Check if the removed key was for the image provider
             if (settings.imageProvider === provider) {
               const currentImageProvider = IMAGE_PROVIDERS.find(p => p.id === provider);
               const currentImageModel = currentImageProvider?.models.find(m => m.id === settings.imageModel);
 
               if (currentImageModel?.tier === 'premium') {
-                // Znajdź pierwszy dostępny model basic w tym providerze
+                // Find the first available basic model in this provider
                 const basicModel = currentImageProvider?.models.find(m => m.tier === 'basic');
                 if (basicModel) {
                   settingsToUpdate.imageModel = basicModel.id;
                   setSettings(prev => ({ ...prev, imageModel: basicModel.id }));
-                  console.log(`🔄 Przełączono na model basic obrazów: ${basicModel.name}`);
+                  console.log(`🔄 Switched to basic image model: ${basicModel.name}`);
                 } else {
-                  // 🆕 ZMIANA: Fallback na Google Imagen 3 (najtańszy)
+                  // 🆕 CHANGE: Fallback to Google Imagen 3 (cheapest)
                   const googleProvider = IMAGE_PROVIDERS.find(p => p.id === 'google');
                   const googleBasic = googleProvider?.models.find(m => m.tier === 'basic');
                   if (googleBasic) {
                     settingsToUpdate.imageProvider = 'google';
                     settingsToUpdate.imageModel = googleBasic.id;
                     setSettings(prev => ({ ...prev, imageProvider: 'google', imageModel: googleBasic.id }));
-                    console.log(`🔄 Przełączono na Google: ${googleBasic.name}`);
+                    console.log(`🔄 Switched to Google: ${googleBasic.name}`);
                   }
                 }
               }
             }
 
-            // Zapisz zmiany ustawień AI w bazie jeśli były jakieś przełączenia
+            // Save AI settings changes to the database if any switches occurred
             if (Object.keys(settingsToUpdate).length > 0) {
               await updateUserAiSettings(settingsToUpdate);
             }
 
-            setMessage({ type: 'success', text: `Klucz API dla ${providerName} został usunięty` });
+            setMessage({ type: 'success', text: `API key for ${providerName} has been removed` });
           } else {
             const errorData = await response.json();
-            console.error('❌ Błąd usuwania klucza API:', errorData);
+            console.error('❌ Error removing API key:', errorData);
             setMessage({
               type: 'error',
-              text: errorData.error || `Nie udało się usunąć klucza API dla ${providerName}`
+              text: errorData.error || `Failed to remove API key for ${providerName}`
             });
           }
         } catch (error) {
-          console.error('❌ Błąd sieci przy usuwaniu klucza API:', error);
-          setMessage({ type: 'error', text: 'Błąd połączenia z serwerem' });
+          console.error('❌ Network error while removing API key:', error);
+          setMessage({ type: 'error', text: 'Server connection error' });
         } finally {
           setConfirmModal(prev => ({ ...prev, isOpen: false }));
           setTimeout(() => setMessage(null), 3000);
@@ -673,19 +879,99 @@ export default function UstawieniaContent() {
     });
   }, [settings.textProvider, settings.textModel, settings.imageProvider, settings.imageModel, updateUserAiSettings]);
 
-  // ✅ NOWE: Obsługa logo/avatara - upload z FormData
+  // ===== NEW PROVIDER HANDLER FUNCTIONS =====
+
+  // Text provider change handler - elegant version
+  const handleTextProviderChange = useCallback((providerId: string) => {
+    const provider = TEXT_PROVIDERS.find(p => p.id === providerId);
+    if (provider && provider.available) {
+      const newSettings = {
+        textProvider: providerId,
+        textModel: provider.models[0].id
+      };
+      setSettings(prev => ({ ...prev, ...newSettings }));
+      // Save AI settings to the users table
+      updateUserAiSettings(newSettings);
+    }
+  }, [updateUserAiSettings]);
+
+  // Text model change handler - elegant version with conditionality
+  const handleTextModelChange = useCallback((modelId: string) => {
+    const provider = TEXT_PROVIDERS.find(p => p.id === settings.textProvider);
+    const model = provider?.models.find(m => m.id === modelId);
+
+    if (!model) return;
+
+    const newSettings = { textModel: modelId };
+    setSettings(prev => ({ ...prev, ...newSettings }));
+
+    // CONDITIONAL SAVE TO DATABASE
+    const isPremium = model.tier === 'premium';
+    const hasApiKey = apiKeys[settings.textProvider]?.isSaved;
+
+    if (!isPremium || (isPremium && hasApiKey)) {
+      // Save only if the model is basic OR it's premium and the user has a key
+      updateUserAiSettings(newSettings);
+      console.log(`✅ Saved model ${model.name} to the database.`);
+    } else {
+      // If the model is premium and the user has no key - only update the UI
+      console.log(`🟡 Selected premium model ${model.name}, awaiting API key. Change not saved to the database.`);
+    }
+  }, [settings.textProvider, apiKeys, updateUserAiSettings]);
+
+  // Image provider change handler - elegant version
+  const handleImageProviderChange = useCallback((providerId: string) => {
+    const provider = IMAGE_PROVIDERS.find(p => p.id === providerId);
+    if (provider && provider.available) {
+      const newSettings = {
+        imageProvider: providerId,
+        imageModel: provider.models[0].id
+      };
+      setSettings(prev => ({ ...prev, ...newSettings }));
+      // Save AI settings to the users table
+      updateUserAiSettings(newSettings);
+    }
+  }, [updateUserAiSettings]);
+
+  // Image model change handler - elegant version with conditionality
+  const handleImageModelChange = useCallback((modelId: string) => {
+    const provider = IMAGE_PROVIDERS.find(p => p.id === settings.imageProvider);
+    const model = provider?.models.find(m => m.id === modelId);
+
+    if (!model) return;
+
+    const newSettings = { imageModel: modelId };
+    setSettings(prev => ({ ...prev, ...newSettings }));
+
+    // CONDITIONAL SAVE TO DATABASE
+    const isPremium = model.tier === 'premium';
+    const providerKeyMap: Record<string, string> = { 'google': 'google', 'openai': 'openai' };
+    const keyName = providerKeyMap[settings.imageProvider] || settings.imageProvider;
+    const hasApiKey = apiKeys[keyName]?.isSaved;
+
+    if (!isPremium || (isPremium && hasApiKey)) {
+      updateUserAiSettings(newSettings);
+      console.log(`✅ Saved model ${model.name} to the database.`);
+    } else {
+      console.log(`🟡 Selected premium model ${model.name}, awaiting API key. Change not saved to the database.`);
+    }
+  }, [settings.imageProvider, apiKeys, updateUserAiSettings]);
+
+  // ===== OTHER FUNCTIONS (avatar, username) =====
+
+  // ✅ NEW: Logo/avatar handling - upload with FormData
   const handleLogoUpload = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file || isUploadingAvatar) return;
 
-    console.log('🖼️ Rozpoczęcie uploadu avatara:', file.name, file.type, file.size);
+    console.log('🖼️ Starting avatar upload:', file.name, file.type, file.size);
 
-    // ✅ Wyczyść stary blob URL jeśli istnieje
+    // ✅ Clear old blob URL if it exists
     if (settings.logo && settings.logo.startsWith('blob:')) {
       URL.revokeObjectURL(settings.logo);
     }
 
-    // ✅ Reset aspect ratio przed nowym uploadem
+    // ✅ Reset aspect ratio before new upload
     resetImageAspectRatio();
 
     setIsUploadingAvatar(true);
@@ -696,39 +982,39 @@ export default function UstawieniaContent() {
 
       const response = await fetch('/api/user/author-settings', {
         method: 'PUT',
-        body: formData, // FormData automatycznie ustawia Content-Type
+        body: formData, // FormData automatically sets the Content-Type
       });
 
       if (response.ok) {
         const data = await response.json();
         const authorSettings: AuthorSettings = data.authorSettings;
 
-        // ✅ Cache busting - dodaj timestamp do URL aby wymusić odświeżenie
+        // ✅ Cache busting - add a timestamp to the URL to force a refresh
         let newAvatarUrl = authorSettings.authorLogoUrl;
         if (newAvatarUrl) {
           const separator = newAvatarUrl.includes('?') ? '&' : '?';
           newAvatarUrl = `${newAvatarUrl}${separator}t=${Date.now()}`;
         }
 
-        // Aktualizuj settings z nowym avatarem (z cache busting)
+        // Update settings with the new avatar (with cache busting)
         setSettings(prev => ({
           ...prev,
           logo: newAvatarUrl
         }));
 
-        setMessage({ type: 'success', text: 'Avatar został zaktualizowany' });
-        console.log('✅ Avatar zaktualizowany:', newAvatarUrl);
+        setMessage({ type: 'success', text: 'Avatar has been updated' });
+        console.log('✅ Avatar updated:', newAvatarUrl);
       } else {
         const errorData = await response.json();
-        console.error('❌ Błąd uploadu avatara:', errorData);
+        console.error('❌ Error uploading avatar:', errorData);
         setMessage({
           type: 'error',
-          text: errorData.error || 'Nie udało się przesłać avatara'
+          text: errorData.error || 'Failed to upload avatar'
         });
       }
     } catch (error) {
-      console.error('❌ Błąd sieci przy uploadzie avatara:', error);
-      setMessage({ type: 'error', text: 'Błąd połączenia z serwerem' });
+      console.error('❌ Network error while uploading avatar:', error);
+      setMessage({ type: 'error', text: 'Server connection error' });
     } finally {
       setIsUploadingAvatar(false);
       setTimeout(() => setMessage(null), 3000);
@@ -740,11 +1026,11 @@ export default function UstawieniaContent() {
     }
   }, [isUploadingAvatar, settings.logo, resetImageAspectRatio]);
 
-  // ✅ NOWE: Usuwanie avatara przez DELETE API
+  // ✅ NEW: Remove avatar via DELETE API
   const removeLogo = useCallback(async () => {
     if (isDeletingAvatar) return;
 
-    // ✅ Wyczyść blob URL jeśli istnieje
+    // ✅ Clear blob URL if it exists
     if (settings.logo && settings.logo.startsWith('blob:')) {
       URL.revokeObjectURL(settings.logo);
     }
@@ -766,29 +1052,29 @@ export default function UstawieniaContent() {
         const data = await response.json();
         const authorSettings: AuthorSettings = data.authorSettings;
 
-        // Usuń avatar z settings
+        // Remove avatar from settings
         setSettings(prev => ({ ...prev, logo: null }));
 
-        setMessage({ type: 'success', text: 'Avatar został usunięty' });
-        console.log('✅ Avatar usunięty');
+        setMessage({ type: 'success', text: 'Avatar has been removed' });
+        console.log('✅ Avatar removed');
       } else {
         const errorData = await response.json();
-        console.error('❌ Błąd usuwania avatara:', errorData);
+        console.error('❌ Error removing avatar:', errorData);
         setMessage({
           type: 'error',
-          text: errorData.error || 'Nie udało się usunąć avatara'
+          text: errorData.error || 'Failed to remove avatar'
         });
       }
     } catch (error) {
-      console.error('❌ Błąd sieci przy usuwaniu avatara:', error);
-      setMessage({ type: 'error', text: 'Błąd połączenia z serwerem' });
+      console.error('❌ Network error while removing avatar:', error);
+      setMessage({ type: 'error', text: 'Server connection error' });
     } finally {
       setIsDeletingAvatar(false);
       setTimeout(() => setMessage(null), 3000);
     }
   }, [isDeletingAvatar, settings.logo, resetImageAspectRatio]);
 
-  // ✅ NOWE: Zapis nazwy autora przez PUT API (JSON)
+  // ✅ NEW: Save author name via PUT API (JSON)
   const handleSaveUsername = useCallback(async () => {
     if (isSavingUsername || settings.username.trim() === '' || settings.username === lastSavedUsername) return;
 
@@ -809,22 +1095,22 @@ export default function UstawieniaContent() {
         const data = await response.json();
         const authorSettings: AuthorSettings = data.authorSettings;
 
-        // Ustaw jako zapisane
+        // Set as saved
         setLastSavedUsername(settings.username);
 
-        setMessage({ type: 'success', text: 'Nazwa autora została zaktualizowana' });
-        console.log('✅ Nazwa autora zaktualizowana:', authorSettings.authorDisplayName);
+        setMessage({ type: 'success', text: 'Author name has been updated' });
+        console.log('✅ Author name updated:', authorSettings.authorDisplayName);
       } else {
         const errorData = await response.json();
-        console.error('❌ Błąd zapisu nazwy autora:', errorData);
+        console.error('❌ Error saving author name:', errorData);
         setMessage({
           type: 'error',
-          text: errorData.error || 'Nie udało się zapisać nazwy autora'
+          text: errorData.error || 'Failed to save author name'
         });
       }
     } catch (error) {
-      console.error('❌ Błąd sieci przy zapisie nazwy autora:', error);
-      setMessage({ type: 'error', text: 'Błąd połączenia z serwerem' });
+      console.error('❌ Network error while saving author name:', error);
+      setMessage({ type: 'error', text: 'Server connection error' });
     } finally {
       setIsSavingUsername(false);
       setTimeout(() => setMessage(null), 3000);
@@ -837,38 +1123,24 @@ export default function UstawieniaContent() {
 
   return (
     <div className="space-y-8">
-      {/* Header */}
-      <div className="border-b border-gray-200 pb-6">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Ustawienia AI</h1>
-        <p className="text-gray-600 text-lg">Skonfiguruj modele AI i personalizuj swoje ebooki</p>
-      </div>
-
-      {/* Messages */}
-      {message && (
-        <div className={`rounded-xl p-4 flex items-center ${ message.type === 'success' ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200' }`}>
-          {message.type === 'success' ? <CheckCircle className="h-5 w-5 text-green-600 mr-3" /> : <AlertCircle className="h-5 w-5 text-red-600 mr-3" />}
-          <span className={message.type === 'success' ? 'text-green-800' : 'text-red-800'}>{message.text}</span>
-        </div>
-      )}
-
-      {/* Profil autora */}
+      {/* Author Profile */}
       <div className="bg-white rounded-xl border border-gray-200 p-6">
         <div className="flex items-center mb-6">
           <User className="h-5 w-5 text-blue-600 mr-2" />
-          <h2 className="text-xl font-bold text-gray-900">Profil autora</h2>
+          <h2 className="text-xl font-bold text-gray-900">Author Profile</h2>
           {isLoadingAuthorSettings && (
             <Loader2 className="h-4 w-4 text-gray-400 ml-2 animate-spin" />
           )}
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Nazwa autora</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Author Name</label>
             <div className="relative">
               <input
                 type="text"
                 value={settings.username}
                 onChange={(e) => setSettings(prev => ({ ...prev, username: e.target.value }))}
-                placeholder="Wprowadź swoją nazwę"
+                placeholder="Enter your name"
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-500 pr-28"
               />
               {settings.username !== lastSavedUsername && settings.username.trim() !== '' && (
@@ -882,39 +1154,39 @@ export default function UstawieniaContent() {
                   ) : (
                     <>
                       <Save className="h-4 w-4 mr-1.5" />
-                      Zapisz
+                      Save
                     </>
                   )}
                 </button>
               )}
             </div>
-            <p className="text-xs text-gray-500 mt-1">Widoczna na okładkach ebooków</p>
+            <p className="text-xs text-gray-500 mt-1">Visible in the ebook footer and on landing pages</p>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Logo / Zdjęcie autora</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Author Logo / Photo</label>
             {settings.logo || isUploadingAvatar ? (
               <div
                 className="relative group border-2 border-gray-200 rounded-lg overflow-hidden flex items-center justify-center bg-gray-50"
                 style={{
                   width: '100%',
-                  // ✅ Zwiększona wysokość kontenera - minimum 200px, można więcej dla wysokich obrazów
+                  // ✅ Increased container height - min 200px, can be more for tall images
                   height: imageAspectRatio
                     ? imageAspectRatio >= 1
-                      ? '200px' // Landscape/Square - stała wysokość
-                      : `${Math.min(400 / imageAspectRatio, 400)}px` // Portrait - oblicz na podstawie szerokości 400px
+                      ? '200px' // Landscape/Square - fixed height
+                      : `${Math.min(400 / imageAspectRatio, 400)}px` // Portrait - calculate based on 400px width
                     : '200px',
                   minHeight: '200px',
                   maxHeight: '400px'
                 }}
               >
                 {isUploadingAvatar ? (
-                  // ✅ Loading state podczas uploadu
+                  // ✅ Loading state during upload
                   <div className="flex flex-col items-center justify-center text-gray-500">
                     <Loader2 className="h-8 w-8 animate-spin mb-2" />
-                    <span className="text-sm font-medium">Przetwarzanie...</span>
+                    <span className="text-sm font-medium">Processing...</span>
                   </div>
                 ) : (
-                  // ✅ Normalny podgląd grafiki - zawsze w pełnych proporcjach
+                  // ✅ Normal image preview - always in full proportions
                   <img
                     src={settings.logo!}
                     alt="Logo"
@@ -924,15 +1196,15 @@ export default function UstawieniaContent() {
                       width: '100%',
                       height: '100%'
                     }}
-                    key={settings.logo} // ✅ Force re-render przy zmianie URL
-                    onLoad={handleImageLoad} // ✅ Oblicz proporcje po załadowaniu
+                    key={settings.logo} // ✅ Force re-render on URL change
+                    onLoad={handleImageLoad} // ✅ Calculate aspect ratio on load
                     onError={(e) => {
-                      console.error('❌ Błąd ładowania obrazu:', settings.logo);
+                      console.error('❌ Error loading image:', settings.logo);
                       resetImageAspectRatio();
                     }}
                   />
                 )}
-                {/* Loading overlay podczas usuwania */}
+                {/* Loading overlay during deletion */}
                 {isDeletingAvatar && (
                   <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center">
                     <Loader2 className="h-6 w-6 text-white animate-spin" />
@@ -955,14 +1227,14 @@ export default function UstawieniaContent() {
                 {isUploadingAvatar ? (
                   <>
                     <Loader2 className="h-8 w-8 text-gray-400 mb-2 animate-spin" />
-                    <span className="text-sm font-medium text-gray-600">Przesyłanie...</span>
-                    <span className="text-xs text-gray-500">Przetwarzanie avatara</span>
+                    <span className="text-sm font-medium text-gray-600">Uploading...</span>
+                    <span className="text-xs text-gray-500">Processing avatar</span>
                   </>
                 ) : (
                   <>
                     <ImageIcon className="h-8 w-8 text-gray-400 mb-2" />
-                    <span className="text-sm font-medium text-gray-600">Dodaj logo</span>
-                    <span className="text-xs text-gray-500">PNG, JPG do 5MB</span>
+                    <span className="text-sm font-medium text-gray-600">Add logo</span>
+                    <span className="text-xs text-gray-500">PNG, JPG up to 5MB</span>
                   </>
                 )}
                 <input
@@ -974,266 +1246,225 @@ export default function UstawieniaContent() {
                 />
               </label>
             )}
-            <p className="text-xs text-gray-500 mt-1">Widoczne na okładce obok nazwy</p>
+            <p className="text-xs text-gray-500 mt-1">Visible in the cover header and on landing pages</p>
           </div>
         </div>
       </div>
 
-      {/* AI Configuration */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Text Generation */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <div className="flex items-center mb-6">
-            <Type className="h-5 w-5 text-blue-600 mr-2" />
-            <h2 className="text-xl font-bold text-gray-900">Generowanie tekstu</h2>
-            {isLoadingApiKeys && (
-              <Loader2 className="h-4 w-4 text-gray-400 ml-2 animate-spin" />
-            )}
-          </div>
-
-          <div className="space-y-4">
-            {/* Text Provider */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Provider AI</label>
-              <div className="relative">
-                <button onClick={() => toggleDropdown('textProvider')} className="w-full px-4 py-3 border border-gray-300 rounded-lg text-left flex items-center justify-between hover:border-gray-400 focus:ring-2 focus:ring-blue-500 bg-white">
-                  <div className="flex items-center"><span className="text-lg mr-3">{textProvider?.icon}</span><span className="font-medium text-gray-900">{textProvider?.name}</span></div>
-                  <ChevronDown className={`h-5 w-5 text-gray-400 transition-transform ${dropdowns.textProvider ? 'rotate-180' : ''}`} />
-                </button>
-                {dropdowns.textProvider && (
-                  <div className="absolute z-10 w-full bottom-full mb-1 bg-white border border-gray-200 rounded-lg shadow-lg">
-                    {TEXT_PROVIDERS.map((provider) => (
-                      <button key={provider.id} onClick={() => {
-                        if (provider.available) {
-                          const newSettings = {
-                            textProvider: provider.id,
-                            textModel: provider.models[0].id
-                          };
-                          setSettings(prev => ({ ...prev, ...newSettings }));
-                          toggleDropdown('textProvider');
-                          // ✅ Zapisz ustawienia AI w tabeli users
-                          updateUserAiSettings(newSettings);
-                        }
-                      }} disabled={!provider.available} className={`w-full px-4 py-3 text-left flex items-center justify-between first:rounded-t-lg last:rounded-b-lg transition-colors ${!provider.available ? 'cursor-not-allowed opacity-60' : 'hover:bg-gray-50'} ${settings.textProvider === provider.id ? 'bg-blue-50 text-blue-700' : 'text-gray-900'}`}>
-                        <div className="flex items-center"><span className="text-lg mr-3">{provider.icon}</span><span className="font-medium">{provider.name}</span></div>
-                        <div className="flex items-center">{!provider.available && (<span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full mr-2">wkrótce</span>)}{settings.textProvider === provider.id && provider.available && (<Check className="h-4 w-4 text-blue-600" />)}</div>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-            {/* Text Model */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Model</label>
-              <div className="relative">
-                <button onClick={() => toggleDropdown('textModel')} className="w-full px-4 py-3 border border-gray-300 rounded-lg text-left flex items-center justify-between hover:border-gray-400 focus:ring-2 focus:ring-blue-500 bg-white">
-                  <div>
-                    <div className="font-medium text-gray-900 flex items-center">{textModel?.name}{textModel?.tier === 'premium' && (<span className="ml-2 px-2.5 py-0.5 bg-purple-100 text-purple-800 text-xs font-medium rounded-full">Wymagany własny klucz API</span>)}</div>
-                    <div className="text-sm text-gray-500">{textModel?.description}</div>
-                  </div>
-                  <ChevronDown className={`h-5 w-5 text-gray-400 transition-transform ${dropdowns.textModel ? 'rotate-180' : ''}`} />
-                </button>
-                {dropdowns.textModel && textProvider && (
-                  <div className="absolute z-10 w-full bottom-full mb-1 bg-white border border-gray-200 rounded-lg shadow-lg">
-                    {textProvider.models.map((model) => (
-                      <button key={model.id} onClick={() => {
-                        const newSettings = { textModel: model.id };
-                        setSettings(prev => ({ ...prev, ...newSettings }));
-                        toggleDropdown('textModel');
-                        // ✅ Zapisz ustawienia AI w tabeli users
-                        updateUserAiSettings(newSettings);
-                      }} className={`w-full px-4 py-3 text-left hover:bg-gray-50 first:rounded-t-lg last:rounded-b-lg transition-colors ${settings.textModel === model.id ? 'bg-blue-50' : ''}`}>
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <div className="font-medium text-gray-900 flex items-center">{model.name}{model.tier === 'premium' && (<span className="ml-2 px-2.5 py-0.5 bg-purple-100 text-purple-800 text-xs font-medium rounded-full">Wymagany własny klucz API</span>)}</div>
-                            <div className="text-sm text-gray-500">{model.description}</div>
-                          </div>
-                          {settings.textModel === model.id && <Check className="h-4 w-4 text-blue-600" />}
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-          {/* Text API Key Section */}
-          {needsTextApiKey && (
-            <div className="mt-6 pt-6 border-t border-gray-100">
-              {!currentTextApiKey?.isSaved && (<div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4"><p className="text-sm text-blue-800">Model <strong>{textModel?.name}</strong> wymaga własnego klucza API.</p></div>)}
-              {currentTextApiKey?.isSaved ? (
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between p-4 bg-green-50 border border-green-200 rounded-lg">
-                    <div className="flex items-center"><span className="text-lg mr-3">{textProvider?.icon}</span><div><span className="font-medium text-green-900">{textProvider?.name} API Key</span><p className="text-sm text-green-700">✓ Klucz jest aktywny</p></div></div>
-                    <button onClick={() => removeApiKey(settings.textProvider)} className="px-3 py-1.5 text-sm bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors">Usuń klucz</button>
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <label className="block text-sm font-medium text-gray-700"><div className="flex items-center"><span className="text-lg mr-2">{textProvider?.icon}</span>{textProvider?.name} API Key</div></label>
-                  <div className="relative">
-                    <input type={currentTextApiKey?.showValue ? 'text' : 'password'} value={currentTextApiKey?.value || ''} onChange={(e) => updateApiKey(settings.textProvider, e.target.value)} placeholder={getApiKeyPlaceholder(settings.textProvider)} autoComplete="new-password" className={`w-full px-4 py-3 ${currentTextApiKey?.value && isValidTextKey ? 'pr-32' : 'pr-12'} border rounded-lg focus:ring-2 focus:border-transparent transition-all text-gray-900 placeholder-gray-500 ${currentTextApiKey?.value && isValidTextKey ? 'border-green-300 focus:ring-green-500 bg-green-50' : currentTextApiKey?.value && !isValidTextKey ? 'border-red-300 focus:ring-red-500 bg-red-50' : 'border-gray-300 focus:ring-blue-500 bg-white'}`} />
-                    <button type="button" onClick={() => toggleApiKeyVisibility(settings.textProvider)} className={`absolute top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 z-10 ${currentTextApiKey?.value && isValidTextKey ? 'right-24' : 'right-3'}`}>{currentTextApiKey?.showValue ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}</button>
-                    {currentTextApiKey?.value && isValidTextKey && (
-                      <button onClick={() => saveApiKey(settings.textProvider)} disabled={savingApiKey === settings.textProvider} className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center px-2 py-1.5 bg-blue-600 text-white text-xs font-bold rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all z-10">
-                        {savingApiKey === settings.textProvider ? (<Loader2 className="h-4 w-4 animate-spin" />) : (<><Save className="h-4 w-4 mr-1" />Zapisz</>)}
-                      </button>
-                    )}
-                  </div>
-                  {currentTextApiKey?.value && !isValidTextKey && (<div className="mt-2"><p className="text-xs text-red-600 font-medium flex items-center"><AlertCircle className="h-3 w-3 mr-1" />Nieprawidłowy format klucza API</p><p className="text-xs text-gray-500 mt-1">Oczekiwany format: {getApiKeyPlaceholder(settings.textProvider)}</p></div>)}
-                  <div className="mt-3 pt-3 border-t border-gray-100"><p className="text-xs text-gray-500 flex items-center"><span className="mr-1">🔒</span>Klucz będzie szyfrowany AES-256 i przechowywany bezpiecznie</p></div>
-                </div>
-              )}
-            </div>
-          )}
+      {/* AI Configuration - Elegant version */}
+      <div className="space-y-8">
+        {/* Header */}
+        <div className="text-center space-y-2">
+          <h2 className="text-2xl font-semibold text-gray-900">AI Configuration</h2>
+          <p className="text-gray-600">Choose models and configure API keys</p>
         </div>
 
-        {/* Image Generation */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <div className="flex items-center mb-6">
-            <Palette className="h-5 w-5 text-purple-600 mr-2" />
-            <h2 className="text-xl font-bold text-gray-900">Generowanie obrazów</h2>
-            {isLoadingApiKeys && (
-              <Loader2 className="h-4 w-4 text-gray-400 ml-2 animate-spin" />
-            )}
-          </div>
-
-          <div className="space-y-4">
-            {/* Image Provider */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Provider AI</label>
-              <div className="relative">
-                <button onClick={() => toggleDropdown('imageProvider')} className="w-full px-4 py-3 border border-gray-300 rounded-lg text-left flex items-center justify-between hover:border-gray-400 focus:ring-2 focus:ring-purple-500 bg-white">
-                  <div className="flex items-center"><span className="text-lg mr-3">{imageProvider?.icon}</span><span className="font-medium text-gray-900">{imageProvider?.name}</span></div>
-                  <ChevronDown className={`h-5 w-5 text-gray-400 transition-transform ${dropdowns.imageProvider ? 'rotate-180' : ''}`} />
-                </button>
-                {dropdowns.imageProvider && (
-                  <div className="absolute z-10 w-full bottom-full mb-1 bg-white border border-gray-200 rounded-lg shadow-lg">
-                    {IMAGE_PROVIDERS.map((provider) => (
-                      <button key={provider.id} onClick={() => {
-                        if (provider.available) {
-                          const newSettings = {
-                            imageProvider: provider.id,
-                            imageModel: provider.models[0].id
-                          };
-                          setSettings(prev => ({ ...prev, ...newSettings }));
-                          toggleDropdown('imageProvider');
-                          // ✅ Zapisz ustawienia AI w tabeli users
-                          updateUserAiSettings(newSettings);
-                        }
-                      }} disabled={!provider.available} className={`w-full px-4 py-3 text-left flex items-center justify-between first:rounded-t-lg last:rounded-b-lg transition-colors ${!provider.available ? 'cursor-not-allowed opacity-60' : 'hover:bg-gray-50'} ${settings.imageProvider === provider.id ? 'bg-purple-50 text-purple-700' : 'text-gray-900'}`}>
-                        <div className="flex items-center"><span className="text-lg mr-3">{provider.icon}</span><span className="font-medium">{provider.name}</span></div>
-                        <div className="flex items-center">{!provider.available && (<span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full mr-2">wkrótce</span>)}{settings.imageProvider === provider.id && provider.available && (<Check className="h-4 w-4 text-purple-600" />)}</div>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-            {/* Image Model */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Model</label>
-              <div className="relative">
-                <button onClick={() => toggleDropdown('imageModel')} className="w-full px-4 py-3 border border-gray-300 rounded-lg text-left flex items-center justify-between hover:border-gray-400 focus:ring-2 focus:ring-purple-500 bg-white">
-                  <div>
-                    <div className="font-medium text-gray-900 flex items-center">
-                      {imageModel?.name}
-                      {imageModel?.tier === 'premium' && (
-                        <span className="ml-2 px-2.5 py-0.5 bg-purple-100 text-purple-800 text-xs font-medium rounded-full">Wymagany własny klucz API</span>
-                      )}
-                    </div>
-                    <div className="text-sm text-gray-500">{imageModel?.description}</div>
-                  </div>
-                  <ChevronDown className={`h-5 w-5 text-gray-400 transition-transform ${dropdowns.imageModel ? 'rotate-180' : ''}`} />
-                </button>
-                {dropdowns.imageModel && imageProvider && (
-                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-y-auto">
-                    {imageProvider.models.map((model) => (
-                      <button key={model.id} onClick={() => {
-                        const newSettings = { imageModel: model.id };
-                        setSettings(prev => ({ ...prev, ...newSettings }));
-                        toggleDropdown('imageModel');
-                        // ✅ Zapisz ustawienia AI w tabeli users
-                        updateUserAiSettings(newSettings);
-                      }} className={`w-full px-4 py-3 text-left hover:bg-gray-50 first:rounded-t-lg last:rounded-b-lg transition-colors ${settings.imageModel === model.id ? 'bg-purple-50' : ''}`}>
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <div className="font-medium text-gray-900 flex items-center">
-                              {model.name}
-                              {model.tier === 'premium' && (
-                                <span className="ml-2 px-2.5 py-0.5 bg-purple-100 text-purple-800 text-xs font-medium rounded-full">Wymagany własny klucz API</span>
-                              )}
-                            </div>
-                            <div className="text-sm text-gray-500">{model.description}</div>
-                          </div>
-                          {settings.imageModel === model.id && <Check className="h-4 w-4 text-purple-600" />}
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-           {/* Image API Key Section */}
-           {needsImageApiKey && (
-            <div className="mt-6 pt-6 border-t border-gray-100">
-              {!currentImageApiKey?.isSaved && (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-                  <p className="text-sm text-blue-800">
-                    Model <strong>{imageModel?.name}</strong> wymaga własnego klucza API.
-                    {settings.imageProvider === 'google' && (
-                      <span className="block mt-1">
-                        Uzyskaj darmowy klucz z <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="underline font-medium">Google AI Studio</a>.
-                      </span>
-                    )}
-                  </p>
-                </div>
+        {/* Main Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {/* Text Generation */}
+          <div className="bg-white border border-gray-200 rounded-xl p-6 relative">
+            <div className="flex items-center space-x-2 mb-6">
+              <Type className="w-5 h-5 text-blue-600" />
+              <h3 className="text-lg font-semibold text-gray-900">Text Generation</h3>
+              {isLoadingApiKeys && (
+                <Loader2 className="h-4 w-4 text-gray-400 ml-2 animate-spin" />
               )}
-              {currentImageApiKey?.isSaved ? (
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between p-4 bg-green-50 border border-green-200 rounded-lg">
-                    <div className="flex items-center"><span className="text-lg mr-3">{imageProvider?.icon}</span><div><span className="font-medium text-green-900">{imageProvider?.name} API Key</span><p className="text-sm text-green-700">✓ Klucz jest aktywny</p></div></div>
-                    <button onClick={() => removeApiKey(settings.imageProvider)} className="px-3 py-1.5 text-sm bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors">Usuń klucz</button>
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <label className="block text-sm font-medium text-gray-700">
-                    <div className="flex items-center">
-                      <span className="text-lg mr-2">{imageProvider?.icon}</span>
-                      {imageProvider?.name} API Key
-                      {settings.imageProvider === 'google' && (
-                        <span className="ml-2 text-xs text-green-600 font-medium">(Darmowy)</span>
-                      )}
-                    </div>
-                  </label>
-                  <div className="relative">
-                    <input type={currentImageApiKey?.showValue ? 'text' : 'password'} value={currentImageApiKey?.value || ''} onChange={(e) => updateApiKey(settings.imageProvider, e.target.value)} placeholder={getApiKeyPlaceholder(settings.imageProvider)} autoComplete="new-password" className={`w-full px-4 py-3 ${currentImageApiKey?.value && isValidImageKey ? 'pr-32' : 'pr-12'} border rounded-lg focus:ring-2 focus:border-transparent transition-all text-gray-900 placeholder-gray-500 ${currentImageApiKey?.value && isValidImageKey ? 'border-green-300 focus:ring-green-500 bg-green-50' : currentImageApiKey?.value && !isValidImageKey ? 'border-red-300 focus:ring-red-500 bg-red-50' : 'border-gray-300 focus:ring-blue-500 bg-white'}`} />
-                    <button type="button" onClick={() => toggleApiKeyVisibility(settings.imageProvider)} className={`absolute top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 z-10 ${currentImageApiKey?.value && isValidImageKey ? 'right-24' : 'right-3'}`}>{currentImageApiKey?.showValue ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}</button>
-                    {currentImageApiKey?.value && isValidImageKey && (
-                       <button onClick={() => saveApiKey(settings.imageProvider)} disabled={savingApiKey === settings.imageProvider} className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center px-2 py-1.5 bg-blue-600 text-white text-xs font-bold rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all z-10">
-                         {savingApiKey === settings.imageProvider ? (<Loader2 className="h-4 w-4 animate-spin" />) : (<><Save className="h-4 w-4 mr-1" />Zapisz</>)}
-                       </button>
+            </div>
+
+            {/* API Key Badge */}
+            {currentTextApiKey?.isSaved && (
+              <div className="absolute top-4 right-4 flex items-center space-x-2 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-1.5">
+                <CheckCircle className="w-4 h-4 text-emerald-600" />
+                <span className="text-sm font-medium text-emerald-900">API Active</span>
+                <button
+                  onClick={() => removeApiKey(settings.textProvider)}
+                  className="ml-1 text-emerald-600 hover:text-emerald-800 transition-colors"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            )}
+
+            <ProviderSelector
+              label="Provider"
+              providers={TEXT_PROVIDERS}
+              currentProviderId={settings.textProvider}
+              currentModelId={settings.textModel}
+              onProviderChange={handleTextProviderChange}
+              onModelChange={handleTextModelChange}
+              apiKey={currentTextApiKey}
+              type="text"
+              dropdowns={dropdowns}
+              toggleDropdown={toggleDropdown}
+            />
+
+            {/* API Key Input - only when needed and not saved */}
+            {needsTextApiKey && !currentTextApiKey?.isSaved && (
+              <div className="mt-6 pt-6 border-t border-gray-100 space-y-4">
+                <label className="block text-sm font-medium text-gray-700">
+                  {textProvider?.name} API Key
+                </label>
+
+                <div className="relative">
+                  <input
+                    type={currentTextApiKey?.showValue ? 'text' : 'password'}
+                    value={currentTextApiKey?.value || ''}
+                    onChange={(e) => updateApiKey(settings.textProvider, e.target.value)}
+                    placeholder="Paste your API key..."
+                    className="w-full pl-4 pr-32 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all text-gray-900 placeholder-gray-500"
+                  />
+
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center space-x-2">
+                    <button
+                      type="button"
+                      onClick={() => toggleApiKeyVisibility(settings.textProvider)}
+                      className="text-gray-400 hover:text-gray-600 transition-colors"
+                    >
+                      {currentTextApiKey?.showValue ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+
+                    {currentTextApiKey?.value && currentTextApiKey.value.length > 10 && isValidTextKey && (
+                      <button
+                        onClick={() => saveApiKey(settings.textProvider)}
+                        disabled={savingApiKey === settings.textProvider}
+                        className="flex items-center space-x-1 px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50"
+                      >
+                        {savingApiKey === settings.textProvider ? (
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                        ) : (
+                          <>
+
+                            <span>Save</span>
+                          </>
+                        )}
+                      </button>
                     )}
                   </div>
-                  {currentImageApiKey?.value && !isValidImageKey && (<div className="mt-2"><p className="text-xs text-red-600 font-medium flex items-center"><AlertCircle className="h-3 w-3 mr-1" />Nieprawidłowy format klucza API</p><p className="text-xs text-gray-500 mt-1">Oczekiwany format: {getApiKeyPlaceholder(settings.imageProvider)}</p></div>)}
-                  <div className="mt-3 pt-3 border-t border-gray-100">
-                    <p className="text-xs text-gray-500 flex items-center">
-                      <span className="mr-1">🔒</span>Klucz będzie szyfrowany AES-256 i przechowywany bezpiecznie
+                </div>
+
+                {currentTextApiKey?.value && currentTextApiKey.value.length > 0 && currentTextApiKey.value.length <= 10 && (
+                  <div className="flex items-center space-x-2 text-xs text-amber-600">
+                    <AlertCircle className="w-3 h-3" />
+                    <span>The key seems incomplete</span>
+                  </div>
+                )}
+
+                {/* Security Notice - moved under input */}
+                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
+                  <div className="flex items-center justify-center space-x-2">
+                    <Shield className="w-10 h-10 text-emerald-600 flex-shrink-0" />
+                    <p className="text-xs text-emerald-800">
+                      <span className="font-medium">Cryptographically secured:</span> Your key will be safe here!
                     </p>
-                    {settings.imageProvider === 'google' && (
-                      <p className="text-xs text-green-600 mt-1 flex items-center">
-                        <span className="mr-1">💰</span>Imagen 3 dostępny bez klucza API (najtańszy - $0.03/obraz)
-                      </p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Image Generation */}
+          <div className="bg-white border border-gray-200 rounded-xl p-6 relative">
+            <div className="flex items-center space-x-2 mb-6">
+              <Palette className="w-5 h-5 text-purple-600" />
+              <h3 className="text-lg font-semibold text-gray-900">Image Generation</h3>
+              {isLoadingApiKeys && (
+                <Loader2 className="h-4 w-4 text-gray-400 ml-2 animate-spin" />
+              )}
+            </div>
+
+            {/* API Key Badge */}
+            {currentImageApiKey?.isSaved && (
+              <div className="absolute top-4 right-4 flex items-center space-x-2 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-1.5">
+                <CheckCircle className="w-4 h-4 text-emerald-600" />
+                <span className="text-sm font-medium text-emerald-900">API Active</span>
+                <button
+                  onClick={() => removeApiKey(settings.imageProvider)}
+                  className="ml-1 text-emerald-600 hover:text-emerald-800 transition-colors"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            )}
+
+            <ProviderSelector
+              label="Provider"
+              providers={IMAGE_PROVIDERS}
+              currentProviderId={settings.imageProvider}
+              currentModelId={settings.imageModel}
+              onProviderChange={handleImageProviderChange}
+              onModelChange={handleImageModelChange}
+              apiKey={currentImageApiKey}
+              type="image"
+              dropdowns={dropdowns}
+              toggleDropdown={toggleDropdown}
+            />
+
+            {/* API Key Input - only when needed and not saved */}
+            {needsImageApiKey && !currentImageApiKey?.isSaved && (
+              <div className="mt-6 pt-6 border-t border-gray-100 space-y-4">
+                <label className="block text-sm font-medium text-gray-700">
+                  {imageProvider?.name} API Key
+                </label>
+
+                <div className="relative">
+                  <input
+                    type={currentImageApiKey?.showValue ? 'text' : 'password'}
+                    value={currentImageApiKey?.value || ''}
+                    onChange={(e) => updateApiKey(settings.imageProvider, e.target.value)}
+                    placeholder="Paste your API key..."
+                    className="w-full pl-4 pr-32 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all text-gray-900 placeholder-gray-500"
+                  />
+
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center space-x-2">
+                    <button
+                      type="button"
+                      onClick={() => toggleApiKeyVisibility(settings.imageProvider)}
+                      className="text-gray-400 hover:text-gray-600 transition-colors"
+                    >
+                      {currentImageApiKey?.showValue ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+
+                    {currentImageApiKey?.value && currentImageApiKey.value.length > 10 && isValidImageKey && (
+                      <button
+                        onClick={() => saveApiKey(settings.imageProvider)}
+                        disabled={savingApiKey === settings.imageProvider}
+                        className="flex items-center space-x-1 px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50"
+                      >
+                        {savingApiKey === settings.imageProvider ? (
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                        ) : (
+                          <>
+
+                            <span>Save</span>
+                          </>
+                        )}
+                      </button>
                     )}
                   </div>
                 </div>
-              )}
-            </div>
-          )}
+
+                {currentImageApiKey?.value && currentImageApiKey.value.length > 0 && currentImageApiKey.value.length <= 10 && (
+                  <div className="flex items-center space-x-2 text-xs text-amber-600">
+                    <AlertCircle className="w-3 h-3" />
+                    <span>The key seems incomplete</span>
+                  </div>
+                )}
+
+                {/* Security Notice - moved under input */}
+                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
+                  <div className="flex items-center justify-center space-x-2">
+                    <Shield className="w-10 h-10 text-emerald-600 flex-shrink-0" />
+                    <p className="text-xs text-emerald-800">
+                      <span className="font-medium">Cryptographically secured:</span> Your key will be safe here!
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
+
+
       </div>
 
       {/* Confirmation Modal */}
@@ -1246,45 +1477,65 @@ export default function UstawieniaContent() {
               <h3 className="text-lg font-semibold text-gray-900 mb-2">{confirmModal.title}</h3>
               <p className="text-sm text-gray-500 mb-6">{confirmModal.message}</p>
               <div className="flex gap-3 justify-center">
-                <button onClick={closeConfirmModal} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">Anuluj</button>
-                <button onClick={confirmModal.onConfirm} className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors">Usuń klucz</button>
+                <button onClick={closeConfirmModal} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">Cancel</button>
+                <button onClick={confirmModal.onConfirm} className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors">Remove Key</button>
               </div>
             </div>
           </div>
         </div>
       )}
-      {/* Zarządzanie systemem */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <div className="flex items-center mb-6">
-            <FolderOpen className="h-5 w-5 text-gray-600 mr-2" />
-            <h2 className="text-xl font-bold text-gray-900">Zarządzanie systemem</h2>
-          </div>
 
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Eksploracja dysku
-              </label>
-              <p className="text-sm text-gray-500 mb-3">
-                Przeglądaj i zarządzaj plikami przechowywanymi na serwerze Railway
-              </p>
-              <button
-                onClick={() => setIsDiskExplorerOpen(true)}
-                className="inline-flex items-center px-4 py-2 bg-gray-600 text-white text-sm font-medium rounded-lg hover:bg-gray-700 transition-colors"
-              >
-                <FolderOpen className="h-4 w-4 mr-2" />
-                Eksploruj dysk
-              </button>
-            </div>
+      {/* System Management */}
+      <div className="bg-white rounded-xl border border-gray-200 p-6">
+        <div className="flex items-center mb-6">
+          <FolderOpen className="h-5 w-5 text-gray-600 mr-2" />
+          <h2 className="text-xl font-bold text-gray-900">System Management</h2>
+        </div>
+
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Disk Explorer
+            </label>
+            <p className="text-sm text-gray-500 mb-3">
+              Browse and manage files stored on the Railway server
+            </p>
+            <button
+              onClick={() => setIsDiskExplorerOpen(true)}
+              className="inline-flex items-center px-4 py-2 bg-gray-600 text-white text-sm font-medium rounded-lg hover:bg-gray-700 transition-colors"
+            >
+              <FolderOpen className="h-4 w-4 mr-2" />
+              Explore Disk
+            </button>
           </div>
         </div>
-        {/* Disk Explorer Modal */}
-        {isDiskExplorerOpen && (
-          <DiskExplorerModal
-            isOpen={isDiskExplorerOpen}
-            onClose={() => setIsDiskExplorerOpen(false)}
-          />
-        )}
+      </div>
+
+      {/* Disk Explorer Modal */}
+      {isDiskExplorerOpen && (
+        <DiskExplorerModal
+          isOpen={isDiskExplorerOpen}
+          onClose={() => setIsDiskExplorerOpen(false)}
+        />
+      )}
+
+      {/* Toast Messages */}
+      {message && (
+        <div className="fixed top-4 right-4 z-50">
+          <div className={`px-4 py-3 rounded-lg shadow-lg flex items-center space-x-2 ${
+            message.type === 'success'
+              ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+              : 'bg-red-50 text-red-800 border border-red-200'
+          }`}>
+            {message.type === 'success' ? (
+              <CheckCircle className="w-4 h-4" />
+            ) : (
+              <AlertCircle className="w-4 h-4" />
+            )}
+            <span className="text-sm font-medium">{message.text}</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
