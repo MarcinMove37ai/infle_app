@@ -84,23 +84,30 @@ export default function EbookGeneratorModal({ isOpen, onClose, onEbookCreated, e
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
       {/* ✅ NOWY KOD: Dodajemy ref do tego diva */}
-      <div ref={modalContentRef} className="bg-white rounded-xl shadow-2xl w-full max-w-7xl max-h-[95vh] overflow-hidden">
-        {/* Modal Header with close button */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gray-50">
-          <h2 className="text-xl font-semibold text-gray-800">Create your ebook with AI</h2>
-          <button
-            onClick={onClose}
-            className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-          >
-            <X size={20} />
-          </button>
-        </div>
+      return (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-0 sm:p-4 backdrop-blur-sm">
+            <div
+              ref={modalContentRef}
+              className="bg-white w-full h-full sm:rounded-xl sm:shadow-2xl sm:w-full sm:max-w-7xl sm:max-h-[95vh] overflow-hidden"
+            >
+              {/* Modal Header - dodaj padding dla mobile */}
+              <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gray-50">
+                <h2 className="text-lg sm:text-xl font-semibold text-gray-800">Create your ebook with AI</h2>
+                <button
+                  onClick={onClose}
+                  className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
 
-        {/* Modal Content - scrollable */}
-        <div className="overflow-y-auto max-h-[calc(95vh-80px)]">
-          <EbookGeneratorContent isOpen={isOpen} ebookId={ebookId} onEbookCreated={onEbookCreated} onClose={onClose} />
-        </div>
-      </div>
+              {/* Modal Content - z ukrytym scrollbarem */}
+              <div className="overflow-y-auto h-[calc(100%-80px)] sm:h-[calc(95vh-80px)] scrollbar-hide">
+                <EbookGeneratorContent isOpen={isOpen} ebookId={ebookId} onEbookCreated={onEbookCreated} onClose={onClose} />
+              </div>
+            </div>
+          </div>
+      );
     </div>
   );
 }
@@ -3785,6 +3792,21 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
           }
           .hide-scrollbar::-webkit-scrollbar {
             display: none;
+          }
+        `}</style>
+        <style jsx global>{`
+          /* Ukryj scrollbar ale zachowaj funkcjonalność */
+          .scrollbar-hide {
+            -ms-overflow-style: none;  /* Internet Explorer 10+ */
+            scrollbar-width: none;  /* Firefox */
+          }
+          .scrollbar-hide::-webkit-scrollbar {
+            display: none;  /* Safari and Chrome */
+          }
+
+          /* Zapewnij płynne scrollowanie na iOS */
+          .scrollbar-hide {
+            -webkit-overflow-scrolling: touch;
           }
         `}</style>
       </div>
