@@ -10,6 +10,23 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 
+interface Model {
+  id: string;
+  name: string;
+  description: string;
+  tier: 'basic' | 'premium';
+  cost?: string;
+}
+
+interface Provider {
+  id: string;
+  name: string;
+  icon: string;
+  available: boolean;
+  models: Model[];
+}
+
+
 interface UserSettings {
   username: string;
   logo: string | null;
@@ -37,7 +54,7 @@ interface AuthorSettings {
 }
 
 // Text provider configuration
-const TEXT_PROVIDERS = [
+const TEXT_PROVIDERS: Provider[] = [
   {
     id: 'anthropic',
     name: 'Anthropic',
@@ -79,7 +96,7 @@ const TEXT_PROVIDERS = [
 ];
 
 // 🆕 UPDATED Image provider configuration with Google
-const IMAGE_PROVIDERS = [
+const IMAGE_PROVIDERS: Provider[] = [
   {
     id: 'google',
     name: 'Google AI Studio',
@@ -183,7 +200,7 @@ const ProviderSelector = ({
   toggleDropdown
 }: {
   label: string;
-  providers: any[];
+  providers: Provider[];
   currentProviderId: string;
   currentModelId: string;
   onProviderChange: (providerId: string) => void;
