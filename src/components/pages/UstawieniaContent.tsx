@@ -1282,7 +1282,10 @@ export default function SettingsContent() {
           <div className="bg-white border border-gray-200 rounded-xl p-6 relative">
             <div className="flex items-center space-x-2 mb-6">
               <Type className="w-5 h-5 text-blue-600" />
-              <h3 className="text-lg font-semibold text-gray-900">Text Generation</h3>
+              <h3 className="text-lg font-semibold text-gray-900">
+                <span className="sm:hidden">AI for Text</span>
+                <span className="hidden sm:inline">Text Generation</span>
+              </h3>
               {isLoadingApiKeys && (
                 <Loader2 className="h-4 w-4 text-gray-400 ml-2 animate-spin" />
               )}
@@ -1383,7 +1386,10 @@ export default function SettingsContent() {
           <div className="bg-white border border-gray-200 rounded-xl p-6 relative">
             <div className="flex items-center space-x-2 mb-6">
               <Palette className="w-5 h-5 text-purple-600" />
-              <h3 className="text-lg font-semibold text-gray-900">Image Generation</h3>
+              <h3 className="text-lg font-semibold text-gray-900">
+                <span className="sm:hidden">AI for Images</span>
+                <span className="hidden sm:inline">Image Generation</span>
+              </h3>
               {isLoadingApiKeys && (
                 <Loader2 className="h-4 w-4 text-gray-400 ml-2 animate-spin" />
               )}

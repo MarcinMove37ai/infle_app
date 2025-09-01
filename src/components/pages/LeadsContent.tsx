@@ -490,7 +490,7 @@ const LeadsContent = () => {
                                         <td className="hidden sm:table-cell px-6 py-4 whitespace-nowrap text-sm text-gray-600">{formatDate(lead.createdAt)}</td>
                                         <td className="px-6 py-4 whitespace-nowrap">
                                             <div className="text-sm font-medium text-gray-900 truncate">{lead.name}</div>
-                                            <div className="text-sm text-gray-500 truncate">{lead.email}</div>
+                                            <div className="hidden sm:block text-sm text-gray-500 truncate">{lead.email}</div>
                                             {lead.phone && <div className="text-sm text-gray-500 truncate">{lead.phone}</div>}
                                         </td>
                                         <td className="hidden md:table-cell px-6 py-4 whitespace-nowrap text-sm text-gray-800 truncate">{lead.page}</td>

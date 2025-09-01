@@ -582,34 +582,37 @@ const PagesView = () => {
 
                             <div className="border-t border-gray-200 my-4"></div>
 
-                            <div className="flex gap-2">
-                                <div className="w-3/5 flex-shrink-0">
+                            <div className="flex gap-4">
+                                <div className="w-1/3 flex-shrink-0 flex flex-col justify-center">
                                     {page.coverImage ? (
                                         <img src={getAssetUrl(page.coverImage)} alt={`Cover for ${page.title}`} className="w-full h-auto object-contain cursor-pointer rounded-md max-h-48" onClick={() => openCoverPreview(getAssetUrl(page.coverImage), page.headline || page.title, page.subtitle)}/>
                                     ) : (
                                         <VideoCoverPlaceholder width="100%" height="160px" />
                                     )}
+                                    {page.coverImage && (
+                                        <p className="text-xs text-gray-500 text-center mt-1">Mockup preview</p>
+                                    )}
                                 </div>
-                                <div className="w-2/5 flex flex-col justify-center gap-2">
-                                <div className="bg-blue-50 rounded-lg p-2 border border-blue-100">
-                                    <p className="text-blue-600 text-lg font-semibold">{page.visits}</p>
-                                    <p className="text-blue-500 text-xs uppercase tracking-wide font-medium">visits</p>
+                                <div className="w-2/3 flex flex-col gap-2">
+                                    <div className="bg-blue-50 rounded-lg p-2 border border-blue-100">
+                                        <p className="text-blue-600 text-lg font-semibold">{page.visits}</p>
+                                        <p className="text-blue-500 text-xs uppercase tracking-wide font-medium">visits</p>
+                                    </div>
+                                    <div className="bg-green-50 rounded-lg p-2 border border-green-100">
+                                        <p className="text-green-600 text-lg font-semibold">{page.leads}</p>
+                                        <p className="text-green-500 text-xs uppercase tracking-wide font-medium">leads</p>
+                                    </div>
+                                    {/* PRZENIESIONY BLOK */}
+                                    <div className="bg-gray-50 rounded-lg p-3 mt-2 space-y-2 border border-gray-100">
+                                        <dl className="text-xs space-y-2">
+                                            <div className="flex"><dt className="w-1/3 text-gray-500">Author:</dt><dd className="w-2/3 font-medium text-gray-800 truncate">{page.creator}</dd></div>
+                                            <div className="border-t border-gray-200"></div>
+                                            <div className="flex pt-1"><dt className="w-1/3 text-gray-500">Created:</dt><dd className="w-2/3 font-medium text-gray-800 truncate">{formatDate(page.createdAt)}</dd></div>
+                                            {page.supervisorCode && !isGodRole && <div className="flex"><dt className="w-1/3 text-gray-500">Supervisor:</dt><dd className="w-2/3 font-medium text-gray-800 truncate">{getSupervisorDescription(page.supervisorCode)}</dd></div>}
+                                            {page.isOwnedByUser && page.videoPassword && <div className="flex items-center"><dt className="w-1/3 text-gray-500 flex items-center"><Lock size={12} className="mr-1 text-amber-500"/>Password:</dt><dd className="w-2/3 font-medium text-amber-600 truncate">{page.videoPassword}</dd></div>}
+                                        </dl>
+                                    </div>
                                 </div>
-                                <div className="bg-green-50 rounded-lg p-2 border border-green-100">
-                                    <p className="text-green-600 text-lg font-semibold">{page.leads}</p>
-                                    <p className="text-green-500 text-xs uppercase tracking-wide font-medium">leads</p>
-                                </div>
-                            </div>
-                            </div>
-
-                            <div className="bg-gray-50 rounded-lg p-3 mt-4 space-y-2 border border-gray-100">
-                                <dl className="text-xs space-y-2">
-                                    <div className="flex"><dt className="w-1/3 text-gray-500">Author:</dt><dd className="w-2/3 font-medium text-gray-800 truncate">{page.creator}</dd></div>
-                                    <div className="border-t border-gray-200"></div>
-                                    <div className="flex pt-1"><dt className="w-1/3 text-gray-500">Created:</dt><dd className="w-2/3 font-medium text-gray-800 truncate">{formatDate(page.createdAt)}</dd></div>
-                                    {page.supervisorCode && !isGodRole && <div className="flex"><dt className="w-1/3 text-gray-500">Supervisor:</dt><dd className="w-2/3 font-medium text-gray-800 truncate">{getSupervisorDescription(page.supervisorCode)}</dd></div>}
-                                    {page.isOwnedByUser && page.videoPassword && <div className="flex items-center"><dt className="w-1/3 text-gray-500 flex items-center"><Lock size={12} className="mr-1 text-amber-500"/>Password:</dt><dd className="w-2/3 font-medium text-amber-600 truncate">{page.videoPassword}</dd></div>}
-                                </dl>
                             </div>
 
                             <div className="mt-auto pt-4">
@@ -784,7 +787,7 @@ const PagesView = () => {
                 <div className="flex items-center justify-between p-4 flex-shrink-0 border-b border-white/10">
                     <div className="flex items-center space-x-3 min-w-0">
                         <ImageIcon className="h-5 w-5 text-white flex-shrink-0" />
-                        <h3 className="text-white font-medium truncate">ebook cover preview</h3>
+                        <h3 className="text-white font-medium truncate">Ebook mockup preview</h3>
                     </div>
                     <button onClick={closeCoverPreview} className="text-white hover:text-gray-300 transition-colors flex-shrink-0 ml-4">
                         <X size={24} />
