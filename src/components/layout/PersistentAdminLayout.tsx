@@ -181,21 +181,21 @@ const menuItems: MenuItem[] = [
   },
   {
     IconComponent: BookOpen,
-    label: 'Ebooki',
+    label: 'Ebooks',
     path: '/ebooki',
     roles: ['ADMIN', 'USER', 'GOD', 'free'],
     requiredStatus: ['active']
   },
   {
     IconComponent: FileSignature,
-    label: 'Strony Zapisu',
+    label: 'Landing Pages',
     path: '/strony-zapisu',
     roles: ['ADMIN', 'USER', 'GOD', 'free'],
     requiredStatus: ['active']
   },
   {
     IconComponent: UserCheck,
-    label: 'Leady',
+    label: 'Leads',
     path: '/leady',
     roles: ['ADMIN', 'USER', 'GOD', 'free'],
     requiredStatus: ['active']
@@ -209,7 +209,7 @@ const menuItems: MenuItem[] = [
   },
   {
     IconComponent: Settings,
-    label: 'Ustawienia',
+    label: 'Settings',
     path: '/ustawienia',
     roles: ['ADMIN', 'USER', 'GOD','free'],
     requiredStatus: ['active']
@@ -347,7 +347,7 @@ const Sidebar: React.FC = () => {
 
     return (
       <div
-        className={`fixed left-0 z-50 top-16 h-[calc(100vh-4rem)] w-64
+        className={`fixed left-0 z-50 top-16 bottom-4 w-64
           bg-white/95 backdrop-blur-xl backdrop-saturate-150 shadow-2xl rounded-r-3xl
           transition-all duration-300 ease-out overflow-y-auto border-r border-gray-100
           ${isMobileMenuOpen ? 'transform translate-x-0' : 'transform -translate-x-full'}`}
@@ -356,7 +356,7 @@ const Sidebar: React.FC = () => {
         }}
       >
         <div className="flex flex-col h-full">
-          <nav className="flex-1 py-6">
+          <nav className="flex-1 py-6 overflow-y-auto">
             <ul className="space-y-2 px-4">
               {filteredMenuItems.map((item, index) => (
                 <li key={item.path}
@@ -389,21 +389,29 @@ const Sidebar: React.FC = () => {
             </ul>
           </nav>
 
-          <div className="px-4 pb-6 pt-4 border-t border-gray-200/50 flex justify-center">
+          <div className="px-4 pb-4 pt-4 border-t border-gray-200/50">
             <button
               onClick={handleMobileLogout}
               disabled={isLoggingOut}
-              className={`p-2.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all duration-200 cursor-pointer shadow-sm hover:shadow-md ${
-                isLoggingOut ? 'opacity-50 cursor-not-allowed' : ''
-              }`}
-              aria-label="Wyloguj się"
-              title="Wyloguj się"
+              className={`
+                flex items-center w-full h-14 px-4 rounded-xl transition-all duration-200
+                focus:outline-none focus:ring-2 focus:ring-red-400
+                border border-transparent hover:bg-red-50 text-red-500 hover:text-red-700 hover:shadow-md
+                ${isLoggingOut ? 'opacity-60 cursor-not-allowed' : ''}
+              `}
             >
-              {isLoggingOut ? (
-                <div className="h-5 w-5 border-2 border-red-300 border-t-red-600 rounded-full animate-spin"></div>
-              ) : (
-                isClient && <Power className="h-5 w-5" />
-              )}
+              {/* Kontener na ikonę */}
+              <div className="flex-shrink-0 w-7 h-7 flex items-center justify-center">
+                {isLoggingOut ? (
+                  <div className="h-5 w-5 border-2 border-red-300 border-t-red-600 rounded-full animate-spin"></div>
+                ) : (
+                  <Power size={22} />
+                )}
+              </div>
+              {/* Etykieta tekstowa */}
+              <span className="ml-4 whitespace-nowrap font-medium text-base">
+                Logout
+              </span>
             </button>
           </div>
         </div>
