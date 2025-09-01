@@ -347,7 +347,7 @@ const Sidebar: React.FC = () => {
 
     return (
       <div
-        className={`fixed left-0 z-50 top-16 bottom-4 w-64
+        className={`fixed left-0 z-50 top-16 bottom-1 w-64
           bg-white/95 backdrop-blur-xl backdrop-saturate-150 shadow-2xl rounded-r-3xl
           transition-all duration-300 ease-out overflow-y-auto border-r border-gray-100
           ${isMobileMenuOpen ? 'transform translate-x-0' : 'transform -translate-x-full'}`}
