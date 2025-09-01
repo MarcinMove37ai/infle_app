@@ -347,7 +347,7 @@ const Sidebar: React.FC = () => {
 
     return (
       <div
-        className={`fixed left-0 z-50 top-16 bottom-1 w-64
+        className={`fixed left-0 z-50 top-16 bottom-1 w-58
           bg-white/95 backdrop-blur-xl backdrop-saturate-150 shadow-2xl rounded-r-3xl
           transition-all duration-300 ease-out overflow-y-auto border-r border-gray-100
           ${isMobileMenuOpen ? 'transform translate-x-0' : 'transform -translate-x-full'}`}
@@ -663,7 +663,7 @@ const PersistentAdminLayout: React.FC<PersistentAdminLayoutProps> = ({
   children,
   disableMenu = false
 }) => {
-  const { hoveredSidebar, isNavigating } = useLayout();
+  const { hoveredSidebar, isNavigating, isMobileMenuOpen, setIsMobileMenuOpen } = useLayout();
   const pathname = usePathname();
   const { isLoading: authLoading } = useAuth();
   const [isMobile, setIsMobile] = useState(false);
@@ -694,7 +694,13 @@ const PersistentAdminLayout: React.FC<PersistentAdminLayoutProps> = ({
   return (
     <div className="flex h-screen bg-gray-100 font-sans overflow-hidden">
       {!disableMenu && <Sidebar />}
-
+      {isMobile && isMobileMenuOpen && (
+        <div
+          className="fixed inset-0 z-30 bg-black/40 backdrop-blur-sm transition-opacity duration-300"
+          onClick={() => setIsMobileMenuOpen(false)}
+          aria-hidden="true"
+        />
+      )}
       <div
         className={`flex-1 flex flex-col transition-all duration-300 ease-out ${
           isMobile || disableMenu || !isScreenSizeDetected
