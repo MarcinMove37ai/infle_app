@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { BookOpen, Plus, Edit, Download, Sparkles, Trash2, AlertCircle, RefreshCw, FileText, ImageIcon, X, Search } from 'lucide-react';
+import { BookOpen, Plus, Edit, Download, Sparkles, Trash2, AlertCircle, RefreshCw, FileText, ImageIcon, X, Search, LayoutGrid } from 'lucide-react';
 import EbookGeneratorModal from '@/components/ebooks/EbookGeneratorModal';
 import { useEbooksSSE } from '@/hooks/useEbooksSSE';
 
@@ -98,6 +98,20 @@ export default function EbookiContent() {
     }
   };
 
+  const getStatusColorForCardBorder = (status: string | null) => {
+    switch (status) {
+      case 'published':
+      case 'completed':
+        return 'bg-green-500';
+      case 'in-progress':
+        return 'bg-yellow-500';
+      case 'draft':
+        return 'bg-orange-500';
+      default:
+        return 'bg-gray-400';
+    }
+  };
+
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
@@ -149,7 +163,7 @@ export default function EbookiContent() {
         inProgress: cleanEbooks.filter(e => !isEbookCompleted(e)).length,
     };
 
-    const limit = 10;
+    const limit = 9; // Usunięto logikę zależną od viewMode
     const total = filteredEbooks.length;
     const totalPages = Math.ceil(total / limit);
     const page = Math.min(currentPage, totalPages) || 1;
@@ -463,7 +477,7 @@ export default function EbookiContent() {
   };
 
   return (
-    <div className="space-y-4 sm:space-y-6">
+    <div className="space-y-4 sm:space-y-6 overflow-hidden">
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex flex-col sm:flex-row items-start sm:items-center space-y-3 sm:space-y-0 sm:space-x-3">
           <AlertCircle className="text-red-500 flex-shrink-0" size={20} />
@@ -565,143 +579,137 @@ export default function EbookiContent() {
         </button>
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="bg-transparent sm:bg-white rounded-none sm:rounded-xl border-0 sm:border border-gray-200 overflow-hidden -mx-4 sm:mx-0">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50">
             <h2 className="text-lg font-semibold text-gray-800">Your e-books</h2>
-            {pagination && pagination.total > 0 && (
-            <p className="text-sm text-gray-600">
-                Showing {((pagination.page - 1) * pagination.limit) + 1} - {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total}
-            </p>
-            )}
+
+            <div className="flex items-center gap-2">
+              {pagination && pagination.total > 0 && (
+                <p className="text-sm text-gray-600 hidden sm:block">
+                    Showing {((pagination.page - 1) * pagination.limit) + 1} - {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total}
+                </p>
+              )}
+            </div>
         </div>
 
-        <div className="divide-y divide-gray-200">
-          {loading ? (
+        {loading ? (
             <div className="px-6 py-12 text-center"><RefreshCw size={48} className="mx-auto text-gray-300 mb-4 animate-spin" /><p className="text-gray-500">Loading e-books...</p></div>
-          ) : displayedEbooks.length === 0 ? (
+        ) : displayedEbooks.length === 0 ? (
             <div className="px-6 py-12 text-center">
               <BookOpen size={48} className="mx-auto text-gray-300 mb-4" />
               <h3 className="text-lg font-medium text-gray-900 mb-2">{searchTerm || activeFilter !== 'all' ? 'No e-books found' : 'You haven\'t created any e-books yet'}</h3>
               <p className="text-gray-500 mb-6">{searchTerm ? 'Try changing your search phrase.' : 'Click the button above to create your first e-book.'}</p>
             </div>
-          ) : (
-            displayedEbooks.map((ebook) => {
-              const isDeleting = deletingIds.has(ebook.id);
-              const isDownloading = downloadingIds.has(ebook.id);
-              const isDisabled = isDeleting || isDownloading;
+        ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-4">
+              {displayedEbooks.map((ebook) => {
+                const isDeleting = deletingIds.has(ebook.id);
+                const isDownloading = downloadingIds.has(ebook.id);
+                const isDisabled = isDeleting || isDownloading;
 
-              return (
-                <div key={ebook.id} className={`transition-opacity ${isDisabled ? 'opacity-50' : ''}`}>
-                  {/* MOBILE VIEW */}
-                  <div className="p-4 block sm:hidden">
-                    <div className="flex gap-4">
-                      <div className="w-1/3 flex-shrink-0">
-                        {ebook.cover_image_webp_url ? (
-                            <img
-                              src={`/api/assets/${ebook.cover_image_webp_url}`}
-                              alt={`Cover: ${ebook.title}`}
-                              className="w-full h-auto object-cover rounded-md bg-gray-200 cursor-pointer"
-                              loading="lazy"
-                              onClick={() => handlePreviewEbook(ebook)}
-                            />
-                        ) : (
-                            <div className="w-full h-32 flex items-center justify-center bg-gray-100 rounded-md"><ImageIcon className="w-8 h-8 text-gray-400" /></div>
-                        )}
-                      </div>
-                      <div className="w-2/3 flex flex-col">
-                        <h3 className="text-base font-semibold text-gray-900 line-clamp-2">{ebook.title}</h3>
-                        {ebook.subtitle && <p className="text-xs text-gray-500 mt-1 line-clamp-2">{ebook.subtitle}</p>}
-                        <span className={`text-xs px-2 py-1 rounded-full mt-2 self-start ${getStatusColor(ebook.status)}`}>{getStatusLabel(ebook.status)}</span>
+                return (
+                  <div key={ebook.id} className={`bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden hover:shadow-md transition-shadow duration-200 flex flex-col ${isDisabled ? 'opacity-50 pointer-events-none' : ''}`}>
+                    <div className={`h-1.5 ${getStatusColorForCardBorder(ebook.status)}`}></div>
+
+                    <div className="p-4 flex flex-col flex-grow">
+                      <div className="flex gap-4">
+                          <div className="w-1/3 flex-shrink-0 flex flex-col justify-center">
+                            {ebook.cover_image_webp_url ? (
+                                <img
+                                  src={`/api/assets/${ebook.cover_image_webp_url}`}
+                                  alt={`Cover: ${ebook.title}`}
+                                  className="w-full h-auto object-cover rounded-md bg-gray-200 cursor-pointer aspect-square"
+                                  loading="lazy"
+                                  onClick={() => handlePreviewEbook(ebook)}
+                                />
+                            ) : (
+                                <div className="w-full h-full flex items-center justify-center bg-gray-100 rounded-md aspect-square"><ImageIcon className="w-8 h-8 text-gray-400" /></div>
+                            )}
+                            <p className="text-xs text-gray-500 text-center mt-1">
+                              {ebook.cover_image_webp_url ? 'Cover image' : 'No cover image'}
+                            </p>
+                          </div>
+                          <div className="w-2/3 flex flex-col">
+                            <h3 className="font-semibold text-gray-900 text-base leading-tight line-clamp-3">{ebook.title}</h3>
+                            <p className="text-xs text-gray-500 mt-1 line-clamp-2">{ebook.subtitle}</p>
+                            <div className="mt-2 flex items-center flex-wrap gap-2">
+                                <span className={`text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap ${getStatusColor(ebook.status)}`}>{getStatusLabel(ebook.status)}</span>
+                                {creatingPageId === ebook.id ? (
+                                    <span className="text-xs flex items-center gap-1 bg-gray-100 text-gray-700 px-2 py-0.5 rounded-md">
+                                        <RefreshCw size={12} className="animate-spin" /> Creating...
+                                    </span>
+                                ) : ebook.hasLandingPage && (
+                                    <span className="text-xs flex items-center gap-1 bg-blue-100 text-blue-700 px-2 py-0.5 rounded-md">
+                                        <FileText size={12} /> LP Ready
+                                    </span>
+                                )}
+                            </div>
+
+                            <div className="border-t border-gray-200 my-3"></div>
+
+                            <div className="text-xs">
+                                <div className="flex"><dt className="w-1/3 text-gray-500">Created:</dt><dd className="w-2/3 font-medium text-gray-800 truncate">{formatDate(ebook.created_at)}</dd></div>
+                                {ebook.authorDisplayName && (
+                                  <>
+                                    <div className="border-t border-gray-200 my-2"></div>
+                                    <div className="flex"><dt className="w-1/3 text-gray-500">Author:</dt><dd className="w-2/3 font-medium text-gray-800 truncate">{ebook.authorDisplayName}</dd></div>
+                                  </>
+                                )}
+                            </div>
+                          </div>
                       </div>
                     </div>
-                    <div className="mt-3 flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-2">
-                            <button onClick={() => handleEditEbook(ebook.id)} className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg" disabled={isDisabled}><Edit size={16} /></button>
-                            {isEbookCompleted(ebook) && (
-                                <button onClick={() => downloadPDF(ebook.id, ebook.title)} className="p-2 text-green-600 hover:bg-green-100 rounded-lg" disabled={isDisabled}>
-                                    {isDownloading ? <RefreshCw size={16} className="animate-spin" /> : <Download size={16} />}
-                                </button>
-                            )}
-                            <button onClick={() => handleDeleteEbook(ebook)} className="p-2 text-red-600 hover:bg-red-100 rounded-lg" disabled={isDisabled}>
-                                {isDeleting ? <RefreshCw size={16} className="animate-spin" /> : <Trash2 size={16} />}
-                            </button>
-                        </div>
-                        {creatingPageId === ebook.id ? (
-                            <span className="text-xs flex items-center gap-1 bg-gray-100 text-gray-700 px-2 py-1.5 rounded-md">
-                                <RefreshCw size={12} className="animate-spin" /> Creating...
-                            </span>
-                        ) : ebook.hasLandingPage ? (
-                            <span className="text-xs flex items-center gap-1 bg-blue-100 text-blue-700 px-2 py-1.5 rounded-md">
-                                <FileText size={12} /> LP Ready
-                            </span>
-                        ) : (
+
+                    <div className="px-4 py-3 border-t border-gray-100 bg-gray-50/50 mt-auto space-y-3 sm:space-y-0 sm:flex sm:justify-between sm:items-center">
+                        {/* Przycisk "Create LP" na całą szerokość dla widoku mobilnego siatki */}
+                        {ebook.status !== 'draft' && !ebook.hasLandingPage && creatingPageId !== ebook.id && (
                             <button
                                 onClick={() => handleCreatePage(ebook.id)}
-                                className="text-xs flex items-center gap-1 bg-yellow-100 text-yellow-700 px-2 py-1.5 rounded-md hover:bg-yellow-200"
+                                className="w-full flex sm:hidden items-center justify-center gap-2 bg-yellow-100 text-yellow-800 px-3 py-2 rounded-lg hover:bg-yellow-200 font-medium text-sm"
+                                disabled={isDisabled}
                             >
-                                <Plus size={12} /> Create LP
+                                <Plus size={14} />
+                                Create Landing Page
                             </button>
                         )}
-                    </div>
-                  </div>
 
-                  {/* DESKTOP VIEW */}
-                  <div className="hidden sm:flex items-center justify-between gap-4 px-6 py-4 hover:bg-gray-50/75">
-                    <div className="flex items-center flex-1 min-w-0 gap-4">
-                      {ebook.cover_image_webp_url ? (
-                        <img
-                          src={`/api/assets/${ebook.cover_image_webp_url}`}
-                          alt={`Cover: ${ebook.title}`}
-                          className="w-14 h-20 object-cover rounded-md flex-shrink-0 bg-gray-200 cursor-pointer"
-                          loading="lazy"
-                          onClick={() => handlePreviewEbook(ebook)}
-                        />
-                      ) : (
-                        <div className="w-14 h-20 flex items-center justify-center bg-gray-100 rounded-md flex-shrink-0"><ImageIcon className="w-6 h-6 text-gray-400" /></div>
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <h3 className="text-lg font-medium text-gray-900 truncate">{ebook.title}</h3>
-                        {ebook.subtitle && <p className="text-sm text-gray-500 truncate">{ebook.subtitle}</p>}
-                        <div className="flex items-center flex-wrap gap-x-3 gap-y-1 mt-2">
-                          <span className={`text-xs px-2 py-1 rounded-full ${getStatusColor(ebook.status)}`}>{getStatusLabel(ebook.status)}</span>
-                          {creatingPageId === ebook.id ? (
-                              <span className="text-xs flex items-center gap-1 bg-gray-100 text-gray-700 px-2 py-1 rounded">
-                                  <RefreshCw size={12} className="animate-spin" /> Creating & Generating AI...
-                              </span>
-                          ) : ebook.hasLandingPage ? (
-                              <span className="text-xs flex items-center gap-1 bg-blue-100 text-blue-700 px-2 py-1 rounded">
-                                  <FileText size={12} /> LandingPage Ready
-                              </span>
-                          ) : (
-                              <button
-                                  onClick={(e) => { e.stopPropagation(); handleCreatePage(ebook.id); }}
-                                  className="text-xs flex items-center gap-1 bg-yellow-100 text-yellow-700 px-2 py-1 rounded hover:bg-yellow-200"
-                                  title="Create a page and automatically generate AI content"
-                              >
-                                  <Plus size={12} /> Create LP with AI
-                              </button>
-                          )}
-                          <span className="text-xs text-gray-400">{formatDate(ebook.created_at)}</span>
+                        {/* Kontener na pozostałe przyciski */}
+                        <div className="flex items-center justify-between w-full">
+                            <div className="flex items-center gap-2">
+                                <button onClick={() => handleEditEbook(ebook.id)} className="text-sm text-sky-600 hover:text-sky-700 font-medium bg-sky-50 hover:bg-sky-100 px-3 py-1.5 rounded-md transition-colors inline-flex items-center" disabled={isDisabled}>
+                                    <Edit size={14} className="inline mr-1.5" />
+                                    Edit
+                                </button>
+                                {isEbookCompleted(ebook) && (
+                                    <button onClick={() => downloadPDF(ebook.id, ebook.title)} className="text-sm text-green-600 hover:text-green-700 font-medium bg-green-50 hover:bg-green-100 px-3 py-1.5 rounded-md transition-colors inline-flex items-center" disabled={isDisabled}>
+                                        {isDownloading ? <RefreshCw size={14} className="animate-spin" /> : <Download size={14} className="inline mr-1.5" />}
+                                        {isDownloading ? '' : 'Download'}
+                                    </button>
+                                )}
+                                {/* Przycisk "Create LP" dla widoku desktopowego siatki */}
+                                {ebook.status !== 'draft' && !ebook.hasLandingPage && creatingPageId !== ebook.id && (
+                                    <button
+                                        onClick={() => handleCreatePage(ebook.id)}
+                                        className="text-sm text-yellow-700 hover:text-yellow-800 font-medium bg-yellow-100 hover:bg-yellow-200 px-3 py-1.5 rounded-md transition-colors hidden sm:inline-flex items-center"
+                                        disabled={isDisabled}
+                                    >
+                                        <Plus size={14} className="inline mr-1.5" />
+                                        Create LP
+                                    </button>
+                                )}
+                            </div>
+                            <button onClick={() => handleDeleteEbook(ebook)} className="text-sm text-red-600 hover:text-red-700 font-medium bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-md transition-colors inline-flex items-center" disabled={isDisabled}>
+                                {isDeleting ? <RefreshCw size={14} className="animate-spin" /> : <Trash2 size={14} className="inline mr-1.5" />}
+                                 {isDeleting ? '' : 'Delete'}
+                            </button>
                         </div>
-                      </div>
                     </div>
-                    <div className="flex items-center space-x-2">
-                      <button onClick={() => handleEditEbook(ebook.id)} className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg" title="Edit" disabled={isDisabled}><Edit size={16} /></button>
-                      {isEbookCompleted(ebook) && (
-                        <button onClick={() => downloadPDF(ebook.id, ebook.title)} className="p-2 text-green-600 hover:bg-green-100 rounded-lg" title="Download PDF" disabled={isDisabled}>
-                          {isDownloading ? <RefreshCw size={16} className="animate-spin" /> : <Download size={16} />}
-                        </button>
-                      )}
-                      <button onClick={() => handleDeleteEbook(ebook)} className="p-2 text-red-600 hover:bg-red-100 rounded-lg" title="Delete" disabled={isDisabled}>
-                        {isDeleting ? <RefreshCw size={16} className="animate-spin" /> : <Trash2 size={16} />}
-                      </button>
-                    </div>
+
                   </div>
-                </div>
-              );
-            })
-          )}
-        </div>
+                )
+              })}
+            </div>
+        )}
 
         {pagination && pagination.totalPages > 1 && (
           <div className="px-4 sm:px-6 py-4 border-t border-gray-200 bg-gray-50">
@@ -738,41 +746,36 @@ export default function EbookiContent() {
 
       {previewImage && previewEbook && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[70] p-4 backdrop-blur-sm">
-          <div ref={previewModalRef} className="relative w-full max-w-screen-xl max-h-[95vh] flex flex-col bg-black/50 rounded-lg animate-fadeIn">
+          <div ref={previewModalRef} className="relative w-full max-w-screen-xl max-h-[95vh] flex flex-col bg-gray-900/80 rounded-xl border border-white/10 animate-fadeIn shadow-2xl">
             {/* Modal Header */}
             <div className="flex items-center justify-between p-4 flex-shrink-0 border-b border-white/10">
               <div className="flex items-center space-x-3 min-w-0">
                 <ImageIcon className="h-5 w-5 text-white flex-shrink-0" />
                 <h3 className="text-white font-medium truncate">{previewImageTitle}</h3>
               </div>
-              <button onClick={handleClosePreview} className="text-white hover:text-gray-300 transition-colors flex-shrink-0 ml-4">
+              <button onClick={handleClosePreview} className="text-gray-400 hover:text-white transition-colors flex-shrink-0 ml-4">
                 <X size={24} />
               </button>
             </div>
 
             {/* Main Content: Image + Table of Contents */}
-            <div className="flex-1 flex flex-col md:flex-row gap-6 p-4 min-h-0">
+            <div className="flex-1 flex flex-col md:flex-row gap-4 p-4 min-h-0 overflow-y-auto">
               {/* Left Side: Image */}
               <div className="w-full md:w-2/3 flex items-center justify-center">
-                <div
-                  className="max-w-full max-h-full rounded-lg shadow-2xl overflow-hidden"
-                  style={{ height: 'calc(95vh - 160px)' }}
-                >
-                  <img
-                    ref={previewImageRef}
-                    src={previewImage}
-                    alt={previewImageTitle}
-                    className="w-full h-full object-contain"
-                    onError={(e) => {
-                      e.currentTarget.onerror = null;
-                      e.currentTarget.src = `/api/assets/${previewEbook.cover_image_webp_url}`;
-                    }}
-                  />
-                </div>
+                <img
+                  ref={previewImageRef}
+                  src={previewImage}
+                  alt={previewImageTitle}
+                  className="w-auto h-auto max-w-full max-h-full object-contain rounded-md"
+                  onError={(e) => {
+                    e.currentTarget.onerror = null;
+                    e.currentTarget.src = `/api/assets/${previewEbook.cover_image_webp_url}`;
+                  }}
+                />
               </div>
 
-              {/* Right Side: Table of Contents */}
-              <div className="w-full mt-4 md:mt-0 md:w-1/3 bg-black/20 rounded-lg flex flex-col overflow-hidden border border-white/10">
+              {/* Right Side: Table of Contents (Desktop Only) */}
+              <div className="hidden md:flex w-full mt-4 md:mt-0 md:w-1/3 bg-black/20 rounded-lg flex-col overflow-hidden border border-white/10 max-h-[40vh] md:max-h-full">
                 <div className="p-3 flex-shrink-0 bg-black/20">
                   <h4 className="font-semibold text-white flex items-center">
                     <FileText size={18} className="mr-2 text-gray-300"/>
@@ -803,24 +806,21 @@ export default function EbookiContent() {
             </div>
 
             {/* Modal Footer */}
-            <div className="flex flex-wrap justify-center items-center p-4 flex-shrink-0 space-x-3 border-t border-white/10">
-              <button onClick={handleClosePreview} className="px-6 py-2 bg-white/10 text-white rounded-lg hover:bg-white/20 transition-colors font-medium">
-                Close
-              </button>
+            <div className="flex flex-col md:flex-row-reverse gap-3 p-4 flex-shrink-0 border-t border-white/10">
               <button
                 onClick={() => handleDownloadAsPng(previewImageName)}
                 disabled={isConverting}
-                className={`flex items-center space-x-2 px-6 py-2 rounded-lg font-medium transition-colors ${
+                className={`w-full md:w-auto flex items-center justify-center space-x-2 px-6 py-2 rounded-lg font-medium transition-colors ${
                   isConverting
-                    ? "bg-gray-400 text-white cursor-not-allowed"
+                    ? "bg-gray-500 text-white cursor-not-allowed"
                     : "bg-green-600 text-white hover:bg-green-700"
                 }`}
                 title="Download as PNG"
               >
                 {isConverting ? (
-                  <><RefreshCw size={18} className="animate-spin" /><span>Converting...</span></>
+                  <><RefreshCw size={16} className="animate-spin" /><span>Converting...</span></>
                 ) : (
-                  <><Download size={18} /><span>Download PNG</span></>
+                  <><Download size={16} /><span>Download PNG</span></>
                 )}
               </button>
               <button
@@ -830,10 +830,13 @@ export default function EbookiContent() {
                     handleEditEbook(previewEbook.id);
                   }
                 }}
-                className="flex items-center space-x-2 px-6 py-2 rounded-lg font-medium transition-colors bg-blue-600 text-white hover:bg-blue-700"
+                className="w-full md:w-auto flex items-center justify-center space-x-2 px-6 py-2 rounded-lg font-medium transition-colors bg-blue-600 text-white hover:bg-blue-700"
               >
-                <Edit size={18} />
+                <Edit size={16} />
                 <span>Edit e-book</span>
+              </button>
+              <button onClick={handleClosePreview} className="w-full md:w-auto px-6 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition-colors font-medium md:mr-auto">
+                Close
               </button>
             </div>
           </div>

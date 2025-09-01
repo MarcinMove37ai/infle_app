@@ -449,7 +449,7 @@ const PagesView = () => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 overflow-hidden">
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-700 p-4 mb-6 rounded-md">
             <p>{error}</p>
@@ -533,7 +533,7 @@ const PagesView = () => {
             </form>
         </div>
 
-        <div className="bg-white rounded-none border-0 sm:rounded-xl sm:border border-gray-200 overflow-hidden -mx-4 sm:mx-0">
+        <div className="bg-transparent sm:bg-white rounded-none border-0 sm:rounded-xl sm:border border-gray-200 overflow-hidden -mx-4 sm:mx-0">
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50">
                 <h2 className="text-lg font-semibold text-gray-800">Your Pages</h2>
                 {stats && stats.total > 0 && (
