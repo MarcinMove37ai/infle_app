@@ -56,58 +56,50 @@ interface EbookGeneratorModalProps {
 
 // Main component for the ebook generator
 export default function EbookGeneratorModal({ isOpen, onClose, onEbookCreated, ebookId }: EbookGeneratorModalProps) {
-  // ✅ NOWY KOD: Referencja do elementu z treścią modala
   const modalContentRef = useRef<HTMLDivElement>(null);
 
-  // ✅ NOWY KOD: Efekt do obsługi kliknięcia poza modalem
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      // Sprawdzamy, czy referencja istnieje i czy kliknięty element nie jest częścią modala
       if (modalContentRef.current && !modalContentRef.current.contains(event.target as Node)) {
-        onClose(); // Wywołujemy funkcję zamykającą
+        onClose();
       }
     };
 
     if (isOpen) {
-      // Dodajemy nasłuchiwanie tylko, gdy modal jest otwarty
       document.addEventListener('mousedown', handleClickOutside);
     }
 
-    // Sprzątamy po sobie
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [isOpen, onClose]); // Efekt zależy od stanu otwarcia i funkcji zamykającej
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-      {/* ✅ NOWY KOD: Dodajemy ref do tego diva */}
-      return (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-0 sm:p-4 backdrop-blur-sm">
-            <div
-              ref={modalContentRef}
-              className="bg-white w-full h-full sm:rounded-xl sm:shadow-2xl sm:w-full sm:max-w-7xl sm:max-h-[95vh] overflow-hidden"
-            >
-              {/* Modal Header - dodaj padding dla mobile */}
-              <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gray-50">
-                <h2 className="text-lg sm:text-xl font-semibold text-gray-800">Create your ebook with AI</h2>
-                <button
-                  onClick={onClose}
-                  className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-                >
-                  <X size={20} />
-                </button>
-              </div>
+    // Usunięto zduplikowany 'return' i poprawiono strukturę
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-0 sm:p-4 backdrop-blur-sm">
+      <div
+        ref={modalContentRef}
+        className="bg-white w-full h-full sm:rounded-xl sm:shadow-2xl sm:w-full sm:max-w-7xl sm:max-h-[95vh] overflow-hidden"
+      >
+        <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gray-50">
+          <h2 className="text-lg sm:text-xl font-semibold text-gray-800">Create your ebook with AI</h2>
+          <button
+            onClick={onClose}
+            className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+          >
+            <X size={20} />
+          </button>
+        </div>
 
-              {/* Modal Content - z ukrytym scrollbarem */}
-              <div className="overflow-y-auto h-[calc(100%-80px)] sm:h-[calc(95vh-80px)] scrollbar-hide">
-                <EbookGeneratorContent isOpen={isOpen} ebookId={ebookId} onEbookCreated={onEbookCreated} onClose={onClose} />
-              </div>
-            </div>
-          </div>
-      );
+        <div
+          id="modal-scroll-container"
+          className="overflow-y-auto h-[calc(100%-80px)] sm:h-[calc(95vh-80px)] scrollbar-hide"
+        >
+          <EbookGeneratorContent isOpen={isOpen} ebookId={ebookId} onEbookCreated={onEbookCreated} onClose={onClose} />
+        </div>
+      </div>
     </div>
   );
 }
@@ -2654,7 +2646,8 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
 
   // EXTENDED renderStep1 with new fields
   const renderStep1 = () => (
-    <div className="bg-gradient-to-br from-white to-blue-50 rounded-xl border border-blue-100 shadow-lg p-8 transition-all duration-300">
+    // CHANGE: Removed frames and shadows for mobile view, reduced padding
+    <div className="bg-gradient-to-br from-white to-blue-50 sm:rounded-xl sm:border sm:border-blue-100 sm:shadow-lg p-4 sm:p-8 transition-all duration-300">
       <div className="mb-8 text-center">
         <BookMarked size={48} className="text-blue-500 mb-4 mx-auto drop-shadow-md" />
         <h2 className="text-2xl font-semibold text-gray-800 mb-2">
@@ -2667,9 +2660,12 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
         </p>
       </div>
 
-      <div className="mb-6 max-w-2xl mx-auto space-y-6">
+      {/* CHANGE: Removed space-y-6 for mobile to manually control spacing */}
+      <div className="max-w-2xl mx-auto sm:space-y-6">
+
         {/* Title section */}
-        <div className="bg-white p-4 rounded-lg border border-blue-100">
+        {/* CHANGE: Removed the frame for mobile, added a bottom border as a separator */}
+        <div className="border-b border-gray-200 pb-6 sm:border-0 sm:pb-0 sm:bg-white sm:p-4 sm:rounded-lg sm:border sm:border-blue-100">
           <label className="block text-sm font-medium text-gray-700 mb-3">
             Ebook Title *
           </label>
@@ -2685,7 +2681,8 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
         </div>
 
         {/* Subtitle section */}
-        <div className="bg-white p-4 rounded-lg border border-blue-100">
+        {/* CHANGE: Removed the frame for mobile, added a bottom border as a separator */}
+        <div className="pt-6 border-b border-gray-200 pb-6 sm:pt-0 sm:border-0 sm:pb-0 sm:bg-white sm:p-4 sm:rounded-lg sm:border sm:border-blue-100">
           <label className="block text-sm font-medium text-gray-700 mb-3">
             Subtitle:
             <span className="text-gray-400 font-normal ml-1">(optional)</span>
@@ -2701,8 +2698,9 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
           />
         </div>
 
-        {/* NEW Description section */}
-        <div className="bg-white p-4 rounded-lg border border-blue-100">
+        {/* Description section */}
+        {/* CHANGE: Removed the frame for mobile, added a bottom border as a separator */}
+        <div className="pt-6 border-b border-gray-200 pb-6 sm:pt-0 sm:border-0 sm:pb-0 sm:bg-white sm:p-4 sm:rounded-lg sm:border sm:border-blue-100">
           <label className="block text-sm font-medium text-gray-700 mb-3">
             Description and preferences:
             <span className="text-gray-400 font-normal ml-1">(optional)</span>
@@ -2722,8 +2720,9 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
           </div>
         </div>
 
-        {/* NEW Links section */}
-        <div className="bg-white p-4 rounded-lg border border-blue-100 text-gray-700">
+        {/* Sources section (WWW & PDF) */}
+        {/* CHANGE: Removed the frame for mobile. The separator is already on the last element above. */}
+        <div className="pt-6 sm:pt-0 sm:bg-white sm:p-4 sm:rounded-lg sm:border sm:border-blue-100 text-gray-700">
           <div className="flex justify-between items-center mb-3">
             <label className="text-sm font-medium text-gray-700">
               WWW Sources:
@@ -2840,7 +2839,7 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
                   {scrapedContent.map((item, index) => (
                     <div key={index} className="text-xs bg-gray-50 p-2 rounded border relative">
                       <button
-                        onClick={() => handleRemoveScrapedContent(item)} // Zmień z item.url na item
+                        onClick={() => handleRemoveScrapedContent(item)}
                         className="absolute top-1 right-1 text-red-500 hover:text-red-700 hover:bg-red-100 rounded-full p-1 transition-colors cursor-pointer"
                         title="Remove source"
                       >
@@ -2858,7 +2857,6 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
       </div>
 
       <div className="flex justify-center mt-8 gap-4">
-        {/* Przycisk zapisu szkicu */}
         <button
           onClick={handleSaveDraft}
           disabled={!title.trim() || isGeneratingToc || isSaving || isScrapingUrls || isSavingDraft}
@@ -2871,7 +2869,6 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
           {isSavingDraft ? (
             <>
               <Loader size={20} className="animate-spin mr-3" />
-              {/* âœ… DODAJ INFORMACJĘ O AKTUALIZACJI MOCKUPÓW */}
               {(title !== originalTitle || subtitle !== originalSubtitle) ? 'Saving...' : 'Saving...'}
             </>
           ) : (
@@ -3064,7 +3061,7 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
   };
 
   const renderStep2 = () => (
-    <div className="bg-white rounded-xl border border-gray-200 shadow-lg overflow-hidden transition-all duration-300">
+    <div className="sm:bg-white sm:rounded-xl sm:border sm:border-gray-200 sm:shadow-lg sm:overflow-hidden transition-all duration-300">
       <div className="bg-gradient-to-r from-blue-500 to-blue-600 p-4 sm:p-6 text-white">
         <div className="flex flex-col justify-between">
           <div>
@@ -3370,9 +3367,9 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
     const completionPercentage = calculateCompletionPercentage();
 
     return (
-      <div className="bg-white rounded-xl border border-gray-200 shadow-lg overflow-hidden transition-all duration-300 flex flex-col">
+      <div className="sm:bg-white sm:rounded-xl sm:border sm:border-gray-200 sm:shadow-lg sm:overflow-hidden transition-all duration-300 flex flex-col">
         {chaptersWithoutContent.length > 0 && (
-          <div className="bg-yellow-50 border-b border-yellow-200 p-4 rounded-t-xl">
+          <div className="bg-yellow-50 border-b border-yellow-200 p-4 sm:rounded-t-xl">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <div className="flex items-start sm:items-center">
                 <AlertCircle size={20} className="text-yellow-600 mr-3 flex-shrink-0 mt-0.5 sm:mt-0" />
@@ -3417,21 +3414,23 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
           </div>
         )}
 
+        {/* ZMIENIONY BLOK NAGŁÓWKA */}
         <div className="bg-gradient-to-r from-blue-500 to-blue-600 p-4 sm:p-6 text-white">
-          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center">
+          <div className="flex flex-col justify-between">
             <div>
               <h2 className="text-xl font-medium pb-2 border-b border-blue-300 mb-3">Customize the ebook content</h2>
-              <p className="text-xl sm:text-2xl text-white mt-1 font-bold max-w-2xl line-clamp-2">
+              <p className="text-xl sm:text-2xl text-white mt-1 font-bold max-w-2xl line-clamp-3">
                 {title}
               </p>
               {subtitle && (
-                <p className="text-blue-200 mt-1 font-normal line-clamp-1">
+                <p className="text-blue-200 mt-1 font-normal line-clamp-2">
                   {subtitle}
                 </p>
               )}
             </div>
           </div>
         </div>
+        {/* KONIEC ZMIENIONEGO BLOKU NAGŁÓWKA */}
 
         <div className="sm:hidden border-b border-gray-200 p-3 bg-blue-50">
           <div className="flex justify-between items-center">
@@ -3784,34 +3783,9 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
             Graphics and cover
           </button>
         </div>
-
-        <style jsx global>{`
-          .hide-scrollbar {
-            -ms-overflow-style: none;
-            scrollbar-width: none;
-          }
-          .hide-scrollbar::-webkit-scrollbar {
-            display: none;
-          }
-        `}</style>
-        <style jsx global>{`
-          /* Ukryj scrollbar ale zachowaj funkcjonalność */
-          .scrollbar-hide {
-            -ms-overflow-style: none;  /* Internet Explorer 10+ */
-            scrollbar-width: none;  /* Firefox */
-          }
-          .scrollbar-hide::-webkit-scrollbar {
-            display: none;  /* Safari and Chrome */
-          }
-
-          /* Zapewnij płynne scrollowanie na iOS */
-          .scrollbar-hide {
-            -webkit-overflow-scrolling: touch;
-          }
-        `}</style>
       </div>
     );
-  };
+};
 
   // MODIFIED renderStep4 with the cover as the first graphic
   const renderStep4 = () => {
@@ -4195,7 +4169,7 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
   };
 
   return (
-    <div className="max-w-5xl mx-auto p-6">
+    <div className="max-w-5xl mx-auto p-0 sm:p-6">
       {error && (
         <div className="bg-red-50 border-l-4 border-red-500 text-red-700 p-4 mb-6 rounded-lg shadow-sm flex items-start animate-fadeIn">
           <AlertCircle className="mr-3 flex-shrink-0 mt-0.5" size={20} />
@@ -4206,7 +4180,7 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
         </div>
       )}
 
-      <div className="mb-8">
+      <div className="mb-4 px-4 sm:px-0 mt-4 sm:mt-0">
         <div className="flex justify-between relative mb-2">
           <div className="absolute left-5 right-5 top-5 h-1 -translate-y-1/2 bg-gray-200"></div>
 
@@ -4266,10 +4240,10 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
           </div>
         </div>
         <div className="flex justify-between text-sm text-gray-600">
-          <div className="w-20 text-center -ml-5">Data</div>
+          <div className="w-20 text-center sm:-ml-5">Data</div>
           <div className="w-20 text-center">Chapters</div>
           <div className="w-20 text-center">Content</div>
-          <div className="w-20 text-center -mr-5">Graphics</div>
+          <div className="w-20 text-center sm:-mr-5">Graphics</div>
         </div>
       </div>
 
@@ -4369,72 +4343,41 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
         />
       )}
       <style jsx global>{`
-        button:not(:disabled),
-        .cursor-pointer,
-        .hover\\:bg-gray-50:not(:disabled),
-        .hover\\:bg-blue-50:not(:disabled),
-        .hover\\:bg-blue-700:not(:disabled),
-        .hover\\:bg-red-50:not(:disabled),
-        .hover\\:bg-red-100:not(:disabled),
-        .hover\\:bg-green-50:not(:disabled),
-        .hover\\:bg-green-100:not(:disabled),
-        .hover\\:text-blue-600:not(:disabled),
-        .hover\\:text-red-600:not(:disabled),
-        .hover\\:text-green-600:not(:disabled),
-        .hover\\:scale-105:not(:disabled),
-        .hover\\:shadow-md:not(:disabled),
-        .hover\\:shadow-lg:not(:disabled),
-        input[type="checkbox"],
-        input[type="radio"],
-        label[for] {
-          cursor: pointer;
-        }
+      /* Używamy ID, aby styl był absolutnie priorytetowy i zadziałał na 100% */
+      #modal-scroll-container {
+        -ms-overflow-style: none;  /* Dla Internet Explorer 10+ */
+        scrollbar-width: none;  /* Dla Firefox */
+      }
+      #modal-scroll-container::-webkit-scrollbar {
+        display: none;  /* Dla Chrome, Safari, Edge */
+      }
 
-        button:disabled,
-        .cursor-not-allowed,
-        input:disabled,
-        textarea:disabled {
-          cursor: not-allowed;
-        }
+      /* Pozostałe style z Twojego pliku - upewnij się, że są tutaj */
+      .custom-scrollbar::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+      .custom-scrollbar::-webkit-scrollbar-track {
+        background-color: #f1f1f1;
+        border-radius: 4px;
+      }
+      .custom-scrollbar::-webkit-scrollbar-thumb {
+        background-color: #c1c1c1;
+        border-radius: 4px;
+      }
+      .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+        background-color: #a1a1a1;
+      }
 
-        .custom-scrollbar::-webkit-scrollbar {
-          width: 8px;
-          height: 8px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-track {
-          background-color: #f1f1f1;
-          border-radius: 4px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-          background-color: #c1c1c1;
-          border-radius: 4px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-          background-color: #a1a1a1;
-        }
+      .animate-fadeIn {
+        animation: fadeIn 0.2s ease-in-out;
+      }
 
-        .animate-fadeIn {
-          animation: fadeIn 0.2s ease-in-out;
-        }
-
-        @keyframes fadeIn {
-          from { opacity: 0; transform: translateY(-5px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-
-        .prose {
-          line-height: 1.7;
-        }
-        .prose p {
-          margin-bottom: 1rem;
-        }
-        .prose h1, .prose h2, .prose h3, .prose h4 {
-          margin-top: 1.5rem;
-          margin-bottom: 1rem;
-          font-weight: 600;
-          color: #333;
-        }
-      `}</style>
+      @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(-5px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+    `}</style>
 
     </div>
   );
