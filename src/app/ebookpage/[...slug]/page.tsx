@@ -59,7 +59,7 @@ export async function generateMetadata({ params }: PublicPageProps): Promise<Met
   const imageUrl = pageData.ebook?.final_mockup_url || pageData.ebook?.cover_image_url || '/default-image.jpg';
 
   return {
-    title: `HPS e-book | ${title}`,
+    title: `e-book | ${title}`,
     description: description.substring(0, 160),
     openGraph: {
         title: `e-book | ${title}`,
@@ -68,7 +68,7 @@ export async function generateMetadata({ params }: PublicPageProps): Promise<Met
     },
     twitter: {
         card: 'summary_large_image',
-        title: `HPS e-book | ${title}`,
+        title: `e-book | ${title}`,
         description,
         images: [imageUrl],
     },

@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { UserCheck, Search, Download, Trash2, AlertCircle, RefreshCw, MessageCircle, AlertTriangle, Archive, Edit, Save, X, Sparkles, ChevronDown, Mail, Phone, Calendar, Globe, ArrowLeft } from 'lucide-react';
+import { UserCheck, Search, Download, Trash2, AlertCircle, RefreshCw, MessageCircle, AlertTriangle, Archive, Edit, Save, X, Sparkles, ChevronDown, Mail, Phone, Calendar, Globe, ArrowLeft, MessageSquarePlus } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -458,15 +458,15 @@ const LeadsContent = () => {
             {/* Leads Table */}
             <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
                 <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
+                    <table className="min-w-full divide-y divide-gray-200 table-fixed">
                         <thead className="bg-gray-50">
                             <tr>
-                                <th className="hidden sm:table-cell px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Lead</th>
-                                <th className="hidden md:table-cell px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Source</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                                <th className="hidden sm:table-cell px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Comment</th>
-                                <th className="hidden sm:table-cell px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                                <th className="hidden sm:table-cell w-[15%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                                <th className="w-3/5 sm:w-[30%] px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Lead</th>
+                                <th className="hidden md:table-cell w-[20%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Source</th>
+                                <th className="w-2/5 sm:w-[15%] px-4 sm:px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                <th className="hidden sm:table-cell w-[15%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Comment</th>
+                                <th className="hidden sm:table-cell w-[5%] px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
@@ -488,13 +488,27 @@ const LeadsContent = () => {
                                         className="sm:hover:bg-gray-50 transition-colors cursor-pointer sm:cursor-default"
                                     >
                                         <td className="hidden sm:table-cell px-6 py-4 whitespace-nowrap text-sm text-gray-600">{formatDate(lead.createdAt)}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <div className="text-sm font-medium text-gray-900 truncate">{lead.name}</div>
-                                            <div className="hidden sm:block text-sm text-gray-500 truncate">{lead.email}</div>
-                                            {lead.phone && <div className="text-sm text-gray-500 truncate">{lead.phone}</div>}
+                                        <td className="px-4 sm:px-6 py-4 min-w-0 max-w-0 w-3/5 sm:w-[30%]">
+                                            <div className="min-w-0">
+                                                <div className="text-sm font-medium text-gray-900 truncate" title={lead.name}>
+                                                    {lead.name}
+                                                </div>
+                                                <div className="text-xs sm:text-sm text-gray-500 truncate" title={lead.email}>
+                                                    {lead.email}
+                                                </div>
+                                                {lead.phone && (
+                                                    <div className="text-xs sm:text-sm text-gray-500 truncate" title={lead.phone || ''}>
+                                                        {lead.phone}
+                                                    </div>
+                                                )}
+                                            </div>
                                         </td>
-                                        <td className="hidden md:table-cell px-6 py-4 whitespace-nowrap text-sm text-gray-800 truncate">{lead.page}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap">
+                                        <td className="hidden md:table-cell px-6 py-4 min-w-0 max-w-0 w-[20%] text-sm text-gray-800">
+                                            <div className="truncate" title={lead.page}>
+                                                {lead.page}
+                                            </div>
+                                        </td>
+                                        <td className="px-4 sm:px-6 py-4 whitespace-nowrap w-2/5 sm:w-[15%]">
                                             <button onClick={(e) => { e.stopPropagation(); handleOpenStatusMenu(lead.id, e); }} disabled={updatingStatusId === lead.id} className={`flex items-center gap-2 px-2.5 py-1.5 text-xs font-medium rounded-full w-full justify-center transition-all hover:shadow-md disabled:opacity-50 disabled:cursor-wait cursor-pointer ${getStatusProps(lead.status).color}`}>
                                                 {updatingStatusId === lead.id ? <RefreshCw size={14} className="animate-spin" /> : getStatusProps(lead.status).icon}
                                                 <span>{getStatusProps(lead.status).text}</span>
@@ -514,14 +528,26 @@ const LeadsContent = () => {
                                                         <button onClick={() => setEditingComment(null)} className="p-1 text-red-600 hover:bg-red-100 rounded-full cursor-pointer"><X size={14} /></button>
                                                     </div>
                                                 ) : (
-                                                    <>
-                                                        <p className="italic text-gray-500 line-clamp-2">{lead.comment || '-'}</p>
-                                                        <button onClick={() => setEditingComment({ id: lead.id, text: lead.comment || '' })} className="opacity-0 group-hover:opacity-100 transition-opacity p-1 text-gray-500 hover:bg-gray-200 rounded-full flex-shrink-0 cursor-pointer"><Edit size={14} /></button>
-                                                    </>
+                                                    lead.comment ? (
+                                                        // Jeśli komentarz istnieje - zachowaj stare zachowanie
+                                                        <>
+                                                            <p className="italic text-gray-500 line-clamp-2">{lead.comment}</p>
+                                                            <button onClick={() => setEditingComment({ id: lead.id, text: lead.comment || '' })} className="opacity-0 group-hover:opacity-100 transition-opacity p-1 text-gray-500 hover:bg-gray-200 rounded-full flex-shrink-0 cursor-pointer"><Edit size={14} /></button>
+                                                        </>
+                                                    ) : (
+                                                        // Jeśli komentarz NIE istnieje - pokaż nowy, zawsze widoczny przycisk
+                                                        <button
+                                                            onClick={() => setEditingComment({ id: lead.id, text: '' })}
+                                                            className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-blue-600 hover:bg-blue-50 py-1 px-2 rounded-md transition-colors w-full justify-start"
+                                                        >
+                                                            <MessageSquarePlus size={14} className="flex-shrink-0" />
+                                                            <span>Add comment</span>
+                                                        </button>
+                                                    )
                                                 )}
                                             </div>
                                         </td>
-                                        <td className="hidden sm:table-cell px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                        <td className="hidden sm:table-cell px-6 py-4 whitespace-nowrap text-center text-sm font-medium">
                                             <button onClick={(e) => { e.stopPropagation(); handleDeleteClick(lead); }} disabled={deletingId === lead.id} className="p-2 text-red-600 hover:bg-red-100 rounded-full transition-colors disabled:opacity-50 cursor-pointer">
                                                 {deletingId === lead.id ? <RefreshCw size={16} className="animate-spin" /> : <Trash2 size={16} />}
                                             </button>
@@ -558,7 +584,7 @@ const LeadsContent = () => {
                                     <h3 className="text-xl font-bold text-gray-900">
                                         {isChangingStatus ? 'Change Status' : selectedLead.name}
                                     </h3>
-                                    <p className="text-sm text-gray-500 truncate">
+                                    <p className="text-sm text-gray-500 break-words line-clamp-3 max-w-[250px]" title={selectedLead.page}>
                                         {isChangingStatus ? 'Select a new status for this lead' : selectedLead.page}
                                     </p>
                                 </div>
@@ -604,11 +630,25 @@ const LeadsContent = () => {
                                         <Calendar size={14} className="text-gray-400 mr-4 mt-0.5 flex-shrink-0" />
                                         <span className="text-gray-800">{formatDate(selectedLead.createdAt)}</span>
                                     </div>
-                                    {/* Clickable status badge */}
-                                    <div className="pt-2">
-                                         <button onClick={() => setIsChangingStatus(true)} className={`flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-full transition-transform hover:scale-105 ${getStatusProps(selectedLead.status).color}`}>
+                                    {/* Status badge and Delete button */}
+                                    <div className="pt-2 flex items-center justify-between">
+                                        <button
+                                            onClick={() => setIsChangingStatus(true)}
+                                            className={`flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-full transition-transform hover:scale-105 ${getStatusProps(selectedLead.status).color}`}
+                                        >
                                             {getStatusProps(selectedLead.status).icon}
                                             <span>{getStatusProps(selectedLead.status).text}</span>
+                                        </button>
+
+                                        <button
+                                            onClick={() => {
+                                                setSelectedLead(null); // Zamknij modal
+                                                handleDeleteClick(selectedLead); // Wywołaj funkcję usuwania
+                                            }}
+                                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-600 hover:text-red-700 hover:bg-red-50 rounded-full transition-colors"
+                                        >
+                                            <Trash2 size={14} />
+                                            <span>Delete</span>
                                         </button>
                                     </div>
                                 </div>

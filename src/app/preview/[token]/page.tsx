@@ -536,6 +536,7 @@ const getStatusChangeInfo = () => {
           type: 'success',
           text: 'Zmiany zostały zapisane'
         });
+
       }
     } catch (error) {
       console.error('Błąd podczas zapisywania zmian:', error);
@@ -580,8 +581,12 @@ const getStatusChangeInfo = () => {
         message: 'Masz niezapisane zmiany. Zapisz je przed zmianą statusu strony.',
         confirmText: 'Zapisz zmiany',
         cancelText: 'Anuluj',
-        onConfirm: saveChanges
-      });
+        onConfirm: async () => {
+                await saveChanges();
+                // KLUCZOWA LINIA - zamknij dialog po zapisie
+                setShowConfirmDialog(false);
+            }
+        });
       setShowConfirmDialog(true);
       return;
     }
@@ -735,34 +740,38 @@ const getStatusChangeInfo = () => {
           statusText = status;
       }
 
-      setToast({
-        type: 'success',
-        text: `Status strony został zmieniony na: ${statusText}${additionalMessage}`
-      });
+      // Po pomyślnym wykonaniu
+        setToast({
+            type: 'success',
+            text: `Status strony został zmieniony na: ${statusText}${additionalMessage}`
+        });
 
-      if (status === 'published' && updatedPage?.url) {
-        navigator.clipboard.writeText(updatedPage.url)
-          .then(() => {
+        // DODAJ TO - przekierowanie po publikacji
+        if (status === 'published') {
+            // Opcjonalnie skopiuj link do schowka
+            if (updatedPage?.url) {
+                await navigator.clipboard.writeText(updatedPage.url);
+            }
+
+            // Poczekaj chwilę, żeby użytkownik zobaczył komunikat sukcesu
             setTimeout(() => {
-              setToast({
-                type: 'success',
-                text: 'Link publiczny został skopiowany do schowka!'
-              });
-            }, 3500);
-          })
-          .catch(() => {});
-      }
+                window.location.href = '/strony-zapisu';
+                // lub użyj Next.js router:
+                // router.push('/strony-zapisu');
+            }, 1500); // 1.5 sekundy opóźnienia
+        }
+
     } catch (error) {
-      console.error('Błąd podczas zmiany statusu:', error);
-      setToast({
-        type: 'error',
-        text: 'Nie udało się zmienić statusu strony'
-      });
+        console.error('Błąd podczas zmiany statusu:', error);
+        setToast({
+            type: 'error',
+            text: 'Nie udało się zmienić statusu strony'
+        });
     } finally {
-      setIsChangingStatus(false);
-      setShowConfirmDialog(false);
+        setIsChangingStatus(false);
+        setShowConfirmDialog(false);
     }
-  };
+};
 
   // Pobieranie danych strony
   const fetchData = useCallback(async () => {
