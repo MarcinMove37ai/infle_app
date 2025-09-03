@@ -1,9 +1,51 @@
-//src/lib/pdfGenerator.ts
+// src/lib/pdfGenerator.ts
 
 import { prisma } from '@/lib/prisma';
 import puppeteer from 'puppeteer-core';
 import chromium from '@sparticuz/chromium';
 import fs from 'fs';
+import sharp from 'sharp'; // Import biblioteki sharp
+
+// --- NOWA FUNKCJA POMOCNICZA DO OPTYMALIZACJI GRAFIK ---
+async function optimizeAndEncodeImages(chapters: Chapter[], baseUrl: string): Promise<any[]> {
+  const optimizedChapters = await Promise.all(
+    chapters.map(async (chapter) => {
+      if (!chapter.image_url) {
+        return chapter;
+      }
+      try {
+        const imageUrl = new URL(chapter.image_url, baseUrl).href;
+        console.log(`🖼️  Optymalizowanie obrazu dla rozdziału (pdfGenerator): "${chapter.title}"`);
+
+        const response = await fetch(imageUrl);
+        if (!response.ok) {
+          throw new Error(`Nie udało się pobrać obrazu: ${response.statusText}`);
+        }
+        const imageBuffer = await response.arrayBuffer();
+
+        const optimizedBuffer = await sharp(Buffer.from(imageBuffer))
+          .resize({
+            width: 700,
+            fit: 'inside',
+            withoutEnlargement: true,
+          })
+          .webp({ quality: 75 })
+          .toBuffer();
+
+        const base64Image = optimizedBuffer.toString('base64');
+        return {
+          ...chapter,
+          optimizedImageBase64: `data:image/webp;base64,${base64Image}`,
+        };
+      } catch (error) {
+        console.warn(`⚠️ Nie udało się zoptymalizować obrazu dla rozdziału "${chapter.title}". Użycie oryginalnego URL. Błąd:`, error);
+        return chapter;
+      }
+    })
+  );
+  return optimizedChapters;
+}
+// --- KONIEC NOWEJ FUNKCJI ---
 
 // Interfejsy i typy
 interface Chapter {
@@ -12,6 +54,8 @@ interface Chapter {
   content: string | null;
   image_url: string | null;
   position: number;
+  // Dodajemy opcjonalne pole na zoptymalizowany obraz
+  optimizedImageBase64?: string;
 }
 
 interface EbookData {
@@ -29,12 +73,6 @@ interface PdfGeneratorResult {
   ebook: EbookData;
 }
 
-/**
- * Główna, uniwersalna funkcja do generowania PDF dla danego ebooka.
- * Zaktualizowana o poprawną logikę renderowania okładki 1:1.
- * @param ebookId - ID ebooka, dla którego ma być wygenerowany PDF.
- * @returns Obiekt zawierający bufor PDF i dane ebooka.
- */
 export async function generateEbookPdf(ebookId: number): Promise<PdfGeneratorResult> {
   let browser;
   try {
@@ -52,7 +90,13 @@ export async function generateEbookPdf(ebookId: number): Promise<PdfGeneratorRes
     }
 
     const { title, subtitle, cover_image_url, ebook_chapters: chapters, authorDisplayName, authorLogoUrl } = ebook;
-    const htmlContent = generateHTMLContent(title, subtitle, chapters, cover_image_url, authorDisplayName, authorLogoUrl);
+
+    // --- KROK 1: Uruchomienie optymalizacji grafik przed generowaniem HTML ---
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+    const chaptersWithOptimizedImages = await optimizeAndEncodeImages(chapters, baseUrl);
+    // --- KONIEC KROKU 1 ---
+
+    const htmlContent = generateHTMLContent(title, subtitle, chaptersWithOptimizedImages, cover_image_url, authorDisplayName, authorLogoUrl);
 
     const isProduction = process.env.NODE_ENV === 'production';
     let executablePath: string;
@@ -76,18 +120,13 @@ export async function generateEbookPdf(ebookId: number): Promise<PdfGeneratorRes
       args: chromium.args,
       defaultViewport: chromium.defaultViewport,
       executablePath,
-      headless: true, // Ustaw jawnie na true zamiast używać chromium.headless
+      headless: true,
     });
 
     const page = await browser.newPage();
     await page.setViewport({ width: 795, height: 1125 });
     await page.setContent(htmlContent, { waitUntil: 'networkidle0', timeout: 60000 });
 
-    // ========================================================================
-    //         POPRAWIONA SEKWENCJA GENEROWANIA (KOPIA 1:1 Z ORYGINAŁU)
-    // ========================================================================
-
-    // Krok 1: Modyfikowanie DOM w celu ukrycia tekstu na okładce
     await page.evaluate(() => {
       const titleEl = document.querySelector('.cover-title');
       const subtitleEl = document.querySelector('.cover-subtitle');
@@ -95,29 +134,24 @@ export async function generateEbookPdf(ebookId: number): Promise<PdfGeneratorRes
       if (subtitleEl) (subtitleEl as HTMLElement).style.visibility = 'hidden';
     });
 
-    // Krok 2: Generowanie zrzutu ekranu szablonu tła (TERAZ JUŻ BEZ TEKSTU)
     const coverTemplateBuffer = await page.screenshot({ type: 'webp', quality: 95 });
     const coverTemplateDataUrl = `data:image/webp;base64,${(coverTemplateBuffer as Buffer).toString('base64')}`;
 
-    // Krok 3: Przygotowanie strony do generowania PDF
     await page.evaluate((dataUrl) => {
       const coverPage = document.querySelector('.cover-page') as HTMLElement | null;
       if (!coverPage) return;
 
-      // Ukryj oryginalne elementy, które są teraz częścią tła
       const elementsToHide = ['.cover-logo', '.cover-image-container', '.cover-fallback'];
       elementsToHide.forEach(selector => {
         const el = coverPage.querySelector(selector) as HTMLElement | null;
         if (el) el.style.display = 'none';
       });
 
-      // Ustaw wygenerowane tło (bez tekstu)
       coverPage.style.backgroundImage = `url(${dataUrl})`;
       coverPage.style.backgroundSize = '100% 100%';
       coverPage.style.backgroundPosition = 'center';
       coverPage.style.backgroundRepeat = 'no-repeat';
 
-      // Usuń gradienty i przywróć widoczność tekstu
       const titleSection = coverPage.querySelector('.cover-title-section') as HTMLElement | null;
       const subtitleSection = coverPage.querySelector('.cover-subtitle-section') as HTMLElement | null;
       if (titleSection) titleSection.style.background = 'none';
@@ -129,7 +163,6 @@ export async function generateEbookPdf(ebookId: number): Promise<PdfGeneratorRes
       if (subtitleEl) subtitleEl.style.visibility = 'visible';
     }, coverTemplateDataUrl);
 
-    // Krok 4: Generowanie finalnego PDF
     const pdfBuffer = await page.pdf({
       format: 'A4',
       margin: { top: '20mm', right: '20mm', bottom: '25mm', left: '20mm' },
@@ -139,7 +172,7 @@ export async function generateEbookPdf(ebookId: number): Promise<PdfGeneratorRes
       timeout: 60000,
     });
 
-    return { pdfBuffer: pdfBuffer as Buffer, ebook };
+    return { pdfBuffer: pdfBuffer as Buffer, ebook: ebook as EbookData };
 
   } catch (error) {
     console.error(`Błąd podczas generowania PDF dla ebooka ${ebookId}:`, error);
@@ -151,9 +184,6 @@ export async function generateEbookPdf(ebookId: number): Promise<PdfGeneratorRes
   }
 }
 
-// ========================================================================
-//                    FUNKCJE POMOCNICZE (KOPIA 1:1)
-// ========================================================================
 function generateHTMLContent(
   title: string,
   subtitle: string | null,
@@ -277,16 +307,22 @@ function generateChaptersContent(chapters: Chapter[]): string {
           <h2 class="chapter-title">${escapeHtml(chapter.title || '')}</h2>
         </div>
         <div class="chapter-content">
-          ${generateChapterContent(chapter.content || '', chapter.image_url, index)}
+          ${generateChapterContent(chapter.content || '', chapter.image_url, chapter, index)}
         </div>
       </div>
     `).join('');
 }
 
-function generateChapterContent(content: string, imageUrl: string | null, chapterIndex: number): string {
+
+function generateChapterContent(content: string, imageUrl: string | null, chapter: any, chapterIndex: number): string {
   if (!content.trim()) {
     return '<p class="no-content">Brak treści dla tego rozdziału.</p>';
   }
+
+  // --- KROK 2: Użycie zoptymalizowanych grafik ---
+  // Sprawdzamy, czy istnieje zoptymalizowany obraz Base64. Jeśli nie, używamy oryginalnego.
+  const finalImageUrl = chapter.optimizedImageBase64 || imageUrl;
+
   const paragraphs = content.split('\n\n').filter((p) => p.trim());
   let startIndex = 0;
   if (paragraphs.length > 0) {
@@ -303,8 +339,8 @@ function generateChapterContent(content: string, imageUrl: string | null, chapte
   for (let i = 0; i < contentParagraphs.length; i++) {
     const paragraph = contentParagraphs[i].trim();
     if (!paragraph) continue;
-    if (imageUrl && !imageInserted && i === imagePosition) {
-      htmlContent += `<div class="chapter-image-container"><img src="${imageUrl}" alt="Ilustracja rozdziału ${chapterIndex + 1}" class="chapter-image" /></div>`;
+    if (finalImageUrl && !imageInserted && i === imagePosition) {
+      htmlContent += `<div class="chapter-image-container"><img src="${finalImageUrl}" alt="Ilustracja rozdziału ${chapterIndex + 1}" class="chapter-image" /></div>`;
       imageInserted = true;
     }
     if (isSectionHeader(paragraph)) {
@@ -318,6 +354,7 @@ function generateChapterContent(content: string, imageUrl: string | null, chapte
   }
   return htmlContent;
 }
+
 
 function isSectionHeader(text: string): boolean {
   const trimmedText = text.trim();

@@ -1140,40 +1140,27 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
       // ✅ POPRAWKA: Niezawodne porównywanie stanu źródeł
       const hasSourcesChanged = !areSourcesEqual(scrapedContent, originalScrapedContent);
 
-      if (newStep === 2 && step === 1 && tocGenerated &&
-         (title !== originalTitle ||
-          subtitle !== originalSubtitle ||
-          hasDescriptionChanged ||
-          hasUrlsChanged ||
-          hasSourcesChanged)) {
-        setShowRegeneratePopup(true);
-      }
-    else if (newStep === 3 && step === 2) {
-      console.log('🔄 Moving to step 3 - synchronizing chapter status...');
-      syncChapterStatus();
-
-      const chaptersWithNoContent = tocItems
-        .filter(item => !item.content || item.content.trim() === '')
-        .map(item => item.id);
-
-      console.log(`📊 Found ${chaptersWithNoContent.length} chapters without content:`, chaptersWithNoContent);
-
-      if (chaptersWithNoContent.length > 0) {
-        if (!activeChapterId || !tocItems.find(item => item.id === activeChapterId)) {
-          setActiveChapterId(chaptersWithNoContent[0]);
-          console.log(`🎯 Set active chapter: ${chaptersWithNoContent[0]}`);
+        if (newStep === 2 && step === 1 && tocGenerated &&
+           (title !== originalTitle ||
+            subtitle !== originalSubtitle ||
+            hasDescriptionChanged ||
+            hasUrlsChanged ||
+            hasSourcesChanged)) {
+          setShowRegeneratePopup(true);
         }
-      } else {
-        if (!activeChapterId || !tocItems.find(item => item.id === activeChapterId)) {
-          const firstChapterId = tocItems.length > 0 ? tocItems[0].id : null;
-          setActiveChapterId(firstChapterId);
-          console.log(`🎯 Set active chapter (first): ${firstChapterId}`);
-        }
-      }
+      else if (newStep === 3) { // <--- ZMIANA: Usunięto '&& step === 2'
+        console.log('🔄 Moving to step 3 - setting first chapter as active...');
+        syncChapterStatus(); // Synchronizacja statusu wciąż jest potrzebna
 
-      setStep(newStep);
-      console.log('✅ Move to step 3 completed');
-    }
+        // Zawsze ustawiaj pierwszy rozdział jako aktywny, jeśli lista nie jest pusta
+        if (tocItems.length > 0) {
+          setActiveChapterId(tocItems[0].id);
+          console.log(`🎯 Set active chapter to the first one: ${tocItems[0].id}`);
+        }
+
+        setStep(newStep);
+        console.log('✅ Move to step 3 completed');
+      }
     else if (newStep === 4 && step === 3) {
       console.log('🔄 Moving to step 4 - graphics and cover...');
       syncChapterStatus();
@@ -1922,6 +1909,7 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
   };
 
   // ✅ COMPLETELY REWRITTEN handleGenerateAllImages FUNCTION FOR PARALLEL EXECUTION
+  // PRZEBUDOWANA funkcja do generowania obrazów w paczkach, aby unikać błędów rate limit
   const handleGenerateAllImages = async () => {
     const chaptersToGenerate = tocItems.filter(
       item => (item.content && item.content.trim().length > 0) && !item.image_url
@@ -1932,7 +1920,7 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
       return;
     }
 
-    console.log(`🎨 Rozpoczynam równoległe generowanie ${chaptersToGenerate.length} grafik...`);
+    console.log(`🎨 Rozpoczynam generowanie ${chaptersToGenerate.length} grafik w paczkach...`);
 
     setIsGeneratingAllImages(true);
     setGeneratedImagesCount(0);
@@ -1940,96 +1928,100 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
     setError(null);
 
     const startTime = Date.now();
+    const batchSize = 3; // Zgodnie z Twoją prośbą, przetwarzamy po 3 na raz
+    const allFailedChapters: { title: string, reason: string }[] = [];
+    let totalSuccessCount = 0;
 
-    // 1. Stwórz tablicę obietnic (promisów) dla każdego zapytania API
-    const generationPromises = chaptersToGenerate.map(chapter =>
-      fetch(`/api/ebooks/${currentEbookId}/chapters/${chapter.id}/generate-image`, {
-        method: 'POST',
-        headers: getUserHeaders(),
-        body: JSON.stringify({
-          forceRegenerate: false,
-          size: "1024x1024"
-        }),
-      })
-      .then(response => {
-        if (!response.ok) {
-          // Spróbuj odczytać błąd JSON, jeśli się nie uda, rzuć ogólny błąd
-          return response.json().then(err => Promise.reject(err)).catch(() => Promise.reject({ error: `Błąd serwera: ${response.status}` }));
-        }
-        return response.json();
-      })
-      .then(data => {
-        if (!data.success || !data.image_url) {
-          throw new Error('Nieprawidłowa odpowiedź z serwera');
-        }
-        // Zwróć ID rozdziału i nowy URL obrazka
-        return { chapterId: chapter.id, imageUrl: data.image_url, title: chapter.title };
-      })
-      .catch(error => {
-        // Zwróć informację o błędzie dla tego konkretnego rozdziału
-        return { chapterId: chapter.id, error: error.error || error.message || 'Nieznany błąd', title: chapter.title };
-      })
-    );
+    // Główna pętla do przetwarzania w paczkach (batchach)
+    for (let i = 0; i < chaptersToGenerate.length; i += batchSize) {
+      const batch = chaptersToGenerate.slice(i, i + batchSize);
+      console.log(`   -> Przetwarzanie paczki nr ${Math.floor(i / batchSize) + 1}: Generowanie ${batch.length} obrazów...`);
 
-    // 2. Użyj Promise.allSettled, aby poczekać na zakończenie wszystkich zapytań
-    const results = await Promise.allSettled(generationPromises);
-    console.log('🏁 Wszystkie operacje generowania zakończone, przetwarzanie wyników...');
-
-    const successfulChapters: { chapterId: string, imageUrl: string }[] = [];
-    const failedChapters: { title: string, reason: string }[] = [];
-
-    // 3. Przetwórz wyniki
-    results.forEach(result => {
-      if (result.status === 'fulfilled' && 'imageUrl' in result.value) {
-        const { chapterId, imageUrl, title } = result.value;
-        console.log(`✅ Sukces dla rozdziału: "${title}"`);
-        successfulChapters.push({ chapterId, imageUrl });
-      } else {
-        const reason = result.status === 'rejected'
-          ? result.reason
-          : ('error' in result.value ? result.value.error : 'Nieznany błąd');
-        const chapterTitle = result.status === 'fulfilled' ? result.value.title : 'Nieznany rozdział';
-        console.error(`⌐ Błąd dla rozdziału "${chapterTitle}":`, reason);
-        failedChapters.push({ title: chapterTitle, reason });
-      }
-    });
-
-    // 4. Zaktualizuj stan JEDEN RAZ dla wszystkich udanych operacji
-    if (successfulChapters.length > 0) {
-      const timestamp = Date.now();
-      setTocItems(currentTocItems => {
-        const updatedItems = [...currentTocItems];
-        successfulChapters.forEach(({ chapterId, imageUrl }) => {
-          const index = updatedItems.findIndex(item => item.id === chapterId);
-          if (index !== -1) {
-            const baseUrl = imageUrl.split('?')[0];
-            updatedItems[index] = { ...updatedItems[index], image_url: `${baseUrl}?t=${timestamp}` };
+      // Tworzymy promisy tylko dla aktualnej paczki
+      const batchPromises = batch.map(chapter =>
+        fetch(`/api/ebooks/${currentEbookId}/chapters/${chapter.id}/generate-image`, {
+          method: 'POST',
+          headers: getUserHeaders(),
+          body: JSON.stringify({
+            forceRegenerate: false,
+            size: "1024x1024"
+          }),
+        })
+        .then(response => {
+          if (!response.ok) {
+            return response.json().then(err => Promise.reject(err)).catch(() => Promise.reject({ error: `Błąd serwera: ${response.status}` }));
           }
-        });
-        return updatedItems;
+          return response.json();
+        })
+        .then(data => {
+          if (!data.success || !data.image_url) {
+            throw new Error('Nieprawidłowa odpowiedź z serwera');
+          }
+          return { chapterId: chapter.id, imageUrl: data.image_url, title: chapter.title };
+        })
+        .catch(error => {
+          return { chapterId: chapter.id, error: error.error || error.message || 'Nieznany błąd', title: chapter.title };
+        })
+      );
+
+      // Czekamy na zakończenie TYLKO aktualnej paczki
+      const results = await Promise.allSettled(batchPromises);
+
+      const successfulChaptersInBatch: { chapterId: string, imageUrl: string }[] = [];
+
+      // Przetwarzamy wyniki dla bieżącej paczki
+      results.forEach(result => {
+        if (result.status === 'fulfilled' && 'imageUrl' in result.value) {
+          const { chapterId, imageUrl, title } = result.value;
+          console.log(`   ✅ Sukces dla rozdziału: "${title}"`);
+          successfulChaptersInBatch.push({ chapterId, imageUrl });
+        } else {
+          const reason = result.status === 'rejected'
+            ? result.reason
+            : ('error' in result.value ? result.value.error : 'Nieznany błąd');
+          const chapterTitle = result.status === 'fulfilled' ? result.value.title : 'Nieznany rozdział';
+          console.error(`   ❌ Błąd dla rozdziału "${chapterTitle}":`, reason);
+          allFailedChapters.push({ title: chapterTitle, reason: reason });
+        }
       });
-      setGraphicsAdded(true);
+
+      // WAŻNE: Aktualizujemy stan UI po każdej paczce, aby użytkownik widział postęp
+      if (successfulChaptersInBatch.length > 0) {
+        const timestamp = Date.now();
+        setTocItems(currentTocItems => {
+          const updatedItems = [...currentTocItems];
+          successfulChaptersInBatch.forEach(({ chapterId, imageUrl }) => {
+            const index = updatedItems.findIndex(item => item.id === chapterId);
+            if (index !== -1) {
+              const baseUrl = imageUrl.split('?')[0];
+              updatedItems[index] = { ...updatedItems[index], image_url: `${baseUrl}?t=${timestamp}` };
+            }
+          });
+          return updatedItems;
+        });
+        setGraphicsAdded(true);
+      }
+
+      totalSuccessCount += successfulChaptersInBatch.length;
+      setGeneratedImagesCount(totalSuccessCount);
     }
 
-    setGeneratedImagesCount(successfulChapters.length);
-
-    // 5. Zakończ proces i wyświetl podsumowanie
+    // Zakończenie procesu i finalne podsumowanie
     setIsGeneratingAllImages(false);
     const endTime = Date.now();
     const duration = Math.round((endTime - startTime) / 1000);
 
-    console.log(`📊 Podsumowanie generowania równoległego (czas: ${duration}s):`);
-    console.log(`   - Sukcesy: ${successfulChapters.length}/${chaptersToGenerate.length}`);
-    console.log(`   - Błędy: ${failedChapters.length}`);
+    console.log(`📊 Podsumowanie generowania w paczkach (czas: ${duration}s):`);
+    console.log(`   - Sukcesy: ${totalSuccessCount}/${chaptersToGenerate.length}`);
+    console.log(`   - Błędy: ${allFailedChapters.length}`);
 
-    if (failedChapters.length > 0) {
-      const errorTitles = failedChapters.map(f => f.title).join(', ');
-      setError(`Nie udało się wygenerować grafiki dla ${failedChapters.length} rozdziałów: ${errorTitles}. Możesz spróbować ponownie dla pojedynczych grafik.`);
+    if (allFailedChapters.length > 0) {
+      const errorTitles = allFailedChapters.map(f => f.title).join(', ');
+      setError(`Nie udało się wygenerować grafiki dla ${allFailedChapters.length} rozdziałów: ${errorTitles}. Możesz spróbować ponownie dla pojedynczych grafik.`);
     } else {
       setError(null);
     }
 
-    // Odśwież status, aby upewnić się, że wszystkie obrazki są widoczne
     setTimeout(() => refreshImagesStatus(), 1000);
   };
 
@@ -2645,97 +2637,96 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
   };
 
   // EXTENDED renderStep1 with new fields
+  // EXTENDED renderStep1 with new fields
   const renderStep1 = () => (
-    // CHANGE: Removed frames and shadows for mobile view, reduced padding
-    <div className="bg-gradient-to-br from-white to-blue-50 sm:rounded-xl sm:border sm:border-blue-100 sm:shadow-lg p-4 sm:p-8 transition-all duration-300">
-      <div className="mb-8 text-center">
-        <BookMarked size={48} className="text-blue-500 mb-4 mx-auto drop-shadow-md" />
-        <h2 className="text-2xl font-semibold text-gray-800 mb-2">
-          {tocGenerated ? 'Edit ebook data' : "Let's Create!"}
+    // Main container - now identical to steps 2, 3, and 4
+    <div className="sm:bg-white sm:rounded-xl sm:border sm:border-gray-200 sm:shadow-lg sm:overflow-hidden transition-all duration-300">
+
+      {/* New Header - characteristic blue gradient */}
+      <div className="bg-gradient-to-r from-blue-500 to-blue-600 p-4 sm:p-6 text-white">
+        <h2 className="text-xl font-medium pb-2 border-b border-blue-300 mb-3">
+          {tocGenerated ? 'Ebook data and sources' : "Let's create your ebook"}
         </h2>
-        <p className="text-gray-600 max-w-md mx-auto">
+        <p className="text-blue-200 mt-1 font-normal">
           {tocGenerated
-            ? 'Make changes to your ebook data.'
-            : 'Enter the data based on which we will generate the table of contents for your ebook.'}
+            ? 'Here you can edit the basic data and sources used to generate the content.'
+            : 'Start with a title and optional sources, and we will generate a table of contents for you.'}
         </p>
       </div>
 
-      {/* CHANGE: Removed space-y-6 for mobile to manually control spacing */}
-      <div className="max-w-2xl mx-auto sm:space-y-6">
+      {/* Main Content Area - contains the entire form */}
+      <div className="p-4 sm:p-6">
+        <div className="max-w-2xl mx-auto space-y-6">
 
-        {/* Title section */}
-        {/* CHANGE: Removed the frame for mobile, added a bottom border as a separator */}
-        <div className="border-b border-gray-200 pb-6 sm:border-0 sm:pb-0 sm:bg-white sm:p-4 sm:rounded-lg sm:border sm:border-blue-100">
-          <label className="block text-sm font-medium text-gray-700 mb-3">
-            Ebook Title *
-          </label>
-          <input
-            type="text"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="E.g. The Complete Guide to Time Management"
-            className="w-full px-4 py-3 border border-blue-200 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-700 bg-white transition-all duration-200"
-            disabled={isGeneratingToc || isSaving || isScrapingUrls}
-            ref={titleInputRef}
-          />
-        </div>
-
-        {/* Subtitle section */}
-        {/* CHANGE: Removed the frame for mobile, added a bottom border as a separator */}
-        <div className="pt-6 border-b border-gray-200 pb-6 sm:pt-0 sm:border-0 sm:pb-0 sm:bg-white sm:p-4 sm:rounded-lg sm:border sm:border-blue-100">
-          <label className="block text-sm font-medium text-gray-700 mb-3">
-            Subtitle:
-            <span className="text-gray-400 font-normal ml-1">(optional)</span>
-          </label>
-          <input
-            type="text"
-            value={subtitle}
-            onChange={(e) => setSubtitle(e.target.value)}
-            placeholder="E.g. Practical Methods and Tools"
-            className="w-full px-4 py-3 border border-blue-200 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-700 bg-white transition-all duration-200"
-            disabled={isGeneratingToc || isSaving || isScrapingUrls}
-            ref={subtitleInputRef}
-          />
-        </div>
-
-        {/* Description section */}
-        {/* CHANGE: Removed the frame for mobile, added a bottom border as a separator */}
-        <div className="pt-6 border-b border-gray-200 pb-6 sm:pt-0 sm:border-0 sm:pb-0 sm:bg-white sm:p-4 sm:rounded-lg sm:border sm:border-blue-100">
-          <label className="block text-sm font-medium text-gray-700 mb-3">
-            Description and preferences:
-            <span className="text-gray-400 font-normal ml-1">(optional)</span>
-          </label>
-          <textarea
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="Describe your preferences for the ebook content, target audience, writing style, main topics you want to include..."
-            className="w-full px-4 py-3 border border-blue-200 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-700 bg-white transition-all duration-200 resize-none"
-            rows={4}
-            disabled={isGeneratingToc || isSaving || isScrapingUrls}
-            maxLength={1000}
-            ref={descriptionInputRef}
-          />
-          <div className="text-xs text-gray-400 mt-1">
-            {description.length}/1000 characters
-          </div>
-        </div>
-
-        {/* Sources section (WWW & PDF) */}
-        {/* CHANGE: Removed the frame for mobile. The separator is already on the last element above. */}
-        <div className="pt-6 sm:pt-0 sm:bg-white sm:p-4 sm:rounded-lg sm:border sm:border-blue-100 text-gray-700">
-          <div className="flex justify-between items-center mb-3">
-            <label className="text-sm font-medium text-gray-700">
-              WWW Sources:
-              <span className="text-gray-400 font-normal ml-1">(optional, max 5)</span>
+          {/* Title Section */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Ebook Title *
             </label>
-            {scrapedContent.length > 0 && (
-              <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full">
-                Fetched {scrapedContent.length} sources
-              </span>
-            )}
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="E.g. The Complete Guide to Time Management"
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-700 bg-white transition-all duration-200"
+              disabled={isGeneratingToc || isSaving || isScrapingUrls}
+              ref={titleInputRef}
+            />
           </div>
 
-          <div className="space-y-2">
+          {/* Subtitle Section */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Subtitle
+              <span className="text-gray-400 font-normal ml-1">(optional)</span>
+            </label>
+            <input
+              type="text"
+              value={subtitle}
+              onChange={(e) => setSubtitle(e.target.value)}
+              placeholder="E.g. Practical Methods and Tools"
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-700 bg-white transition-all duration-200"
+              disabled={isGeneratingToc || isSaving || isScrapingUrls}
+              ref={subtitleInputRef}
+            />
+          </div>
+
+          {/* Description Section */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Description and guidelines
+              <span className="text-gray-400 font-normal ml-1">(optional)</span>
+            </label>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Describe the target audience, writing style, key topics to include..."
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-700 bg-white transition-all duration-200 resize-none"
+              rows={4}
+              disabled={isGeneratingToc || isSaving || isScrapingUrls}
+              maxLength={1000}
+              ref={descriptionInputRef}
+            />
+            <div className="text-xs text-gray-400 mt-1">
+              {description.length}/1000 characters
+            </div>
+          </div>
+
+          {/* Sources Section */}
+          <div className="text-gray-700">
+            <div className="flex justify-between items-center mb-3">
+              <label className="text-sm font-medium text-gray-700">
+                WWW Sources
+                <span className="text-gray-400 font-normal ml-1">(optional, max 5)</span>
+              </label>
+              {scrapedContent.length > 0 && (
+                <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full">
+                  Fetched {scrapedContent.length} sources
+                </span>
+              )}
+            </div>
+
+            <div className="space-y-2">
               {urlInputs.map((url, index) => (
                 <div key={index} className="flex items-center gap-2">
                   <input
@@ -2743,11 +2734,10 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
                     value={url}
                     onChange={(e) => handleUrlChange(index, e.target.value)}
                     placeholder="https://example.com/article"
-                    className="flex-1 px-3 py-2 border border-blue-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     disabled={isGeneratingToc || isSaving || isScrapingUrls || isScrapingSingleUrl}
                   />
-
-                  {url.trim() && !scrapedContent.find(item => item.url === url) && (
+                   {url.trim() && !scrapedContent.find(item => item.url === url) && (
                       <button
                           onClick={() => scrapeSingleUrl(url)}
                           disabled={isInitializing || isGeneratingToc || isSaving || isScrapingUrls || isScrapingSingleUrl}
@@ -2757,156 +2747,89 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
                               : 'bg-blue-600 text-white hover:bg-blue-700 cursor-pointer'
                           }`}
                       >
-                          {isScrapingSingleUrl ? (
-                            <>
-                              <Loader size={14} className="animate-spin mr-1" />
-                            </>
-                          ) : (
-                            'Approve'
-                          )}
+                          {isScrapingSingleUrl ? <Loader size={14} className="animate-spin" /> : 'Approve'}
                       </button>
                     )}
 
                     {url.trim() && scrapedContent.find(item => item.url === url) && (
                       <span className="px-3 py-2 text-sm bg-green-100 text-green-700 rounded-lg border border-green-200 flex items-center">
                         <Check size={14} className="mr-1" />
-                        Already added
+                        Added
                       </span>
-                  )}
-
-                  {urlInputs.length > 1 && (
-                    <button
-                      onClick={() => removeUrlInput(index)}
-                      className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
-                      disabled={isGeneratingToc || isSaving || isScrapingUrls || isScrapingSingleUrl}
-                    >
-                      <X size={16} />
-                    </button>
                   )}
                 </div>
               ))}
+            </div>
 
-              {/* Divider line and PDF section */}
-              <div className="border-t border-gray-200 pt-4 mt-4">
-                <label className="block text-sm font-medium text-gray-700 mb-3">
-                  PDF Sources:
-                  <span className="text-gray-400 font-normal ml-1">(optional, max 10MB)</span>
-                </label>
+            <div className="border-t border-gray-200 pt-4 mt-4">
+              <label className="block text-sm font-medium text-gray-700 mb-3">
+                PDF Sources
+                <span className="text-gray-400 font-normal ml-1">(optional, max 10MB)</span>
+              </label>
+              <button
+                onClick={handleOpenPdfDialog}
+                disabled={isInitializing || isGeneratingToc || isSaving || isScrapingUrls || isScrapingSingleUrl || isUploadingPdf}
+                className="flex items-center px-4 py-2 border border-dashed border-gray-300 rounded-lg transition-colors bg-white text-gray-700 hover:bg-gray-50 disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
+              >
+                {isUploadingPdf ? (
+                  <><Loader size={16} className="animate-spin mr-2" /> Processing...</>
+                ) : (
+                  <><Upload size={16} className="mr-2" /> Choose PDF file</>
+                )}
+              </button>
+              <input type="file" ref={pdfInputRef} className="hidden" accept=".pdf,application/pdf" onChange={handlePdfUpload} />
+            </div>
 
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={handleOpenPdfDialog}
-                    disabled={isInitializing || isGeneratingToc || isSaving || isScrapingUrls || isScrapingSingleUrl || isUploadingPdf}
-                    className={`flex items-center px-4 py-2 border border-dashed border-gray-300 rounded-lg transition-colors ${
-                      isGeneratingToc || isSaving || isScrapingUrls || isScrapingSingleUrl || isUploadingPdf
-                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                        : 'bg-white text-gray-700 hover:bg-gray-50 cursor-pointer hover:border-blue-300'
-                    }`}
-                  >
-                    {isUploadingPdf ? (
-                      <>
-                        <Loader size={16} className="animate-spin mr-2" />
-                        Processing...
-                      </>
-                    ) : (
-                      <>
-                        <Upload size={16} className="mr-2" />
-                        Choose PDF file
-                      </>
-                    )}
-                  </button>
-
-                  <span className="text-xs text-gray-500">
-                    We support PDF files with text (not scans)
-                  </span>
-                </div>
-
-                <input
-                  type="file"
-                  ref={pdfInputRef}
-                  className="hidden"
-                  accept=".pdf,application/pdf"
-                  onChange={handlePdfUpload}
-                />
-              </div>
-          </div>
-
-          {/* Preview of fetched content */}
             {scrapedContent.length > 0 && (
-              <div className="mt-4 border-t border-gray-200 pt-6">
+              <div className="mt-4 border-t border-gray-200 pt-4">
                 <h4 className="text-sm font-medium text-gray-700 mb-2">Fetched sources:</h4>
-                <div className="space-y-2 max-h-128 overflow-y-auto">
+                <div className="space-y-2 max-h-48 overflow-y-auto">
                   {scrapedContent.map((item, index) => (
                     <div key={index} className="text-xs bg-gray-50 p-2 rounded border relative">
                       <button
                         onClick={() => handleRemoveScrapedContent(item)}
-                        className="absolute top-1 right-1 text-red-500 hover:text-red-700 hover:bg-red-100 rounded-full p-1 transition-colors cursor-pointer"
+                        className="absolute top-1 right-1 text-red-500 hover:text-red-700 p-1"
                         title="Remove source"
                       >
                         <X size={12} />
                       </button>
                       <div className="font-medium text-gray-800 truncate pr-6">{item.title}</div>
                       <div className="text-gray-500 truncate pr-6">{item.url}</div>
-                      <div className="text-gray-600 truncate mt-1 pr-6">{item.content.substring(0, 100)}...</div>
                     </div>
                   ))}
                 </div>
               </div>
             )}
+          </div>
         </div>
       </div>
 
-      <div className="flex justify-center mt-8 gap-4">
+      {/* New Footer with buttons - separated from content */}
+      <div className="border-t border-gray-200 p-4 sm:px-6 sm:py-4 flex flex-col sm:flex-row justify-between items-center gap-3">
         <button
           onClick={handleSaveDraft}
           disabled={!title.trim() || isGeneratingToc || isSaving || isScrapingUrls || isSavingDraft}
-          className={`flex items-center justify-center px-6 py-3 rounded-lg font-medium shadow-md transition-all duration-200 ${
-            !title.trim() || isSavingDraft
-              ? 'bg-gray-300 text-gray-600 cursor-not-allowed'
-              : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 cursor-pointer'
-          }`}
+          className="w-full sm:w-auto flex items-center justify-center px-6 py-3 rounded-lg font-medium shadow-sm transition-all duration-200 bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 disabled:bg-gray-200 disabled:cursor-not-allowed"
         >
           {isSavingDraft ? (
-            <>
-              <Loader size={20} className="animate-spin mr-3" />
-              {(title !== originalTitle || subtitle !== originalSubtitle) ? 'Saving...' : 'Saving...'}
-            </>
+            <><Loader size={20} className="animate-spin mr-3" /> Saving...</>
           ) : (
-            <>
-              <Save size={20} className="mr-3" />
-              Save & Close
-            </>
+            <><Save size={20} className="mr-3" /> Save & Close</>
           )}
         </button>
-          <button
-            onClick={tocGenerated ? updateEbookTitle : generateTableOfContents}
-            disabled={!title.trim() || isGeneratingToc || isSaving || isScrapingUrls}
-          className={`flex items-center justify-center px-6 py-3 rounded-lg text-white font-medium shadow-md transition-all duration-200 ${
-            !title.trim() || isGeneratingToc || isSaving || isScrapingUrls
-              ? 'bg-gray-400 cursor-not-allowed'
-              : 'bg-blue-600 hover:bg-blue-700 hover:scale-105 hover:shadow-lg cursor-pointer'
-          }`}
+        <button
+          onClick={tocGenerated ? () => changeStep(2) : generateTableOfContents}
+          disabled={!title.trim() || isGeneratingToc || isSaving || isScrapingUrls}
+          className="w-full sm:w-auto flex items-center justify-center px-6 py-3 rounded-lg text-white font-medium shadow-md transition-all duration-200 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
         >
           {isGeneratingToc ? (
-            <>
-              <Loader size={20} className="animate-spin mr-3" />
-              Generating...
-            </>
+            <><Loader size={20} className="animate-spin mr-3" /> Generating...</>
           ) : isScrapingUrls ? (
-            <>
-              <Loader size={20} className="animate-spin mr-3" />
-              Fetching sources...
-            </>
+            <><Loader size={20} className="animate-spin mr-3" /> Fetching...</>
           ) : tocGenerated ? (
-            <>
-              <Save size={20} className="mr-3" />
-              Go to TOC
-            </>
+            <>Go to Table of Contents <ChevronRight size={20} className="ml-2" /></>
           ) : (
-            <>
-              <Sparkles size={20} className="mr-3" />
-              Generate table of contents
-            </>
+            <><Sparkles size={20} className="mr-3" /> Generate table of contents</>
           )}
         </button>
       </div>
@@ -3790,16 +3713,16 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
   // MODIFIED renderStep4 with the cover as the first graphic
   const renderStep4 = () => {
     return (
-      <div className="bg-white rounded-xl border border-gray-200 shadow-lg overflow-hidden transition-all duration-300">
-        <div className="bg-gradient-to-r from-blue-500 to-blue-600 p-6 text-white">
-          <div className="flex justify-between items-center">
+      <div className="sm:bg-white sm:rounded-xl sm:border sm:border-gray-200 sm:shadow-lg sm:overflow-hidden transition-all duration-300">
+        <div className="bg-gradient-to-r from-blue-500 to-blue-600 p-4 sm:p-6 text-white">
+          <div className="flex flex-col justify-between">
             <div>
               <h2 className="text-xl font-medium pb-2 border-b border-blue-300 mb-3">Graphics and cover of the ebook</h2>
-              <p className="text-2xl text-white mt-1 font-bold max-w-2xl">
+              <p className="text-xl sm:text-2xl text-white mt-1 font-bold max-w-2xl line-clamp-3">
                 {title}
               </p>
               {subtitle && (
-                <p className="text-blue-200 mt-1 font-normal">
+                <p className="text-blue-200 mt-1 font-normal line-clamp-2">
                   {subtitle}
                 </p>
               )}
@@ -4220,8 +4143,7 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
             } ${contentGenerated ? 'cursor-pointer' : 'cursor-default'}`}
             onClick={() => {
               if (contentGenerated) {
-                syncChapterStatus();
-                setStep(3);
+                changeStep(3); // <-- ZASTOSUJ TĘ ZMIANĘ
               }
             }}
             title={contentGenerated ? "Browse content" : ""}
@@ -4271,8 +4193,8 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
       {/* 🆕 NOWY, ZAKTUALIZOWANY KOD MODALA PODGLĄDU */}
       {previewImage && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[60] p-4 backdrop-blur-sm">
-          {/* ✅ DODAJEMY REF DO TREŚCI MODALA PODGLĄDU */}
-          <div ref={previewModalContentRef} className="relative w-full max-w-7xl max-h-[95vh] flex flex-col bg-black/50 rounded-lg">
+          {/* ZMIANA: Usunięto max-h-[95vh] z tego kontenera. Pozwoli to mu dopasować się do zawartości. */}
+          <div ref={previewModalContentRef} className="relative w-full max-w-7xl flex flex-col bg-black/50 rounded-lg">
 
             {/* Nagłówek podglądu */}
             <div className="flex items-center justify-between p-4 flex-shrink-0">
@@ -4289,15 +4211,18 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
             </div>
 
             {/* Kontener z obrazkiem */}
-            <div className="flex-1 flex items-center justify-center p-4 min-h-0 overflow-hidden">
+            {/* ZMIANA: Zmieniono 'flex-1' na 'flex-grow' aby lepiej kontrolować rozciąganie.
+                        Dodano flex-shrink-0, aby obrazek nie kurczył się niepotrzebnie. */}
+            <div className="flex-grow flex-shrink-0 flex items-center justify-center p-4 overflow-hidden">
               <img
                 src={previewImage}
                 alt={previewImageTitle}
-                className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
-                style={{
-                  height: 'calc(95vh - 160px)', // ✅ ZMIANA Z max-height NA height
-                  maxWidth: 'calc(100vw - 32px)'
-                }}
+                className="max-w-full max-h-[80vh] object-contain rounded-lg shadow-2xl" // ZMIANA: Dodano max-h-[80vh] tutaj i usunięto inline style
+                // ZMIANA: Usunięto całkowicie inline style, ponieważ max-h na img jest bardziej elastyczne
+                // style={{
+                //   height: 'calc(95vh - 160px)',
+                //   maxWidth: 'calc(100vw - 32px)'
+                // }}
               />
             </div>
 
@@ -4307,7 +4232,7 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
                 onClick={handleClosePreview}
                 className="px-6 py-2 bg-white/10 text-white rounded-lg hover:bg-white/20 transition-colors font-medium"
               >
-                Zamknij
+                Close
               </button>
               <button
                 onClick={() => handleDownloadAsPng(previewImage, previewImageName)}
@@ -4317,17 +4242,17 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
                     ? "bg-gray-400 text-white cursor-not-allowed"
                     : "bg-blue-600 text-white hover:bg-blue-700"
                 }`}
-                title={`Pobierz jako PNG`}
+                title={`Download as PNG`}
               >
                 {isConverting ? (
                   <>
                     <Loader size={18} className="animate-spin" />
-                    <span>Konwertuję...</span>
+                    <span>Converting...</span>
                   </>
                 ) : (
                   <>
                     <Download size={18} />
-                    <span>Pobierz PNG</span>
+                    <span>Download</span>
                   </>
                 )}
               </button>

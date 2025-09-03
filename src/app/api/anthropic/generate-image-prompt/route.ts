@@ -301,9 +301,11 @@ ${providerSpecificInstructions}
    - Zawsze dodaj "shallow depth of field" dla realizmu
 
 6. **WYMAGANIA TECHNICZNE (100-150 znaków):**
-   - "Square 1:1 composition for ebook"
-   ${enableTransparency ? '- "transparent background, clean edges"' : ''}
+   // <-- USUNIĘTO: Sprzeczna instrukcja o proporcjach 1:1 -->
    - "ABSOLUTELY NO TEXT anywhere in image"
+   ${enableTransparency ? '- "transparent background, clean edges"' : ''}
+   // <-- DODANO: Wzmocniony zakaz dotyczący dzieci -->
+   - "DO NOT include images of children, infants, or minors. Focus on symbolic or adult representations ONLY."
 
 ${forceRegenerate ? `
 🔄 REGENERATION MODE (Timestamp: ${timestamp}):
@@ -314,14 +316,16 @@ ${forceRegenerate ? `
 ` : ''}
 
 📝 WZORZEC IDEALNEGO PROMPTU:
-
-"Professional ebook illustration: [KONKRETNY OPIS GŁÓWNEJ SCENY z treści rozdziału]. Shot with [PARAMETRY APARATU], f/1.8, ISO 100. [KONKRETNE OŚWIETLENIE] with natural shadows and volumetric lighting. Photorealistic, hyperrealistic, 8K UHD resolution, professional photography, ultra-sharp focus${maximumQuality ? ', commercial quality, HDR' : ''}. [KOMPOZYCJA] with shallow depth of field. Square 1:1 composition for ebook${enableTransparency ? ', transparent background with clean edges' : ''}. Perfect visual representation of "${chapterTitle}" chapter. ABSOLUTELY NO TEXT anywhere in image."
+// <-- USUNIĘTO: "Square 1:1 composition for ebook" i DODANO zakaz dot. dzieci -->
+"Professional ebook illustration: [KONKRETNY OPIS GŁÓWNEJ SCENY z treści rozdziału]. Shot with [PARAMETRY APARATU], f/1.8, ISO 100. [KONKRETNE OŚWIETLENIE] with natural shadows and volumetric lighting. Photorealistic, hyperrealistic, 8K UHD resolution, professional photography, ultra-sharp focus${maximumQuality ? ', commercial quality, HDR' : ''}. [KOMPOZYCJA] with shallow depth of field. Perfect visual representation of "${chapterTitle}" chapter. ABSOLUTELY NO TEXT anywhere in image. Image must not contain children or minors."
 
 KRYTYCZNE INSTRUKCJE:
 - Prompt MUSI mieć ${config.optimalLength} znaków (OPTIMAL dla ${config.provider} ${targetModel})
 - ZAWSZE dodaj parametry aparatu i oświetlenie
 - ZAWSZE użyj "photorealistic, hyperrealistic, 8K UHD"
 - ZAWSZE dodaj "ABSOLUTELY NO TEXT anywhere"
+// <-- DODANO: Wzmocniony zakaz dotyczący dzieci -->
+- ZAWSZE przestrzegaj zakazu generowania obrazów dzieci: "DO NOT include images of children or minors"
 - Bazuj BEZPOŚREDNIO na treści rozdziału
 - ${forceRegenerate ? 'STWÓRZ KOMPLETNIE INNĄ wizualną interpretację' : ''}
 - ŻADNYCH komentarzy - tylko czysty prompt

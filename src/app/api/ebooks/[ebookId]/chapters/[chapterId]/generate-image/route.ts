@@ -228,6 +228,8 @@ const selectOptimalModel = async (userId: string | null): Promise<{
 };
 
 // ✅ POPRAWIONA FUNKCJA callGoogleImageGeneration
+// src/app/api/ebooks/[ebookId]/chapters/[chapterId]/generate-image/route.ts
+
 const callGoogleImageGeneration = async (
   model: string,
   prompt: string,
@@ -250,39 +252,39 @@ const callGoogleImageGeneration = async (
     throw new Error('API Key is null or not provided to callGoogleImageGeneration.');
   }
 
-  // Określ endpoint i body na podstawie typu modelu
   let apiUrl: string;
   let requestBody: any;
 
   if (modelConfig.provider === 'google' && 'api_method' in modelConfig && (modelConfig as any).api_method === 'generateImages') {
-    // DLA MODELI IMAGEN – REST :predict
     apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${(modelConfig as any).api_model}:predict`;
 
-    // Konwersja rozmiaru na format Imagen
-    let aspectRatio = "1:1";
-    if (size === "1024x1536") aspectRatio = "3:4";
-    else if (size === "1536x1024") aspectRatio = "16:9";
+    // <-- ZMIANA: Domyślnie ustawiamy proporcje poziome (landscape) -->
+    let aspectRatio = "16:9"; // Poprzednio było "1:1"
+    if (size === "1024x1024") {
+      aspectRatio = "1:1";
+    } else if (size === "1024x1536") {
+      aspectRatio = "3:4";
+    }
+    // Warunek dla "1536x1024" nie jest już potrzebny, ponieważ stał się wartością domyślną.
+    // <-- KONIEC ZMIANY -->
 
     requestBody = {
       instances: [{ prompt: prompt }],
       parameters: {
-        // 👇 ZMIANA: Na stałe prosimy tylko o 1 obraz, aby oszczędzać środki
         sampleCount: 1,
         aspectRatio: aspectRatio,
         personGeneration: "allow_adult"
       }
     };
   } else {
-    // DLA GEMINI 2.0 FLASH – :generateContent
     apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${(modelConfig as any).api_model}:generateContent`;
-
     requestBody = {
       contents: [{
         parts: [{ text: prompt }]
       }],
       generation_config: {
         temperature: 0.8,
-        responseModalities: ["TEXT", "IMAGE"] // Gemini wymaga obu
+        responseModalities: ["TEXT", "IMAGE"]
       }
     };
   }
@@ -306,11 +308,10 @@ const callGoogleImageGeneration = async (
   }
 
   const result = await response.json();
+  console.log('📦 Raw API Response from Provider:', JSON.stringify(result, null, 2));
   console.log(`   - Response received, processing...`);
 
-  // Parsowanie odpowiedzi
   if (modelConfig.provider === 'google' && 'api_method' in modelConfig && (modelConfig as any).api_method === 'generateImages') {
-    // ODPOWIEDŹ IMAGEN (SDK i REST)
     if (result.generatedImages && result.generatedImages.length > 0) {
       console.log(`   - Found ${result.generatedImages.length} generated images (SDK schema)`);
       return {
@@ -319,7 +320,6 @@ const callGoogleImageGeneration = async (
         }]
       };
     }
-    // REST :predict schema -> { predictions: [ { bytesBase64Encoded, mimeType } ] }
     if (result.predictions && result.predictions.length > 0) {
       console.log(`   - Found ${result.predictions.length} predictions (REST schema)`);
       const first = result.predictions[0];
@@ -329,11 +329,9 @@ const callGoogleImageGeneration = async (
       }
     }
   } else {
-    // ODPOWIEDŹ GEMINI
     if (result.candidates && result.candidates.length > 0) {
       const candidate = result.candidates[0];
       const parts = candidate.content?.parts || [];
-      // Szukamy inlineData z obrazem
       const imagePart = parts.find((p: any) => p.inlineData && p.inlineData.mimeType?.startsWith('image/'));
       if (imagePart) {
         console.log(`   - Found inline image data`);
