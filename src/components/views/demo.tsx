@@ -612,12 +612,13 @@ const DemoView: React.FC<DemoViewProps> = ({
               <div className="block lg:hidden w-full mb-6 sm:mb-8">
                 <div className="mx-auto max-w-xs">
                   <Image
-                    src={pageContent.s3_file_key || "/mockup.png"}
-                    alt="E-book Mockup"
-                    className="w-full h-auto"
-                    width={300}
-                    height={400}
-                    unoptimized
+                      src={pageContent.s3_file_key || "/mockup.png"}
+                      alt="E-book Mockup"
+                      className="w-full h-auto"
+                      width={300}
+                      height={400}
+                      priority
+                      sizes="(max-width: 600px) 300px, 400px"
                   />
                 </div>
               </div>
@@ -654,7 +655,8 @@ const DemoView: React.FC<DemoViewProps> = ({
                   className="w-full h-auto"
                   width={576}
                   height={768}
-                  unoptimized
+                  priority
+                  sizes="(max-width: 768px) 300px, (max-width: 1024px) 400px, 480px"
                 />
               </div>
             </div>

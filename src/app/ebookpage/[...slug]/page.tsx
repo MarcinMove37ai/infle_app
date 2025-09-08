@@ -61,6 +61,10 @@ export async function generateMetadata({ params }: PublicPageProps): Promise<Met
   return {
     title: `e-book | ${title}`,
     description: description.substring(0, 160),
+    other: {
+      // Preload głównego obrazu dla szybszego LCP
+      preload: `<link rel="preload" as="image" href="${imageUrl}" fetchpriority="high" />`,
+    },
     openGraph: {
         title: `e-book | ${title}`,
         description,
