@@ -45,7 +45,6 @@ RUN apt-get update && apt-get install -y \
     libxrandr2 \
     wget \
     gosu \
-    openssl \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
