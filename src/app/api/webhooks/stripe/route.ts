@@ -1,18 +1,41 @@
 // src/app/api/webhooks/stripe/route.ts
 
+// ✅ 1. DODAJ TE DWA EXPORTY NA SAMEJ GÓRZE
+export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
+
 import { NextRequest, NextResponse } from 'next/server';
 import { headers } from 'next/headers';
 import Stripe from 'stripe';
 import { prisma } from '@/lib/prisma';
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2025-09-30.clover',
-});
+// ❌ 2. USUŃ TO (linijki 7-9 z twojego pliku):
+// const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
+//   apiVersion: '2025-09-30.clover',
+// });
+
+// ✅ 3. DODAJ LAZY INITIALIZATION
+let stripeInstance: Stripe | null = null;
+
+function getStripe(): Stripe {
+  if (!stripeInstance) {
+    if (!process.env.STRIPE_SECRET_KEY) {
+      throw new Error('STRIPE_SECRET_KEY is not defined');
+    }
+    stripeInstance = new Stripe(process.env.STRIPE_SECRET_KEY, {
+      apiVersion: '2025-09-30.clover',
+    });
+  }
+  return stripeInstance;
+}
 
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!;
 
 export async function POST(request: NextRequest) {
   try {
+    // ✅ 4. UŻYJ getStripe() ZAMIAST GLOBALNEGO stripe
+    const stripe = getStripe();
+
     const body = await request.text();
     const headersList = await headers();
     const signature = headersList.get('stripe-signature');
@@ -66,6 +89,9 @@ export async function POST(request: NextRequest) {
 // Handler dla checkout.session.completed
 async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   console.log('💳 Processing checkout.session.completed');
+
+  // ✅ 5. DODAJ getStripe() W KAŻDYM HANDLERZE
+  const stripe = getStripe();
 
   const userId = session.metadata?.userId;
   const planId = session.metadata?.planId;
@@ -155,6 +181,9 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
 async function handleInvoicePaymentSucceeded(invoice: Stripe.Invoice) {
   console.log('💰 Processing invoice.payment_succeeded');
 
+  // ✅ 6. DODAJ getStripe() TUTAJ
+  const stripe = getStripe();
+
   // ---> POCZĄTEK ZMIANY <---
   // Ignorujemy błąd, ponieważ definicje typów są niekompletne,
   // ale właściwość 'subscription' istnieje w rzeczywistych danych.
@@ -191,8 +220,7 @@ async function handleInvoicePaymentSucceeded(invoice: Stripe.Invoice) {
     });
 
     console.log(`✅ Payment verified for user ${user.id}, new period ends:`, subscriptionEndsAt);
-  } catch (error)
- {
+  } catch (error) {
     console.error('❌ Error processing invoice payment:', error);
   }
 }
@@ -200,6 +228,9 @@ async function handleInvoicePaymentSucceeded(invoice: Stripe.Invoice) {
 // Handler dla customer.subscription.updated
 async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
   console.log('🔄 Processing customer.subscription.updated');
+
+  // ✅ 7. DODAJ getStripe() TUTAJ (jeśli będzie potrzebne w przyszłości)
+  // const stripe = getStripe();
 
   const user = await prisma.user.findFirst({
     where: { stripeSubscriptionId: subscription.id }
@@ -237,6 +268,9 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
 // Handler dla customer.subscription.deleted
 async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
   console.log('🗑️ Processing customer.subscription.deleted');
+
+  // ✅ 8. DODAJ getStripe() TUTAJ (jeśli będzie potrzebne w przyszłości)
+  // const stripe = getStripe();
 
   const user = await prisma.user.findFirst({
     where: { stripeSubscriptionId: subscription.id }
