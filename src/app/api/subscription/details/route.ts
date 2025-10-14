@@ -1,17 +1,40 @@
 // src/app/api/subscription/details/route.ts
 
+// ✅ DODAJ NA GÓRZE
+export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
+
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import Stripe from 'stripe';
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2025-09-30.clover',
-});
+// ❌ USUŃ (linie 9-11):
+// const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
+//   apiVersion: '2025-09-30.clover',
+// });
+
+// ✅ DODAJ LAZY INITIALIZATION
+let stripeInstance: Stripe | null = null;
+
+function getStripe(): Stripe {
+  if (!stripeInstance) {
+    if (!process.env.STRIPE_SECRET_KEY) {
+      throw new Error('STRIPE_SECRET_KEY is not defined');
+    }
+    stripeInstance = new Stripe(process.env.STRIPE_SECRET_KEY, {
+      apiVersion: '2025-09-30.clover',
+    });
+  }
+  return stripeInstance;
+}
 
 export async function GET(request: NextRequest) {
   try {
+    // ✅ DODAJ NA POCZĄTKU
+    const stripe = getStripe();
+
     const session = await getServerSession(authOptions);
 
     if (!session?.user?.id) {

@@ -1,19 +1,40 @@
 // src/app/api/stripe/create-checkout/route.ts
 
+// ✅ 1. DODAJ NA SAMEJ GÓRZE
+export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
+
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import Stripe from 'stripe';
 
-// Inicjalizacja Stripe z użyciem klucza sekretnego z .env
-// Użycie konkretnej wersji API jest dobrą praktyką
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2025-09-30.clover',
-});
+// ❌ 2. USUŃ TO (linijki 9-12 z twojego pliku):
+// const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
+//   apiVersion: '2025-09-30.clover',
+// });
+
+// ✅ 3. DODAJ LAZY INITIALIZATION
+let stripeInstance: Stripe | null = null;
+
+function getStripe(): Stripe {
+  if (!stripeInstance) {
+    if (!process.env.STRIPE_SECRET_KEY) {
+      throw new Error('STRIPE_SECRET_KEY is not defined');
+    }
+    stripeInstance = new Stripe(process.env.STRIPE_SECRET_KEY, {
+      apiVersion: '2025-09-30.clover',
+    });
+  }
+  return stripeInstance;
+}
 
 export async function POST(request: NextRequest) {
   try {
+    // ✅ 4. UŻYJ getStripe() NA POCZĄTKU FUNKCJI
+    const stripe = getStripe();
+
     const session = await getServerSession(authOptions);
 
     if (!session?.user?.id) {
