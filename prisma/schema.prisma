@@ -9,44 +9,56 @@ datasource db {
 }
 
 model User {
-  id                  String                       @id @default(cuid())
-  email               String                       @unique
-  firstName           String
-  lastName            String
-  phone               String?
-  socialLink          String?
-  password            String
-  emailVerified       DateTime?
-  createdAt           DateTime                     @default(now())
-  updatedAt           DateTime                     @updatedAt
-  verificationToken   String?
-  resetToken          String?
-  resetTokenExpiry    DateTime?
-  profilePicture      String?
-  instagramProfileId  String?
-  linkedinProfileId   String?
-  socialProfileType   SocialProfileType            @default(NONE)
-  instagramUsername   String?
-  authorDisplayName   String?
-  authorLogoUrl       String?
-  imageAiModel        String?                      @default("imagen-3")
-  imageAiProvider     String?                      @default("google")
-  textAiModel         String?                      @default("claude-3-haiku")
-  textAiProvider      String?                      @default("anthropic")
-  role                Role                         @default(free)
-  ebookSources        EbookSource[]
-  ebooks              ebooks[]
-  instagramAIAnalyses InstagramCreatorAIAnalysis[]
-  instagramAnalyses   InstagramCreatorAnalysis[]
-  linkedinAIAnalyses  LinkedInCreatorAIAnalysis[]
-  linkedinAnalyses    LinkedInCreatorAnalysis[]
-  pages               pages[]
-  apiKeys             UserApiKey[]
-  instagramProfile    InstagramProfileCheck?       @relation(fields: [instagramProfileId], references: [id])
-  linkedinProfile     LinkedInProfileCheck?        @relation(fields: [linkedinProfileId], references: [id])
-  page_contents       page_content[]
-  leads               leads[] // Relacja zwrotna do leadów
+  id                    String                       @id @default(cuid())
+  email                 String                       @unique
+  firstName             String
+  lastName              String
+  phone                 String?
+  socialLink            String?
+  password              String
+  emailVerified         DateTime?
+  createdAt             DateTime                     @default(now())
+  updatedAt             DateTime                     @updatedAt
+  verificationToken     String?
+  resetToken            String?
+  resetTokenExpiry      DateTime?
+  profilePicture        String?
+  instagramProfileId    String?
+  linkedinProfileId     String?
+  socialProfileType     SocialProfileType            @default(NONE)
+  instagramUsername     String?
+  authorDisplayName     String?
+  authorLogoUrl         String?
+  imageAiModel          String?                      @default("imagen-3")
+  imageAiProvider       String?                      @default("google")
+  textAiModel           String?                      @default("claude-3-haiku")
+  textAiProvider        String?                      @default("anthropic")
+  role                  Role                         @default(free)
+  paymentMethod         String?                      @map("payment_method")
+  paymentVerifiedAt     DateTime?                    @map("payment_verified_at") @db.Timestamptz(6)
+  stripeCustomerId      String?                      @map("stripe_customer_id")
+  stripePaymentMethodId String?                      @map("stripe_payment_method_id")
+  stripeSubscriptionId  String?                      @map("stripe_subscription_id")
+  subscriptionEndsAt    DateTime?                    @map("subscription_ends_at") @db.Timestamptz(6)
+  subscriptionStatus    String                       @default("trial") @map("subscription_status")
+  trialEndsAt           DateTime?                    @default(dbgenerated("(((\"createdAt\")::date + '21 days'::interval) + ('23:59:59'::time without time zone)::interval)")) @map("trial_ends_at") @db.Timestamptz(6)
+  ebookSources          EbookSource[]
+  ebooks                ebooks[]
+  instagramAIAnalyses   InstagramCreatorAIAnalysis[]
+  instagramAnalyses     InstagramCreatorAnalysis[]
+  leads                 leads[]
+  linkedinAIAnalyses    LinkedInCreatorAIAnalysis[]
+  linkedinAnalyses      LinkedInCreatorAnalysis[]
+  page_contents         page_content[]
+  pages                 pages[]
+  apiKeys               UserApiKey[]
+  instagramProfile      InstagramProfileCheck?       @relation(fields: [instagramProfileId], references: [id])
+  linkedinProfile       LinkedInProfileCheck?        @relation(fields: [linkedinProfileId], references: [id])
 
+  @@index([stripeCustomerId])
+  @@index([stripeSubscriptionId])
+  @@index([subscriptionStatus])
+  @@index([subscriptionEndsAt])
   @@map("users")
 }
 
@@ -255,9 +267,9 @@ model ebooks {
   final_mockup_url                String?
   ebook_chapters                  ebook_chapters[]
   sources                         EbookSource[]
-  pages                           pages[]
   user                            User?            @relation(fields: [userId], references: [id])
   page_contents                   page_content[]
+  pages                           pages[]
 
   @@index([x_amz_meta_user_id], map: "idx_ebooks_user_id")
 }
@@ -292,7 +304,6 @@ model pages {
   leadsCount       Int?          @default(0) @map("leads")
   type             String?       @db.VarChar(50)
   status           String        @db.VarChar(50)
-  color            String?       @db.VarChar(50)
   createdAt        DateTime?     @default(now()) @db.Timestamptz(6)
   url              String?       @db.VarChar(255)
   draft_url        String?       @db.VarChar(255)
@@ -300,55 +311,56 @@ model pages {
   x_amz_meta_title String?       @db.VarChar(255)
   userId           String?       @db.VarChar(255)
   ebookId          Int?
-  user             User?         @relation(fields: [userId], references: [id], map: "fk_user")
-  ebook            ebooks?       @relation(fields: [ebookId], references: [id], map: "fk_ebook", onDelete: Cascade)
+  color            String?       @db.VarChar(50)
+  leads            leads[]
   content          page_content?
-  leads            leads[] // Relacja zwrotna do leadów
+  ebook            ebooks?       @relation(fields: [ebookId], references: [id], onDelete: Cascade, map: "fk_ebook")
+  user             User?         @relation(fields: [userId], references: [id], map: "fk_user")
 }
 
 model page_content {
-  id                          String   @id @default(cuid())
-  pageId                      String   @unique
-  page                        pages    @relation(fields: [pageId], references: [id], onDelete: Cascade)
-  userId                      String
-  user                        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  ebookId                     Int?
-  ebook                       ebooks?  @relation(fields: [ebookId], references: [id], onDelete: SetNull)
-  hero_headline               String?
-  hero_subheadline            String?
-  hero_description            String?  @db.Text
-  benefits_item_0_title       String?
-  benefits_item_0_text        String?
-  benefits_item_1_title       String?
-  benefits_item_1_text        String?
-  benefits_item_2_title       String?
-  benefits_item_2_text        String?
-  benefits_item_3_title       String?
-  benefits_item_3_text        String?
-  testimonials_item_0_text    String?  @db.Text
-  testimonials_item_0_author  String?
-  testimonials_item_0_role    String?
-  testimonials_item_1_text    String?  @db.Text
-  testimonials_item_1_author  String?
-  testimonials_item_1_role    String?
-  testimonials_item_2_text    String?  @db.Text
-  testimonials_item_2_author  String?
-  testimonials_item_2_role    String?
-  content_chapter_0_title     String?
+  id                            String   @id @default(cuid())
+  pageId                        String   @unique
+  userId                        String
+  ebookId                       Int?
+  hero_headline                 String?
+  hero_subheadline              String?
+  hero_description              String?
+  benefits_item_0_title         String?
+  benefits_item_0_text          String?
+  benefits_item_1_title         String?
+  benefits_item_1_text          String?
+  benefits_item_2_title         String?
+  benefits_item_2_text          String?
+  benefits_item_3_title         String?
+  benefits_item_3_text          String?
+  testimonials_item_0_text      String?
+  testimonials_item_0_author    String?
+  testimonials_item_0_role      String?
+  testimonials_item_1_text      String?
+  testimonials_item_1_author    String?
+  testimonials_item_1_role      String?
+  testimonials_item_2_text      String?
+  testimonials_item_2_author    String?
+  testimonials_item_2_role      String?
+  content_chapter_0_title       String?
   content_chapter_0_description String?
-  content_chapter_1_title     String?
+  content_chapter_1_title       String?
   content_chapter_1_description String?
-  content_chapter_2_title     String?
+  content_chapter_2_title       String?
   content_chapter_2_description String?
-  form_title                  String?
-  faq_item_0_question         String?
-  faq_item_0_answer           String?  @db.Text
-  faq_item_1_question         String?
-  faq_item_1_answer           String?  @db.Text
-  faq_item_2_question         String?
-  faq_item_2_answer           String?  @db.Text
-  createdAt                   DateTime @default(now())
-  updatedAt                   DateTime @updatedAt
+  form_title                    String?
+  faq_item_0_question           String?
+  faq_item_0_answer             String?
+  faq_item_1_question           String?
+  faq_item_1_answer             String?
+  faq_item_2_question           String?
+  faq_item_2_answer             String?
+  createdAt                     DateTime @default(now())
+  updatedAt                     DateTime @updatedAt
+  ebook                         ebooks?  @relation(fields: [ebookId], references: [id])
+  page                          pages    @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  user                          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([pageId])
   @@index([userId])
@@ -356,33 +368,27 @@ model page_content {
   @@map("page_contents")
 }
 
-// =================================================================
-// NOWY MODEL: przechowuje zebrane leady
-// =================================================================
 model leads {
-  id              Int       @id @default(autoincrement()) @map("lead_id")
-  pageId          String?   @map("page_id") // Zmieniono na String, aby pasowało do `pages.id`
-  pageName        String?   @map("page_name")
-  leadType        String?   @map("lead_type")
-  userId          String?   @map("user_id") // Zmieniono na String, aby pasowało do `User.id`
-  supervisorCode  String?   @map("supervisor_code") @db.VarChar(255)
-  leadDate        DateTime? @map("lead_date") @db.Date
-  leadTime        DateTime? @map("lead_time") @db.Time
-  leadName        String    @map("lead_name")
-  leadEmail       String    @map("lead_email")
-  leadPhone       String?   @map("lead_phone")
-  leadTimestamp   DateTime? @default(now()) @map("lead_timestamp") @db.Timestamptz
-  buyNow          Boolean?  @default(false) @map("buy_now")
-  status          String?   @default("b_contact")
-  comment         String?
-
-  // Definiowanie relacji z innymi tabelami
-  page            pages?     @relation(fields: [pageId], references: [id], onDelete: SetNull)
-  user            User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  id             Int       @id @default(autoincrement()) @map("lead_id")
+  pageId         String?   @map("page_id")
+  pageName       String?   @map("page_name")
+  leadType       String?   @map("lead_type")
+  userId         String?   @map("user_id")
+  supervisorCode String?   @map("supervisor_code") @db.VarChar(255)
+  leadDate       DateTime? @map("lead_date") @db.Date
+  leadTime       DateTime? @map("lead_time") @db.Time(6)
+  leadName       String    @map("lead_name")
+  leadEmail      String    @map("lead_email")
+  leadPhone      String?   @map("lead_phone")
+  leadTimestamp  DateTime? @default(now()) @map("lead_timestamp") @db.Timestamptz(6)
+  buyNow         Boolean?  @default(false) @map("buy_now")
+  status         String?   @default("b_contact")
+  comment        String?
+  page           pages?    @relation(fields: [pageId], references: [id])
+  user           User?     @relation(fields: [userId], references: [id])
 
   @@map("leads")
 }
-
 
 enum Role {
   admin

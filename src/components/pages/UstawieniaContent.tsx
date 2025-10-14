@@ -6,9 +6,10 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   User, Key, Eye, EyeOff, Save, Trash2, CheckCircle, AlertCircle, Loader2,
   Palette, Type, ChevronDown, Check, Image as ImageIcon, X, AlertTriangle, FolderOpen,
-  Shield
+  Shield, CreditCard
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
+import Link from 'next/link';
 
 interface Model {
   id: string;
@@ -46,7 +47,6 @@ interface AuthorSettings {
   authorDisplayName: string | null;
   authorLogoUrl: string | null;
   fallbackName: string;
-  // ✅ ADDED: AI fields from the endpoint
   textAiProvider: string | null;
   textAiModel: string | null;
   imageAiProvider: string | null;
@@ -95,13 +95,12 @@ const TEXT_PROVIDERS: Provider[] = [
   }
 ];
 
-// 🆕 UPDATED Image provider configuration with Google
 const IMAGE_PROVIDERS: Provider[] = [
   {
     id: 'google',
     name: 'Google AI Studio',
     icon: '✨',
-    available: true, // 🆕 UNLOCKED
+    available: true,
     models: [
       {
         id: 'imagen-3',
@@ -219,7 +218,6 @@ const ProviderSelector = ({
 
   return (
     <div className="space-y-3">
-      {/* Provider Selector */}
       <div className="relative">
         <label className="block text-sm font-medium text-gray-700 mb-2">{label}</label>
         <button
@@ -261,7 +259,6 @@ const ProviderSelector = ({
         )}
       </div>
 
-      {/* Model Selector */}
       <div className="relative">
         <button
           onClick={() => toggleDropdown(modelDropdownKey)}
@@ -282,9 +279,8 @@ const ProviderSelector = ({
         {dropdowns[modelDropdownKey] && currentProvider && (
           <div className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-y-auto">
             {currentProvider.models
-              .filter(model => model.id !== currentModelId) // ✅ ADDED LINE: Filters the list
+              .filter(model => model.id !== currentModelId)
               .map((model) => {
-                // Since we've filtered the list, 'isSelected' will always be false.
                 const isSelected = false;
                 const modelInfo = getModelDisplayInfo(model, apiKey, isSelected);
 
@@ -307,7 +303,6 @@ const ProviderSelector = ({
                           </div>
                         </div>
                       </div>
-                      {/* This Check element will no longer appear, which is correct */}
                       {isSelected && <Check className="w-4 h-4 text-blue-600" />}
                     </div>
                   </button>
@@ -320,19 +315,16 @@ const ProviderSelector = ({
   );
 };
 
-// ===== MAIN COMPONENT =====
-
 export default function SettingsContent() {
   const { user } = useAuth();
 
-  // 🆕 CHANGE: Default provider to Google and model to Imagen 3
   const [settings, setSettings] = useState<UserSettings>({
     username: '',
     logo: null,
     textProvider: 'anthropic',
     textModel: 'claude-3-haiku',
-    imageProvider: 'google', // 🆕 CHANGE: Google default
-    imageModel: 'imagen-3'   // 🆕 CHANGE: Imagen 3 default
+    imageProvider: 'google',
+    imageModel: 'imagen-3'
   });
 
   const [initialUsername, setInitialUsername] = useState('');
@@ -346,10 +338,18 @@ export default function SettingsContent() {
   const [isLoadingApiKeys, setIsLoadingApiKeys] = useState(false);
   const [isSavingAiSettings, setIsSavingAiSettings] = useState(false);
 
+  const [subscriptionBasics, setSubscriptionBasics] = useState<{
+    status: string;
+    planName: string;
+    isActive: boolean;
+    renewsAt: string | null;
+    loading: boolean;
+  } | null>(null);
+
   const [apiKeys, setApiKeys] = useState<Record<string, ApiKey>>({
     anthropic: { value: '', showValue: false, isSaved: false },
     openai: { value: '', showValue: false, isSaved: false },
-    google: { value: '', showValue: false, isSaved: false } // 🆕 CHANGE: 'google' instead of 'gemini'
+    google: { value: '', showValue: false, isSaved: false }
   });
 
   const [dropdowns, setDropdowns] = useState({
@@ -369,7 +369,6 @@ export default function SettingsContent() {
   const [message, setMessage] = useState<{type: 'success' | 'error', text: string} | null>(null);
   const [isDiskExplorerOpen, setIsDiskExplorerOpen] = useState(false);
 
-  // ✅ NEW: Functions for API key management
   const loadApiKeysStatus = useCallback(async () => {
     if (!user?.id) return;
 
@@ -386,7 +385,6 @@ export default function SettingsContent() {
         const data = await response.json();
         console.log('✅ Fetched API key status:', data);
 
-        // Update key state based on server response
         setApiKeys(prev => {
           const updated = { ...prev };
           Object.keys(data.providers).forEach(provider => {
@@ -412,7 +410,6 @@ export default function SettingsContent() {
     }
   }, [user?.id]);
 
-  // ✅ NEW: Update AI settings in the users table
   const updateUserAiSettings = useCallback(async (settings: Partial<UserSettings>) => {
     if (!user?.id || isSavingAiSettings) return;
 
@@ -445,19 +442,17 @@ export default function SettingsContent() {
     }
   }, [user?.id, isSavingAiSettings]);
 
-  // ✅ NEW: Helper functions for aspect ratio - MUST BE BEFORE useEffect
   const handleImageLoad = useCallback((event: React.SyntheticEvent<HTMLImageElement>) => {
     const img = event.currentTarget;
     const aspectRatio = img.naturalWidth / img.naturalHeight;
     setImageAspectRatio(aspectRatio);
-    console.log(`📐 Image dimensions: ${img.naturalWidth}x${img.naturalHeight}, ratio: ${aspectRatio.toFixed(2)}`);
+    console.log(`🔍 Image dimensions: ${img.naturalWidth}x${img.naturalHeight}, ratio: ${aspectRatio.toFixed(2)}`);
   }, []);
 
   const resetImageAspectRatio = useCallback(() => {
     setImageAspectRatio(null);
   }, []);
 
-  // Initialize username only once when the user changes
   useEffect(() => {
     if (user) {
       const fullName = [user.first_name, user.last_name].filter(Boolean).join(' ');
@@ -467,14 +462,12 @@ export default function SettingsContent() {
         setLastSavedUsername(fullName);
       }
     }
-  }, [user]); // ✅ REMOVED initialUsername from dependencies - prevents loop
+  }, [user]);
 
-  // ✅ Fetch author settings only once on load
   useEffect(() => {
-    let isMounted = true; // Prevents state update on unmounted component
+    let isMounted = true;
 
     if (user?.id) {
-      // ✅ Inline async function to avoid dependency on fetchAuthorSettings
       const loadAuthorSettings = async () => {
         setIsLoadingAuthorSettings(true);
         try {
@@ -489,34 +482,30 @@ export default function SettingsContent() {
             const data = await response.json();
             const authorSettings: AuthorSettings = data.authorSettings;
 
-            // ✅ Add cache busting to the existing avatar
             let logoUrl = authorSettings.authorLogoUrl;
             if (logoUrl) {
               const separator = logoUrl.includes('?') ? '&' : '?';
               logoUrl = `${logoUrl}${separator}t=${Date.now()}`;
             }
 
-            // Update settings with data from the server
             setSettings(prev => ({
               ...prev,
               username: authorSettings.authorDisplayName || authorSettings.fallbackName,
               logo: logoUrl,
-              // ✅ ADDED: Update AI settings from server - WITH GOOGLE AS DEFAULT
               textProvider: authorSettings.textAiProvider || 'anthropic',
               textModel: authorSettings.textAiModel || 'claude-3-haiku',
-              imageProvider: authorSettings.imageAiProvider || 'google', // 🆕 CHANGE
-              imageModel: authorSettings.imageAiModel || 'imagen-3' // 🆕 CHANGE
+              imageProvider: authorSettings.imageAiProvider || 'google',
+              imageModel: authorSettings.imageAiModel || 'imagen-3'
             }));
 
-            // Set as saved
             setLastSavedUsername(authorSettings.authorDisplayName || authorSettings.fallbackName);
 
             console.log('✅ Fetched author settings:', authorSettings);
             console.log('🔧 Loaded AI settings from server:', {
               textProvider: authorSettings.textAiProvider || 'anthropic (default)',
               textModel: authorSettings.textAiModel || 'claude-3-haiku (default)',
-              imageProvider: authorSettings.imageAiProvider || 'google (default)', // 🆕 CHANGE
-              imageModel: authorSettings.imageAiModel || 'imagen-3 (default)' // 🆕 CHANGE
+              imageProvider: authorSettings.imageAiProvider || 'google (default)',
+              imageModel: authorSettings.imageAiModel || 'imagen-3 (default)'
             });
           } else if (isMounted) {
             console.error('❌ Error fetching author settings:', response.status);
@@ -541,23 +530,67 @@ export default function SettingsContent() {
     return () => {
       isMounted = false;
     };
-  }, [user?.id]); // ✅ Only user?.id in dependencies
+  }, [user?.id]);
 
-  // ✅ NEW: Load API key status on initialization
   useEffect(() => {
     if (user?.id) {
       loadApiKeysStatus();
     }
   }, [user?.id, loadApiKeysStatus]);
 
-  // ✅ Reset aspect ratio when logo is removed
+  useEffect(() => {
+    if (user?.id) {
+      const loadSubscriptionBasics = async () => {
+        try {
+          setSubscriptionBasics(prev => prev ? { ...prev, loading: true } : {
+            status: 'free',
+            planName: 'Free',
+            isActive: false,
+            renewsAt: null,
+            loading: true
+          });
+
+          const response = await fetch('/api/subscription/details');
+
+          if (response.ok) {
+            const data = await response.json();
+
+            const planNames: Record<string, string> = {
+              'free': 'Free',
+              'standard': 'Standard',
+              'premium': 'Premium'
+            };
+
+            setSubscriptionBasics({
+              status: data.status,
+              planName: planNames[data.status] || data.status,
+              isActive: data.isActive,
+              renewsAt: data.subscriptionEndsAt,
+              loading: false
+            });
+          }
+        } catch (error) {
+          console.error('Error loading subscription basics:', error);
+          setSubscriptionBasics({
+            status: 'free',
+            planName: 'Free',
+            isActive: false,
+            renewsAt: null,
+            loading: false
+          });
+        }
+      };
+
+      loadSubscriptionBasics();
+    }
+  }, [user?.id]);
+
   useEffect(() => {
     if (!settings.logo) {
       resetImageAspectRatio();
     }
   }, [settings.logo, resetImageAspectRatio]);
 
-  // ✅ Cleanup blob URLs on unmount
   useEffect(() => {
     return () => {
       if (settings.logo && settings.logo.startsWith('blob:')) {
@@ -566,7 +599,6 @@ export default function SettingsContent() {
     };
   }, [settings.logo]);
 
-  // Memoized helper functions
   const textProvider = useMemo(() =>
     TEXT_PROVIDERS.find(p => p.id === settings.textProvider),
     [settings.textProvider]
@@ -597,14 +629,12 @@ export default function SettingsContent() {
     [imageModel]
   );
 
-  // Memoized API keys
   const currentTextApiKey = useMemo(() =>
     apiKeys[settings.textProvider],
     [apiKeys, settings.textProvider]
   );
 
   const currentImageApiKey = useMemo(() => {
-    // 🆕 CHANGE: Map provider ID to API key
     const providerKeyMap: Record<string, string> = {
       'google': 'google',
       'openai': 'openai'
@@ -613,13 +643,12 @@ export default function SettingsContent() {
     return apiKeys[keyName];
   }, [apiKeys, settings.imageProvider]);
 
-  // 🆕 EXPANDED API key validation - handles Google
   const isValidApiKey = useCallback((provider: string, key: string): boolean => {
     if (!key || key.length < 20) return false;
     switch (provider) {
       case 'anthropic': return key.startsWith('sk-ant-');
       case 'openai': return key.startsWith('sk-');
-      case 'google': return key.startsWith('AIza'); // 🆕 ADDED: Google API key validation
+      case 'google': return key.startsWith('AIza');
       default: return false;
     }
   }, []);
@@ -638,17 +667,15 @@ export default function SettingsContent() {
     return currentImageApiKey?.value ? isValidApiKey(keyName, currentImageApiKey.value) : false;
   }, [currentImageApiKey?.value, settings.imageProvider, isValidApiKey]);
 
-  // 🆕 EXPANDED placeholder function - handles Google
   const getApiKeyPlaceholder = useCallback((provider: string) => {
     switch (provider) {
       case 'anthropic': return 'sk-ant-... or sk-ant-api03-...';
       case 'openai': return 'sk-...';
-      case 'google': return 'AIza... (from Google AI Studio)'; // 🆕 ADDED
+      case 'google': return 'AIza... (from Google AI Studio)';
       default: return 'Paste your API key';
     }
   }, []);
 
-  // Dropdown handler
   const toggleDropdown = useCallback((dropdown: keyof typeof dropdowns) => {
     setDropdowns(prev => ({
       textProvider: false,
@@ -659,7 +686,6 @@ export default function SettingsContent() {
     }));
   }, []);
 
-  // 🆕 IMPROVED API key handling - safe update
   const updateApiKey = useCallback((provider: string, value: string) => {
     const providerKeyMap: Record<string, string> = {
       'google': 'google',
@@ -672,7 +698,7 @@ export default function SettingsContent() {
       ...prev,
       [keyName]: {
         value: value,
-        showValue: prev[keyName]?.showValue || false, // Safe access to previous value
+        showValue: prev[keyName]?.showValue || false,
         isSaved: false
       }
     }));
@@ -688,9 +714,8 @@ export default function SettingsContent() {
 
     setApiKeys(prev => {
       const currentKey = prev[keyName];
-      // ✅ Guard clause to prevent operations on undefined
       if (!currentKey) {
-        return prev; // Do nothing if the key doesn't exist
+        return prev;
       }
       return {
         ...prev,
@@ -720,7 +745,7 @@ export default function SettingsContent() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          provider: keyName, // Use the mapped keyName
+          provider: keyName,
           apiKey: keyInfo.value
         }),
       });
@@ -729,7 +754,6 @@ export default function SettingsContent() {
         const data = await response.json();
         console.log('✅ API key saved:', data);
 
-        // Clear the input key and mark as saved
         setApiKeys(prev => ({
           ...prev,
           [keyName]: { ...prev[keyName], value: '', showValue: false, isSaved: true }
@@ -737,9 +761,6 @@ export default function SettingsContent() {
 
         setMessage({ type: 'success', text: `API key for ${providerName} has been saved.` });
 
-        // --- START OF FIX ---
-        // ✅ EXTRA STEP: SAVE THE PENDING PREMIUM MODEL
-        // Check if the currently selected model for this provider is premium
         const isTextProvider = TEXT_PROVIDERS.some(p => p.id === provider);
         const isImageProvider = IMAGE_PROVIDERS.some(p => p.id === provider);
 
@@ -764,7 +785,6 @@ export default function SettingsContent() {
             updateUserAiSettings({ imageModel: settings.imageModel });
           }
         }
-        // --- END OF FIX ---
 
       } else {
         const errorData = await response.json();
@@ -810,29 +830,24 @@ export default function SettingsContent() {
             const data = await response.json();
             console.log('✅ API key removed:', data);
 
-            // Update local state
             setApiKeys(prev => ({
               ...prev,
               [keyName]: { value: '', showValue: false, isSaved: false }
             }));
 
-            // ✅ NEW: Automatically switch to a basic model after removing the key
             const settingsToUpdate: Partial<UserSettings> = {};
 
-            // Check if the removed key was for the text provider
             if (settings.textProvider === provider) {
               const currentTextProvider = TEXT_PROVIDERS.find(p => p.id === provider);
               const currentTextModel = currentTextProvider?.models.find(m => m.id === settings.textModel);
 
               if (currentTextModel?.tier === 'premium') {
-                // Find the first available basic model in this provider
                 const basicModel = currentTextProvider?.models.find(m => m.tier === 'basic');
                 if (basicModel) {
                   settingsToUpdate.textModel = basicModel.id;
                   setSettings(prev => ({ ...prev, textModel: basicModel.id }));
                   console.log(`🔄 Switched to basic model: ${basicModel.name}`);
                 } else {
-                  // If the provider has no basic model, switch to anthropic (which has haiku basic)
                   const anthropicProvider = TEXT_PROVIDERS.find(p => p.id === 'anthropic');
                   const anthropicBasic = anthropicProvider?.models.find(m => m.tier === 'basic');
                   if (anthropicBasic) {
@@ -845,20 +860,17 @@ export default function SettingsContent() {
               }
             }
 
-            // Check if the removed key was for the image provider
             if (settings.imageProvider === provider) {
               const currentImageProvider = IMAGE_PROVIDERS.find(p => p.id === provider);
               const currentImageModel = currentImageProvider?.models.find(m => m.id === settings.imageModel);
 
               if (currentImageModel?.tier === 'premium') {
-                // Find the first available basic model in this provider
                 const basicModel = currentImageProvider?.models.find(m => m.tier === 'basic');
                 if (basicModel) {
                   settingsToUpdate.imageModel = basicModel.id;
                   setSettings(prev => ({ ...prev, imageModel: basicModel.id }));
                   console.log(`🔄 Switched to basic image model: ${basicModel.name}`);
                 } else {
-                  // 🆕 CHANGE: Fallback to Google Imagen 3 (cheapest)
                   const googleProvider = IMAGE_PROVIDERS.find(p => p.id === 'google');
                   const googleBasic = googleProvider?.models.find(m => m.tier === 'basic');
                   if (googleBasic) {
@@ -871,7 +883,6 @@ export default function SettingsContent() {
               }
             }
 
-            // Save AI settings changes to the database if any switches occurred
             if (Object.keys(settingsToUpdate).length > 0) {
               await updateUserAiSettings(settingsToUpdate);
             }
@@ -896,9 +907,6 @@ export default function SettingsContent() {
     });
   }, [settings.textProvider, settings.textModel, settings.imageProvider, settings.imageModel, updateUserAiSettings]);
 
-  // ===== NEW PROVIDER HANDLER FUNCTIONS =====
-
-  // Text provider change handler - elegant version
   const handleTextProviderChange = useCallback((providerId: string) => {
     const provider = TEXT_PROVIDERS.find(p => p.id === providerId);
     if (provider && provider.available) {
@@ -907,12 +915,10 @@ export default function SettingsContent() {
         textModel: provider.models[0].id
       };
       setSettings(prev => ({ ...prev, ...newSettings }));
-      // Save AI settings to the users table
       updateUserAiSettings(newSettings);
     }
   }, [updateUserAiSettings]);
 
-  // Text model change handler - elegant version with conditionality
   const handleTextModelChange = useCallback((modelId: string) => {
     const provider = TEXT_PROVIDERS.find(p => p.id === settings.textProvider);
     const model = provider?.models.find(m => m.id === modelId);
@@ -922,21 +928,17 @@ export default function SettingsContent() {
     const newSettings = { textModel: modelId };
     setSettings(prev => ({ ...prev, ...newSettings }));
 
-    // CONDITIONAL SAVE TO DATABASE
     const isPremium = model.tier === 'premium';
     const hasApiKey = apiKeys[settings.textProvider]?.isSaved;
 
     if (!isPremium || (isPremium && hasApiKey)) {
-      // Save only if the model is basic OR it's premium and the user has a key
       updateUserAiSettings(newSettings);
       console.log(`✅ Saved model ${model.name} to the database.`);
     } else {
-      // If the model is premium and the user has no key - only update the UI
       console.log(`🟡 Selected premium model ${model.name}, awaiting API key. Change not saved to the database.`);
     }
   }, [settings.textProvider, apiKeys, updateUserAiSettings]);
 
-  // Image provider change handler - elegant version
   const handleImageProviderChange = useCallback((providerId: string) => {
     const provider = IMAGE_PROVIDERS.find(p => p.id === providerId);
     if (provider && provider.available) {
@@ -945,12 +947,10 @@ export default function SettingsContent() {
         imageModel: provider.models[0].id
       };
       setSettings(prev => ({ ...prev, ...newSettings }));
-      // Save AI settings to the users table
       updateUserAiSettings(newSettings);
     }
   }, [updateUserAiSettings]);
 
-  // Image model change handler - elegant version with conditionality
   const handleImageModelChange = useCallback((modelId: string) => {
     const provider = IMAGE_PROVIDERS.find(p => p.id === settings.imageProvider);
     const model = provider?.models.find(m => m.id === modelId);
@@ -960,7 +960,6 @@ export default function SettingsContent() {
     const newSettings = { imageModel: modelId };
     setSettings(prev => ({ ...prev, ...newSettings }));
 
-    // CONDITIONAL SAVE TO DATABASE
     const isPremium = model.tier === 'premium';
     const providerKeyMap: Record<string, string> = { 'google': 'google', 'openai': 'openai' };
     const keyName = providerKeyMap[settings.imageProvider] || settings.imageProvider;
@@ -974,21 +973,16 @@ export default function SettingsContent() {
     }
   }, [settings.imageProvider, apiKeys, updateUserAiSettings]);
 
-  // ===== OTHER FUNCTIONS (avatar, username) =====
-
-  // ✅ NEW: Logo/avatar handling - upload with FormData
   const handleLogoUpload = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file || isUploadingAvatar) return;
 
     console.log('🖼️ Starting avatar upload:', file.name, file.type, file.size);
 
-    // ✅ Clear old blob URL if it exists
     if (settings.logo && settings.logo.startsWith('blob:')) {
       URL.revokeObjectURL(settings.logo);
     }
 
-    // ✅ Reset aspect ratio before new upload
     resetImageAspectRatio();
 
     setIsUploadingAvatar(true);
@@ -999,21 +993,19 @@ export default function SettingsContent() {
 
       const response = await fetch('/api/user/author-settings', {
         method: 'PUT',
-        body: formData, // FormData automatically sets the Content-Type
+        body: formData,
       });
 
       if (response.ok) {
         const data = await response.json();
         const authorSettings: AuthorSettings = data.authorSettings;
 
-        // ✅ Cache busting - add a timestamp to the URL to force a refresh
         let newAvatarUrl = authorSettings.authorLogoUrl;
         if (newAvatarUrl) {
           const separator = newAvatarUrl.includes('?') ? '&' : '?';
           newAvatarUrl = `${newAvatarUrl}${separator}t=${Date.now()}`;
         }
 
-        // Update settings with the new avatar (with cache busting)
         setSettings(prev => ({
           ...prev,
           logo: newAvatarUrl
@@ -1036,23 +1028,19 @@ export default function SettingsContent() {
       setIsUploadingAvatar(false);
       setTimeout(() => setMessage(null), 3000);
 
-      // Reset input file
       if (event.target) {
         event.target.value = '';
       }
     }
   }, [isUploadingAvatar, settings.logo, resetImageAspectRatio]);
 
-  // ✅ NEW: Remove avatar via DELETE API
   const removeLogo = useCallback(async () => {
     if (isDeletingAvatar) return;
 
-    // ✅ Clear blob URL if it exists
     if (settings.logo && settings.logo.startsWith('blob:')) {
       URL.revokeObjectURL(settings.logo);
     }
 
-    // ✅ Reset aspect ratio
     resetImageAspectRatio();
 
     setIsDeletingAvatar(true);
@@ -1069,7 +1057,6 @@ export default function SettingsContent() {
         const data = await response.json();
         const authorSettings: AuthorSettings = data.authorSettings;
 
-        // Remove avatar from settings
         setSettings(prev => ({ ...prev, logo: null }));
 
         setMessage({ type: 'success', text: 'Avatar has been removed' });
@@ -1091,7 +1078,6 @@ export default function SettingsContent() {
     }
   }, [isDeletingAvatar, settings.logo, resetImageAspectRatio]);
 
-  // ✅ NEW: Save author name via PUT API (JSON)
   const handleSaveUsername = useCallback(async () => {
     if (isSavingUsername || settings.username.trim() === '' || settings.username === lastSavedUsername) return;
 
@@ -1112,7 +1098,6 @@ export default function SettingsContent() {
         const data = await response.json();
         const authorSettings: AuthorSettings = data.authorSettings;
 
-        // Set as saved
         setLastSavedUsername(settings.username);
 
         setMessage({ type: 'success', text: 'Author name has been updated' });
@@ -1186,24 +1171,21 @@ export default function SettingsContent() {
                 className="relative group border-2 border-gray-200 rounded-lg overflow-hidden flex items-center justify-center bg-gray-50"
                 style={{
                   width: '100%',
-                  // ✅ Increased container height - min 200px, can be more for tall images
                   height: imageAspectRatio
                     ? imageAspectRatio >= 1
-                      ? '200px' // Landscape/Square - fixed height
-                      : `${Math.min(400 / imageAspectRatio, 400)}px` // Portrait - calculate based on 400px width
+                      ? '200px'
+                      : `${Math.min(400 / imageAspectRatio, 400)}px`
                     : '200px',
                   minHeight: '200px',
                   maxHeight: '400px'
                 }}
               >
                 {isUploadingAvatar ? (
-                  // ✅ Loading state during upload
                   <div className="flex flex-col items-center justify-center text-gray-500">
                     <Loader2 className="h-8 w-8 animate-spin mb-2" />
                     <span className="text-sm font-medium">Processing...</span>
                   </div>
                 ) : (
-                  // ✅ Normal image preview - always in full proportions
                   <img
                     src={settings.logo!}
                     alt="Logo"
@@ -1213,15 +1195,14 @@ export default function SettingsContent() {
                       width: '100%',
                       height: '100%'
                     }}
-                    key={settings.logo} // ✅ Force re-render on URL change
-                    onLoad={handleImageLoad} // ✅ Calculate aspect ratio on load
+                    key={settings.logo}
+                    onLoad={handleImageLoad}
                     onError={(e) => {
                       console.error('❌ Error loading image:', settings.logo);
                       resetImageAspectRatio();
                     }}
                   />
                 )}
-                {/* Loading overlay during deletion */}
                 {isDeletingAvatar && (
                   <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center">
                     <Loader2 className="h-6 w-6 text-white animate-spin" />
@@ -1268,15 +1249,13 @@ export default function SettingsContent() {
         </div>
       </div>
 
-      {/* AI Configuration - Elegant version */}
+      {/* AI Configuration */}
       <div className="space-y-8">
-        {/* Header */}
         <div className="text-center space-y-2">
           <h2 className="text-2xl font-semibold text-gray-900">AI Configuration</h2>
           <p className="text-gray-600">Choose models and configure API keys</p>
         </div>
 
-        {/* Main Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           {/* Text Generation */}
           <div className="bg-white border border-gray-200 rounded-xl p-6 relative">
@@ -1291,7 +1270,6 @@ export default function SettingsContent() {
               )}
             </div>
 
-            {/* API Key Badge */}
             {currentTextApiKey?.isSaved && (
               <div className="absolute top-4 right-4 flex items-center space-x-2 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-1.5">
                 <CheckCircle className="w-4 h-4 text-emerald-600" />
@@ -1318,7 +1296,6 @@ export default function SettingsContent() {
               toggleDropdown={toggleDropdown}
             />
 
-            {/* API Key Input - only when needed and not saved */}
             {needsTextApiKey && !currentTextApiKey?.isSaved && (
               <div className="mt-6 pt-6 border-t border-gray-100 space-y-4">
                 <label className="block text-sm font-medium text-gray-700">
@@ -1352,10 +1329,7 @@ export default function SettingsContent() {
                         {savingApiKey === settings.textProvider ? (
                           <Loader2 className="w-3 h-3 animate-spin" />
                         ) : (
-                          <>
-
-                            <span>Save</span>
-                          </>
+                          <span>Save</span>
                         )}
                       </button>
                     )}
@@ -1369,7 +1343,6 @@ export default function SettingsContent() {
                   </div>
                 )}
 
-                {/* Security Notice - moved under input */}
                 <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
                   <div className="flex items-center justify-center space-x-2">
                     <Shield className="w-10 h-10 text-emerald-600 flex-shrink-0" />
@@ -1395,7 +1368,6 @@ export default function SettingsContent() {
               )}
             </div>
 
-            {/* API Key Badge */}
             {currentImageApiKey?.isSaved && (
               <div className="absolute top-4 right-4 flex items-center space-x-2 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-1.5">
                 <CheckCircle className="w-4 h-4 text-emerald-600" />
@@ -1422,7 +1394,6 @@ export default function SettingsContent() {
               toggleDropdown={toggleDropdown}
             />
 
-            {/* API Key Input - only when needed and not saved */}
             {needsImageApiKey && !currentImageApiKey?.isSaved && (
               <div className="mt-6 pt-6 border-t border-gray-100 space-y-4">
                 <label className="block text-sm font-medium text-gray-700">
@@ -1456,10 +1427,7 @@ export default function SettingsContent() {
                         {savingApiKey === settings.imageProvider ? (
                           <Loader2 className="w-3 h-3 animate-spin" />
                         ) : (
-                          <>
-
-                            <span>Save</span>
-                          </>
+                          <span>Save</span>
                         )}
                       </button>
                     )}
@@ -1473,7 +1441,6 @@ export default function SettingsContent() {
                   </div>
                 )}
 
-                {/* Security Notice - moved under input */}
                 <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
                   <div className="flex items-center justify-center space-x-2">
                     <Shield className="w-10 h-10 text-emerald-600 flex-shrink-0" />
@@ -1486,50 +1453,91 @@ export default function SettingsContent() {
             )}
           </div>
         </div>
-
-
       </div>
 
-      {/* Confirmation Modal */}
-      {confirmModal.isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/50 backdrop-blur" onClick={closeConfirmModal} />
-          <div className="relative bg-white rounded-xl shadow-2xl p-6 max-w-md w-full mx-4">
-            <div className="text-center">
-              <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 mb-4"><AlertTriangle className="h-6 w-6 text-red-600" /></div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">{confirmModal.title}</h3>
-              <p className="text-sm text-gray-500 mb-6">{confirmModal.message}</p>
-              <div className="flex gap-3 justify-center">
-                <button onClick={closeConfirmModal} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">Cancel</button>
-                <button onClick={confirmModal.onConfirm} className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors">Remove Key</button>
-              </div>
-            </div>
+      {/* Grid for Subscription and System Management */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        {/* Subscription Management */}
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <div className="flex items-center mb-6">
+            <CreditCard className="h-5 w-5 text-blue-600 mr-2" />
+            <h2 className="text-xl font-bold text-gray-900">Subskrypcja</h2>
+            {subscriptionBasics?.loading && (
+              <Loader2 className="h-4 w-4 text-gray-400 ml-2 animate-spin" />
+            )}
           </div>
-        </div>
-      )}
 
-      {/* System Management */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <div className="flex items-center mb-6">
-          <FolderOpen className="h-5 w-5 text-gray-600 mr-2" />
-          <h2 className="text-xl font-bold text-gray-900">System Management</h2>
+          {subscriptionBasics && !subscriptionBasics.loading ? (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                <div>
+                  <p className="text-sm text-gray-600">Aktualny plan</p>
+                  <p className="text-lg font-semibold text-gray-900">{subscriptionBasics.planName}</p>
+                </div>
+                <div>
+                  {subscriptionBasics.isActive ? (
+                    <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-medium">
+                      Aktywna
+                    </span>
+                  ) : (
+                    <span className="px-3 py-1 bg-gray-200 text-gray-700 rounded-full text-sm font-medium">
+                      Nieaktywna
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {subscriptionBasics.renewsAt && (
+                <div className="p-4 bg-blue-50 border border-blue-100 rounded-lg">
+                  <p className="text-sm text-blue-900">
+                    <span className="font-medium">Odnowienie:</span>{' '}
+                    {new Date(subscriptionBasics.renewsAt).toLocaleDateString('pl-PL', {
+                      day: 'numeric',
+                      month: 'long',
+                      year: 'numeric'
+                    })}
+                  </p>
+                </div>
+              )}
+
+              <Link
+                href="/subscription"
+                className="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors w-full justify-center"
+              >
+                <CreditCard className="h-4 w-4 mr-2" />
+                Zarządzaj subskrypcją
+              </Link>
+            </div>
+          ) : (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-6 w-6 text-gray-400 animate-spin" />
+            </div>
+          )}
         </div>
 
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Disk Explorer
-            </label>
-            <p className="text-sm text-gray-500 mb-3">
-              Browse and manage files stored on the Railway server
-            </p>
-            <button
-              onClick={() => setIsDiskExplorerOpen(true)}
-              className="inline-flex items-center px-4 py-2 bg-gray-600 text-white text-sm font-medium rounded-lg hover:bg-gray-700 transition-colors"
-            >
-              <FolderOpen className="h-4 w-4 mr-2" />
-              Explore Disk
-            </button>
+        {/* System Management */}
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <div className="flex items-center mb-6">
+            <FolderOpen className="h-5 w-5 text-gray-600 mr-2" />
+            <h2 className="text-xl font-bold text-gray-900">System Management</h2>
+          </div>
+
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Disk Explorer
+              </label>
+              <p className="text-sm text-gray-500 mb-3">
+                Browse and manage files stored on the Railway server
+              </p>
+              <button
+                onClick={() => setIsDiskExplorerOpen(true)}
+                className="inline-flex items-center px-4 py-2 bg-gray-600 text-white text-sm font-medium rounded-lg hover:bg-gray-700 transition-colors"
+              >
+                <FolderOpen className="h-4 w-4 mr-2" />
+                Explore Disk
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -1540,6 +1548,36 @@ export default function SettingsContent() {
           isOpen={isDiskExplorerOpen}
           onClose={() => setIsDiskExplorerOpen(false)}
         />
+      )}
+
+      {/* Confirmation Modal */}
+      {confirmModal.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur" onClick={closeConfirmModal} />
+          <div className="relative bg-white rounded-xl shadow-2xl p-6 max-w-md w-full mx-4">
+            <div className="text-center">
+              <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 mb-4">
+                <AlertTriangle className="h-6 w-6 text-red-600" />
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">{confirmModal.title}</h3>
+              <p className="text-sm text-gray-500 mb-6">{confirmModal.message}</p>
+              <div className="flex gap-3 justify-center">
+                <button
+                  onClick={closeConfirmModal}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmModal.onConfirm}
+                  className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors"
+                >
+                  Remove Key
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Toast Messages */}

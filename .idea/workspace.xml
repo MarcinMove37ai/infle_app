@@ -6,8 +6,6 @@
   <component name="ChangeListManager">
     <list default="true" id="46749596-836e-4f8d-af4b-57221a03aed3" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/app/ebookpage/[...slug]/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/app/ebookpage/[...slug]/page.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/components/views/demo.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/components/views/demo.tsx" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -60,7 +58,7 @@
     "Python.view_first_record.executor": "Run",
     "RunOnceActivity.ShowReadmeOnStart": "true",
     "git-widget-placeholder": "master",
-    "last_opened_file_path": "D:/HealthProCRM/hps_app"
+    "last_opened_file_path": "D:/pinecone_hybrid_load/pinecone_hybrid_load"
   }
 }]]></component>
   <component name="RecentsManager">

@@ -659,119 +659,162 @@ const getStatusChangeInfo = () => {
   };
 
   // Funkcja wykonująca faktyczną zmianę statusu
-  const executeStatusChange = async (status: string) => {
-    if (isPreviewMode || !token || !pageData) return;
 
-    setIsChangingStatus(true);
+    const executeStatusChange = async (status: string) => {
+      if (isPreviewMode || !token || !pageData) return;
 
-    try {
-      const updateData: Record<string, any> = { status };
+      setIsChangingStatus(true);
 
-      // Jeśli publikujemy stronę, generujemy publiczny URL
-      if (status === 'published') {
-        // 1. Pobierz nazwę autora i tytuł
-        const creatorName = pageData.author_display_name || 'autor';
-        const title = pageData.x_amz_meta_title || 'ebook';
-
-        // 2. "Wyczyść" obie wartości na potrzeby linku (małe litery, myślniki, bez polskich znaków)
-        const sanitize = (text: string) => text
-          .toLowerCase().trim()
-          .replace(/ł/g, 'l').replace(/ą/g, 'a').replace(/ę/g, 'e')
-          .replace(/ś/g, 's').replace(/ć/g, 'c').replace(/ń/g, 'n')
-          .replace(/ó/g, 'o').replace(/ż/g, 'z').replace(/ź/g, 'z')
-          .replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
-
-        const sanitizedCreator = sanitize(creatorName);
-        const sanitizedTitle = sanitize(title);
-
-        // 3. Stwórz unikalny indeks z 3 ostatnich znaków ID strony
-        const uniqueIndex = pageData.id.slice(-3);
-
-        // 4. Zbuduj finalny URL według nowego wzoru
-        const pathUrl = `/ebookpage/by-${sanitizedCreator}/${sanitizedTitle}-${uniqueIndex}`;
-        const fullUrl = `${window.location.origin}${pathUrl}`;
-
-        updateData.url = fullUrl;
-      }
-
-      const response = await fetch(`/api/pages/${pageData.id}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(updateData)
-      });
-
-      if (!response.ok) {
-        throw new Error(`Wystąpił błąd podczas zmiany statusu na ${status}`);
-      }
-
-      const updatedPage = await response.json();
-      setPageData(prevData => {
-          if (!prevData) return null;
-          return {
-              ...prevData,
-              status: status,
-              url: updatedPage.url || prevData.url,
-          };
-      });
-
-      let statusText = '';
-      let additionalMessage = '';
-
-      switch (status) {
-        case 'pending':
-          statusText = 'oczekujący na akceptację';
-          break;
-        case 'published':
-          statusText = 'opublikowany';
-          additionalMessage = updatedPage?.url
-            ? ` Publiczny link: ${updatedPage.url}`
-            : ' Strona jest dostępna pod publicznym linkiem.';
-          break;
-        case 'draft':
-          statusText = 'wersja robocza';
-          setIsTextEditMode(true);
-          if (useContextMode) {
-            editModeContext.setTextEditMode(true);
-          }
-          break;
-        default:
-          statusText = status;
-      }
-
-      // Po pomyślnym wykonaniu
-        setToast({
-            type: 'success',
-            text: `Status strony został zmieniony na: ${statusText}${additionalMessage}`
-        });
-
-        // DODAJ TO - przekierowanie po publikacji
+      try {
+        // ============================================
+        // 🔒 SPRAWDZENIE SUBSKRYPCJI PRZED PUBLIKACJĄ
+        // ============================================
         if (status === 'published') {
-            // Opcjonalnie skopiuj link do schowka
-            if (updatedPage?.url) {
-                await navigator.clipboard.writeText(updatedPage.url);
+          const userRole = (session?.user as any)?.role?.toUpperCase() || 'USER';
+          const isAdmin = userRole === 'ADMIN';
+
+          // Admini mogą publikować bez sprawdzania
+          if (!isAdmin) {
+            console.log('🔍 Checking subscription status before publish...');
+
+            const subscriptionCheck = await fetch('/api/user/subscription-status');
+            const subData = await subscriptionCheck.json();
+
+            console.log('🔍 Subscription check result:', subData);
+
+            if (!subData.canPublish) {
+              // Zamknij obecny dialog
+              setShowConfirmDialog(false);
+              setIsChangingStatus(false);
+
+              // UŻYJ setTimeout aby React zdążył zamknąć poprzedni dialog
+              setTimeout(() => {
+                // Pokaż dialog z informacją o wymaganej subskrypcji
+                setConfirmDialogConfig({
+                  title: subData.action === 'VERIFY_PAYMENT'
+                    ? 'Wymagana weryfikacja płatności'
+                    : 'Wymagana subskrypcja',
+                  message: subData.reason,
+                  confirmText: subData.action === 'VERIFY_PAYMENT'
+                    ? 'Zweryfikuj płatność'
+                    : 'Wykup subskrypcję',
+                  cancelText: 'Anuluj',
+                  onConfirm: () => {
+                    setShowConfirmDialog(false); // Zamknij ten dialog
+                    // Przekieruj do odpowiedniej strony
+                    const redirectUrl = subData.action === 'VERIFY_PAYMENT'
+                      ? '/verify-payment'
+                      : '/subscribe';
+                    window.location.href = redirectUrl;
+                  }
+                });
+
+                setShowConfirmDialog(true);
+              }, 100); // 100ms opóźnienia
+
+              return; // STOP - nie publikuj
             }
 
-            // Poczekaj chwilę, żeby użytkownik zobaczył komunikat sukcesu
-            setTimeout(() => {
-                window.location.href = '/strony-zapisu';
-                // lub użyj Next.js router:
-                // router.push('/strony-zapisu');
-            }, 1500); // 1.5 sekundy opóźnienia
+            console.log('✅ Subscription check passed - proceeding with publish');
+          }
+        }
+        // ============================================
+
+        const updateData: Record<string, any> = { status };
+
+        // Jeśli publikujemy stronę, generujemy publiczny URL
+        if (status === 'published') {
+          const creatorName = pageData.author_display_name || 'autor';
+          const title = pageData.x_amz_meta_title || 'ebook';
+
+          const sanitize = (text: string) => text
+            .toLowerCase().trim()
+            .replace(/ł/g, 'l').replace(/ą/g, 'a').replace(/ę/g, 'e')
+            .replace(/ś/g, 's').replace(/ć/g, 'c').replace(/ń/g, 'n')
+            .replace(/ó/g, 'o').replace(/ż/g, 'z').replace(/ź/g, 'z')
+            .replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+
+          const sanitizedCreator = sanitize(creatorName);
+          const sanitizedTitle = sanitize(title);
+          const uniqueIndex = pageData.id.slice(-3);
+          const pathUrl = `/ebookpage/by-${sanitizedCreator}/${sanitizedTitle}-${uniqueIndex}`;
+          const fullUrl = `${window.location.origin}${pathUrl}`;
+
+          updateData.url = fullUrl;
         }
 
-    } catch (error) {
+        const response = await fetch(`/api/pages/${pageData.id}`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(updateData)
+        });
+
+        if (!response.ok) {
+          throw new Error(`Wystąpił błąd podczas zmiany statusu na ${status}`);
+        }
+
+        const updatedPage = await response.json();
+        setPageData(prevData => {
+          if (!prevData) return null;
+          return {
+            ...prevData,
+            status: status,
+            url: updatedPage.url || prevData.url,
+          };
+        });
+
+        let statusText = '';
+        let additionalMessage = '';
+
+        switch (status) {
+          case 'pending':
+            statusText = 'oczekujący na akceptację';
+            break;
+          case 'published':
+            statusText = 'opublikowany';
+            additionalMessage = updatedPage?.url
+              ? ` Publiczny link: ${updatedPage.url}`
+              : ' Strona jest dostępna pod publicznym linkiem.';
+            break;
+          case 'draft':
+            statusText = 'wersja robocza';
+            setIsTextEditMode(true);
+            if (useContextMode) {
+              editModeContext.setTextEditMode(true);
+            }
+            break;
+          default:
+            statusText = status;
+        }
+
+        setToast({
+          type: 'success',
+          text: `Status strony został zmieniony na: ${statusText}${additionalMessage}`
+        });
+
+        if (status === 'published') {
+          if (updatedPage?.url) {
+            await navigator.clipboard.writeText(updatedPage.url);
+          }
+
+          setTimeout(() => {
+            window.location.href = '/strony-zapisu';
+          }, 1500);
+        }
+
+      } catch (error) {
         console.error('Błąd podczas zmiany statusu:', error);
         setToast({
-            type: 'error',
-            text: 'Nie udało się zmienić statusu strony'
+          type: 'error',
+          text: 'Nie udało się zmienić statusu strony'
         });
-    } finally {
+      } finally {
         setIsChangingStatus(false);
         setShowConfirmDialog(false);
-    }
-};
+      }
+    };
 
   // Pobieranie danych strony
   const fetchData = useCallback(async () => {
