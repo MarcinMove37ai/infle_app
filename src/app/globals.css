@@ -4,6 +4,11 @@
   --background: #ffffff;
   --foreground: #171717;
 }
+@layer base {
+  html {
+    font-family: 'Segoe UI', Roboto, -apple-system, sans-serif;
+  }
+}
 
 @theme inline {
   --color-background: var(--background);

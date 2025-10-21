@@ -1,14 +1,22 @@
+const { fontFamily } = require('tailwindcss/defaultTheme'); // ← DODAJ!
+
 /** @type {import('tailwindcss').Config} */
 module.exports = {
-  content: {
-    files: [
-      "./src/**/*.{js,ts,jsx,tsx}"
-    ],
-    // Wykluczenie folderu z danymi
-    exclude: [
-      "./ignore_py_files/**/*",
-      "./node_modules/**/*",
-      "./.next/**/*"
-    ]
-  }
-}
+  content: [
+    "./src/**/*.{js,ts,jsx,tsx}"
+  ],
+  theme: {
+    extend: {
+      fontFamily: {
+        sans: [
+          'Segoe UI',
+          'Roboto',
+          '-apple-system',
+          'BlinkMacSystemFont',
+          ...fontFamily.sans, // ← TERAZ ZADZIAŁA
+        ],
+      },
+    },
+  },
+  plugins: [],
+};
