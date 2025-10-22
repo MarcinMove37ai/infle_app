@@ -57,6 +57,9 @@ export default function RegisterPage({
   const lang = searchParams.get('lang') || null;
   console.log('Wybrany język (z ?lang=):', lang); // 'pl', 'en' lub null
 
+  // ✅ POPRAWKA: Tworzymy dynamiczny link do logowania, który zachowuje parametr 'lang'
+  const loginHref = lang ? `/login?lang=${lang}` : '/login';
+
   const heroContainerVariants = {
   hidden: { opacity: 0 },
   visible: {
@@ -245,7 +248,7 @@ const heroItemVariants = {
   };
 
   const handleGoogleSignUp = () => {
-    alert('Rejestracja przez Google - funkcja w przygotowaniu');
+    alert(lang === 'en' ? 'Sign up with Google - feature in preparation' : 'Rejestracja przez Google - funkcja w przygotowaniu');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -254,25 +257,25 @@ const heroItemVariants = {
     setError('');
 
     if (!formData.firstName.trim() || !formData.lastName.trim() || !formData.email.trim()) {
-      setError('Pola Imię, Nazwisko i Adres email są wymagane.');
+      setError(lang === 'en' ? 'First Name, Last Name, and Email fields are required.' : 'Pola Imię, Nazwisko i Adres email są wymagane.');
       setLoading(false);
       return;
     }
 
     if (formData.password !== formData.confirmPassword) {
-      setError('Hasła nie są identyczne');
+      setError(lang === 'en' ? 'Passwords do not match' : 'Hasła nie są identyczne');
       setLoading(false);
       return;
     }
 
     if (formData.password.length < 6) {
-      setError('Hasło musi mieć minimum 6 znaków');
+      setError(lang === 'en' ? 'Password must be at least 6 characters long' : 'Hasło musi mieć minimum 6 znaków');
       setLoading(false);
       return;
     }
 
     if (!formData.termsAccepted) {
-      setError('Musisz zaakceptować regulamin i politykę prywatności');
+      setError(lang === 'en' ? 'You must accept the Terms of Service and Privacy Policy' : 'Musisz zaakceptować regulamin i politykę prywatności');
       setLoading(false);
       return;
     }
@@ -300,10 +303,10 @@ const heroItemVariants = {
         setRegistrationSuccess(true);
         window.location.hash = 'sukces';
       } else {
-        setError(data.error || 'Wystąpił błąd podczas rejestracji');
+        setError(data.error || (lang === 'en' ? 'An error occurred during registration' : 'Wystąpił błąd podczas rejestracji'));
       }
     } catch (error) {
-      setError('Wystąpił błąd podczas rejestracji');
+      setError(lang === 'en' ? 'An error occurred during registration' : 'Wystąpił błąd podczas rejestracji');
     } finally {
       setLoading(false);
     }
@@ -382,29 +385,30 @@ const heroItemVariants = {
         <header className="fixed top-0 left-0 right-0 z-50 bg-black/30 backdrop-blur-md border-b border-white/10 h-20">
           <div className="container mx-auto px-6 h-full flex justify-between items-center">
             <Link href="/" className="group flex items-center cursor-pointer">
-              <div className="w-12 h-12 bg-slate-800/70 backdrop-blur-sm rounded-lg ring-1 ring-white/20 flex items-center justify-center p-1.5 group-hover:ring-white/30 transition-all duration-300 mr-3">
+              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-slate-800/70 backdrop-blur-sm rounded-lg ring-1 ring-white/20 flex items-center justify-center p-1 sm:p-1.5 group-hover:ring-white/30 transition-all duration-300 mr-2 sm:mr-3">
                 <Image src="/logoW.png" alt="inflee.app logo" width={48} height={48} className="w-full h-full object-contain" priority />
               </div>
               <div>
-                <h1
-                  className="text-2xl font-bold leading-tight"
-                  style={{
-                    background: 'linear-gradient(135deg, #A855F7, #6366F1)',
-                    WebkitBackgroundClip: 'text',
-                    backgroundClip: 'text',
-                    WebkitTextFillColor: 'transparent',
-                  }}
-                >
-                  inflee.app
-                </h1>
-                <p className="mt-1 text-xs text-slate-400 tracking-wide uppercase leading-tight group-hover:text-slate-300 transition-colors duration-300">
-                  Edukuj | Rośnij | Zarabiaj
-                </p>
+                  <h1
+                    className="text-xl sm:text-2xl font-bold leading-tight"
+                    style={{
+                      background: 'linear-gradient(135deg, #A855F7, #6366F1)',
+                      WebkitBackgroundClip: 'text',
+                      backgroundClip: 'text',
+                      WebkitTextFillColor: 'transparent',
+                    }}
+                  >
+                    inflee.app
+                  </h1>
+                  <p className="mt-0.5 sm:mt-1 text-[11px] sm:text-xs text-slate-400 tracking-wide uppercase leading-tight group-hover:text-slate-300 transition-colors duration-300">
+                    {lang === 'en' ? 'Educate | Grow | Earn' : 'Edukuj | Rośnij | Zarabiaj'}
+                  </p>
               </div>
             </Link>
 
-            <Link href="/login" className="px-4 py-1.5 bg-white/10 border border-white/10 hover:bg-white/20 text-white rounded-lg text-sm font-semibold transition">
-              Zaloguj
+            {/* ✅ POPRAWKA: Używamy dynamicznego linku loginHref */}
+            <Link href={loginHref} className="px-4 py-1.5 bg-white/10 border border-white/10 hover:bg-white/20 text-white rounded-lg text-sm font-semibold transition">
+              {lang === 'en' ? 'Log in' : 'Zaloguj'}
             </Link>
           </div>
         </header>
@@ -427,19 +431,19 @@ const heroItemVariants = {
 
             <div className="absolute top-0 left-0 w-full h-full z-10 bg-[#010101]/80 lg:bg-none lg:bg-gradient-to-r lg:from-transparent lg:via-[#010101]/90 lg:to-[#010101]/90" />
 
-            <div className="container mx-auto px-6 relative z-20 grid grid-cols-1 lg:grid-cols-12 h-full gap-4 lg:gap-0">
+            <div className="container mx-auto px-6 relative z-20 grid grid-cols-1 lg:grid-cols-12 h-full gap-0 lg:gap-0">
 
-              <div className="lg:col-span-7 flex flex-col justify-center items-start text-left pr-0 lg:pr-10 pb-6 lg:pb-0 pt-4 lg:pt-0">
+              <div className="lg:col-span-7 flex flex-col justify-center items-start text-left pr-0 lg:pr-10 pb-0 lg:pb-0 pt-4 lg:pt-0">
                 <motion.div
                   initial="hidden"
                   animate="visible"
                   variants={heroContainerVariants}
-                  className="w-full px-6 lg:px-0"
+                  className="w-full lg:px-0"
                 >
                   <motion.div variants={heroItemVariants}>
                     <h1 className="font-extrabold text-white leading-tight font-sans">
-                      <span className="block text-[2rem] xs:text-3xl sm:text-4xl md:text-5xl lg:text-7xl xl:text-8xl whitespace-nowrap">
-                        {registrationSuccess ? 'Sukces!' : 'Zarejestruj się'}
+                      <span className="block text-3xl sm:text-4xl md:text-5xl lg:text-7xl xl:text-8xl whitespace-nowrap">
+                        {registrationSuccess ? (lang === 'en' ? 'Success!' : 'Sukces!') : (lang === 'en' ? 'Join Inflee.app' : 'Dołącz do Inflee.app')}
                       </span>
                     </h1>
                   </motion.div>
@@ -450,7 +454,7 @@ const heroItemVariants = {
 
                   {!registrationSuccess && (
                     <motion.div variants={heroItemVariants}>
-                      <h1 className="font-extrabold text-white pb-1.5 leading-snug font-sans">
+                      <h1 className="font-extrabold text-white pb-0 leading-snug font-sans">
                         <span
                           className="block text-xl sm:text-2xl md:text-3xl lg:text-5xl xl:text-6xl pb-3"
                           style={{
@@ -460,7 +464,7 @@ const heroItemVariants = {
                             WebkitTextFillColor: 'transparent',
                           }}
                         >
-                          aby zacząć tworzyć
+                          {lang === 'en' ? 'to start creating' : 'aby zacząć tworzyć'}
                         </span>
                       </h1>
                     </motion.div>
@@ -468,12 +472,12 @@ const heroItemVariants = {
                 </motion.div>
               </div>
 
-              <div className="lg:col-span-5 h-full flex items-center justify-center lg:justify-end mt-4 lg:mt-0">
+              <div className="lg:col-span-5 lg:h-full flex items-start lg:items-center justify-center lg:justify-end mt-1 lg:mt-0">
                 <motion.div
                   initial={{ opacity: 0, x: 20 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ duration: 0.6, delay: 0.3 }}
-                  className="w-full max-w-md px-4 py-0 lg:p-0"
+                  className="w-full max-w-md py-0 lg:p-0"
                 >
                   {registrationSuccess ? (
                   <div className="bg-black/40 border border-white/10 backdrop-blur-sm rounded-2xl p-8 w-full">
@@ -495,10 +499,10 @@ const heroItemVariants = {
                         className="space-y-3"
                       >
                         <h2 className="text-3xl font-bold text-white">
-                          Rejestracja ukończona
+                          {lang === 'en' ? 'Registration complete' : 'Rejestracja ukończona'}
                         </h2>
                         <p className="text-slate-400 text-sm leading-relaxed">
-                          Wysłaliśmy link weryfikacyjny na adres:
+                          {lang === 'en' ? "We've sent a verification link to:" : 'Wysłaliśmy link weryfikacyjny na adres:'}
                         </p>
                         <div className="bg-white/5 ring-1 ring-white/10 rounded-lg px-4 py-3">
                           <span className="font-mono text-white text-sm break-all">
@@ -514,22 +518,23 @@ const heroItemVariants = {
                         className="space-y-4"
                       >
                         <p className="text-slate-400 text-xs">
-                          Link jest ważny przez 24 godziny. Sprawdź również folder spam.
+                          {lang === 'en' ? 'The link is valid for 24 hours. Please also check your spam folder.' : 'Link jest ważny przez 24 godziny. Sprawdź również folder spam.'}
                         </p>
 
+                        {/* ✅ POPRAWKA: Używamy dynamicznego linku loginHref */}
                         <Link
-                          href="/login"
+                          href={loginHref}
                           className="inline-block w-full py-3 px-6 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-semibold rounded-xl hover:opacity-90 transition-all shadow-lg"
                         >
-                          Przejdź do logowania
+                          {lang === 'en' ? 'Proceed to login' : 'Przejdź do logowania'}
                         </Link>
                       </motion.div>
                     </div>
                   </div>
                 ) : (
                     <div className="bg-black/40 border border-white/10 backdrop-blur-sm rounded-2xl p-4 md:p-6 w-full max-h-full">
-                      <div className="mb-4">
-                        <h2 className="text-xl font-bold text-white">Utwórz konto w inflee.app</h2>
+                      <div className="mb-4 hidden lg:block">
+                        <h2 className="text-xl font-bold text-white">{lang === 'en' ? 'Create your inflee.app account' : 'Utwórz konto w inflee.app'}</h2>
                       </div>
 
                       <div className="form-scroll-container p-1">
@@ -544,12 +549,12 @@ const heroItemVariants = {
                             <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
                             <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
                           </svg>
-                          <span className="text-sm">Zarejestruj się przez Google</span>
+                          <span className="text-sm">{lang === 'en' ? 'Sign up with Google' : 'Utwórz konto z Google'}</span>
                         </button>
 
                         <div className="flex items-center my-4">
                           <div className="flex-grow border-t border-white/10"></div>
-                          <span className="flex-shrink-0 mx-3 text-xs text-slate-400">lub użyj email</span>
+                          <span className="flex-shrink-0 mx-3 text-xs text-slate-400">{lang === 'en' ? 'or use your email' : 'lub użyj email'}</span>
                           <div className="flex-grow border-t border-white/10"></div>
                         </div>
 
@@ -569,7 +574,9 @@ const heroItemVariants = {
                                 onFocus={handleFocus}
                                 autoComplete="given-name"
                               />
-                              <label htmlFor="firstName" className="absolute left-3 top-3 text-slate-400 text-xs transition-all duration-200 peer-placeholder-shown:top-3 peer-placeholder-shown:text-sm peer-focus:top-1.5 peer-focus:text-xs peer-focus:text-indigo-400 peer-[:not(:placeholder-shown)]:top-1.5 peer-[:not(:placeholder-shown)]:text-xs peer-[:not(:placeholder-shown)]:text-slate-400">Imię *</label>
+                              <label htmlFor="firstName" className="absolute left-3 top-3 text-slate-400 text-xs transition-all duration-200 peer-placeholder-shown:top-3 peer-placeholder-shown:text-sm peer-focus:top-1.5 peer-focus:text-xs peer-focus:text-indigo-400 peer-[:not(:placeholder-shown)]:top-1.5 peer-[:not(:placeholder-shown)]:text-xs peer-[:not(:placeholder-shown)]:text-slate-400">
+                                {lang === 'en' ? 'First name *' : 'Imię *'}
+                              </label>
                             </div>
                             <div className="relative">
                               <input
@@ -585,7 +592,9 @@ const heroItemVariants = {
                                 onFocus={handleFocus}
                                 autoComplete="family-name"
                               />
-                              <label htmlFor="lastName" className="absolute left-3 top-3 text-slate-400 text-xs transition-all duration-200 peer-placeholder-shown:top-3 peer-placeholder-shown:text-sm peer-focus:top-1.5 peer-focus:text-xs peer-focus:text-indigo-400 peer-[:not(:placeholder-shown)]:top-1.5 peer-[:not(:placeholder-shown)]:text-xs peer-[:not(:placeholder-shown)]:text-slate-400">Nazwisko *</label>
+                              <label htmlFor="lastName" className="absolute left-3 top-3 text-slate-400 text-xs transition-all duration-200 peer-placeholder-shown:top-3 peer-placeholder-shown:text-sm peer-focus:top-1.5 peer-focus:text-xs peer-focus:text-indigo-400 peer-[:not(:placeholder-shown)]:top-1.5 peer-[:not(:placeholder-shown)]:text-xs peer-[:not(:placeholder-shown)]:text-slate-400">
+                                {lang === 'en' ? 'Last name *' : 'Nazwisko *'}
+                              </label>
                             </div>
                           </div>
 
@@ -603,7 +612,9 @@ const heroItemVariants = {
                               onFocus={handleFocus}
                               autoComplete="email"
                             />
-                            <label htmlFor="email" className="absolute left-3 top-3 text-slate-400 text-xs transition-all duration-200 peer-placeholder-shown:top-3 peer-placeholder-shown:text-sm peer-focus:top-1.5 peer-focus:text-xs peer-focus:text-indigo-400 peer-[:not(:placeholder-shown)]:top-1.5 peer-[:not(:placeholder-shown)]:text-xs peer-[:not(:placeholder-shown)]:text-slate-400">Adres email *</label>
+                            <label htmlFor="email" className="absolute left-3 top-3 text-slate-400 text-xs transition-all duration-200 peer-placeholder-shown:top-3 peer-placeholder-shown:text-sm peer-focus:top-1.5 peer-focus:text-xs peer-focus:text-indigo-400 peer-[:not(:placeholder-shown)]:top-1.5 peer-[:not(:placeholder-shown)]:text-xs peer-[:not(:placeholder-shown)]:text-slate-400">
+                              {lang === 'en' ? 'Email address *' : 'Adres email *'}
+                            </label>
                           </div>
 
                           <div className="relative">
@@ -619,7 +630,9 @@ const heroItemVariants = {
                               onFocus={handleFocus}
                               autoComplete="tel"
                             />
-                            <label htmlFor="phone" className="absolute left-3 top-3 text-slate-400 text-xs transition-all duration-200 peer-placeholder-shown:top-3 peer-placeholder-shown:text-sm peer-focus:top-1.5 peer-focus:text-xs peer-focus:text-indigo-400 peer-[:not(:placeholder-shown)]:top-1.5 peer-[:not(:placeholder-shown)]:text-xs peer-[:not(:placeholder-shown)]:text-slate-400">Telefon</label>
+                            <label htmlFor="phone" className="absolute left-3 top-3 text-slate-400 text-xs transition-all duration-200 peer-placeholder-shown:top-3 peer-placeholder-shown:text-sm peer-focus:top-1.5 peer-focus:text-xs peer-focus:text-indigo-400 peer-[:not(:placeholder-shown)]:top-1.5 peer-[:not(:placeholder-shown)]:text-xs peer-[:not(:placeholder-shown)]:text-slate-400">
+                              {lang === 'en' ? 'Phone' : 'Telefon'}
+                            </label>
                           </div>
 
                           <input id="socialLink" name="socialLink" type="url" value={formData.socialLink} onChange={handleChange} style={{ display: 'none' }}/>
@@ -696,7 +709,9 @@ const heroItemVariants = {
                                 onFocus={handleFocus}
                                 autoComplete="new-password"
                               />
-                              <label htmlFor="password" className="absolute left-3 top-3 text-slate-400 text-xs transition-all duration-200 peer-placeholder-shown:top-3 peer-placeholder-shown:text-sm peer-focus:top-1.5 peer-focus:text-xs peer-focus:text-indigo-400 peer-[:not(:placeholder-shown)]:top-1.5 peer-[:not(:placeholder-shown)]:text-xs peer-[:not(:placeholder-shown)]:text-slate-400">Hasło *</label>
+                              <label htmlFor="password" className="absolute left-3 top-3 text-slate-400 text-xs transition-all duration-200 peer-placeholder-shown:top-3 peer-placeholder-shown:text-sm peer-focus:top-1.5 peer-focus:text-xs peer-focus:text-indigo-400 peer-[:not(:placeholder-shown)]:top-1.5 peer-[:not(:placeholder-shown)]:text-xs peer-[:not(:placeholder-shown)]:text-slate-400">
+                                {lang === 'en' ? 'Password *' : 'Hasło *'}
+                              </label>
                             </div>
                             <div className="relative">
                               <input
@@ -712,7 +727,9 @@ const heroItemVariants = {
                                 onFocus={handleFocus}
                                 autoComplete="new-password"
                               />
-                              <label htmlFor="confirmPassword" className="absolute left-3 top-3 text-slate-400 text-xs transition-all duration-200 peer-placeholder-shown:top-3 peer-placeholder-shown:text-sm peer-focus:top-1.5 peer-focus:text-xs peer-focus:text-indigo-400 peer-[:not(:placeholder-shown)]:top-1.5 peer-[:not(:placeholder-shown)]:text-xs peer-[:not(:placeholder-shown)]:text-slate-400">Potwierdź hasło *</label>
+                              <label htmlFor="confirmPassword" className="absolute left-3 top-3 text-slate-400 text-xs transition-all duration-200 peer-placeholder-shown:top-3 peer-placeholder-shown:text-sm peer-focus:top-1.5 peer-focus:text-xs peer-focus:text-indigo-400 peer-[:not(:placeholder-shown)]:top-1.5 peer-[:not(:placeholder-shown)]:text-xs peer-[:not(:placeholder-shown)]:text-slate-400">
+                                {lang === 'en' ? 'Confirm password *' : 'Potwierdź hasło *'}
+                              </label>
                             </div>
                           </div>
 
@@ -726,12 +743,19 @@ const heroItemVariants = {
                                   required
                                   checked={formData.termsAccepted}
                                   onChange={handleChange}
-                                  className="focus:ring-indigo-500 h-3.5 w-3.5 text-indigo-600 bg-slate-900 border-slate-600 rounded"
+                                  className="focus:ring-indigo-500 h-3.5 w-3.5 text-indigo-600 bg-slate-900 border-slate-600 rounded cursor-pointer"
                                 />
                               </div>
                               <div className="ml-2 text-xs">
                                 <label htmlFor="termsAccepted" className="text-slate-400">
-                                  Zapoznałem się z <a href="/terms" target="_blank" className="font-medium text-indigo-400 hover:text-indigo-300 hover:underline">regulaminem</a> i <a href="/privacy" target="_blank" className="font-medium text-indigo-400 hover:text-indigo-300 hover:underline">polityką prywatności</a>.
+                                  {lang === 'en' ? 'I have read and agree to the ' : 'Zapoznałem się z '}
+                                  <a href="/terms" target="_blank" className="font-medium text-indigo-400 hover:text-indigo-300 hover:underline">
+                                    {lang === 'en' ? 'Terms of Service' : 'regulaminem'}
+                                  </a>
+                                  {lang === 'en' ? ' and ' : ' i '}
+                                  <a href="/privacy" target="_blank" className="font-medium text-indigo-400 hover:text-indigo-300 hover:underline">
+                                    {lang === 'en' ? 'Privacy Policy' : 'polityką prywatności'}
+                                  </a>.
                                 </label>
                               </div>
                             </div>
@@ -743,12 +767,12 @@ const heroItemVariants = {
                                   type="checkbox"
                                   checked={formData.marketingConsent}
                                   onChange={handleChange}
-                                  className="focus:ring-indigo-500 h-3.5 w-3.5 text-indigo-600 bg-slate-900 border-slate-600 rounded"
+                                  className="focus:ring-indigo-500 h-3.5 w-3.5 text-indigo-600 bg-slate-900 border-slate-600 rounded cursor-pointer"
                                 />
                               </div>
                               <div className="ml-2 text-xs">
                                 <label htmlFor="marketingConsent" className="text-slate-400">
-                                  Wyrażam zgodę na kontakt w celach marketingowych nie częściej niż raz w miesiącu.
+                                  {lang === 'en' ? 'I agree to receive marketing communications no more than once a month.' : 'Wyrażam zgodę na kontakt w celach marketingowych nie częściej niż raz w miesiącu.'}
                                 </label>
                               </div>
                             </div>
@@ -773,24 +797,25 @@ const heroItemVariants = {
                             <button
                               type="submit"
                               disabled={loading}
-                              className="w-full flex justify-center py-2.5 px-4 border border-transparent text-sm font-semibold rounded-xl text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-900 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-lg"
+                              className="w-full flex justify-center py-2.5 px-4 border border-transparent text-sm font-semibold rounded-xl text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-900 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-lg cursor-pointer"
                             >
                               {loading ? (
                                 <div className="flex items-center">
                                   <div className="animate-spin h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full mr-2"></div>
-                                  <span className="text-sm">Tworzenie konta...</span>
+                                  <span className="text-sm">{lang === 'en' ? 'Creating account...' : 'Tworzenie konta...'}</span>
                                 </div>
                               ) : (
-                                'Zarejestruj się'
+                                lang === 'en' ? 'Register' : 'Zarejestruj się'
                               )}
                             </button>
                           </div>
 
                           <div className="text-center pt-2">
                             <p className="text-xs text-slate-400">
-                              Masz już konto?{' '}
-                              <Link href="/login" className="font-medium text-indigo-400 hover:text-indigo-300 transition-colors duration-200 hover:underline">
-                                Zaloguj się
+                              {lang === 'en' ? 'Already have an account? ' : 'Masz już konto? '}
+                              {/* ✅ POPRAWKA: Używamy dynamicznego linku loginHref */}
+                              <Link href={loginHref} className="font-medium text-indigo-400 hover:text-indigo-300 transition-colors duration-200 hover:underline">
+                                {lang === 'en' ? 'Log in' : 'Zaloguj się'}
                               </Link>
                             </p>
                           </div>
