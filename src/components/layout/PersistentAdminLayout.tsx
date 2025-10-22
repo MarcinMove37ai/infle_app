@@ -152,7 +152,7 @@ const menuItems: MenuItem[] = [
     IconComponent: Home,
     label: 'Dashboard',
     path: '/dashboard',
-    roles: ['ADMIN', 'USER', 'GOD'],
+    roles: ['ADMIN', 'USER', 'GOD', 'payd'],
     requiredStatus: ['active'],
     fullWidth: true
   },
@@ -183,21 +183,21 @@ const menuItems: MenuItem[] = [
     IconComponent: BookOpen,
     label: 'Ebooks',
     path: '/ebooki',
-    roles: ['ADMIN', 'USER', 'GOD', 'free'],
+    roles: ['ADMIN', 'USER', 'GOD', 'payd'],
     requiredStatus: ['active']
   },
   {
     IconComponent: FileSignature,
     label: 'Landing Pages',
     path: '/strony-zapisu',
-    roles: ['ADMIN', 'USER', 'GOD', 'free'],
+    roles: ['ADMIN', 'USER', 'GOD', 'payd'],
     requiredStatus: ['active']
   },
   {
     IconComponent: UserCheck,
     label: 'Leads',
     path: '/leady',
-    roles: ['ADMIN', 'USER', 'GOD', 'free'],
+    roles: ['ADMIN', 'USER', 'GOD', 'payd'],
     requiredStatus: ['active']
   },
   {
@@ -211,7 +211,7 @@ const menuItems: MenuItem[] = [
     IconComponent: Settings,
     label: 'Settings',
     path: '/ustawienia',
-    roles: ['ADMIN', 'USER', 'GOD','free'],
+    roles: ['ADMIN', 'USER', 'GOD','payd'],
     requiredStatus: ['active']
   }
 
@@ -242,6 +242,12 @@ const Sidebar: React.FC = () => {
   const { hoveredSidebar, setHoveredSidebar, isMobileMenuOpen, setIsMobileMenuOpen, setIsNavigating } = useLayout();
   const pathname = usePathname();
   const { user, userRole, isLoading: authLoading, signOut } = useAuth();
+  useEffect(() => {
+    if (!authLoading) {
+      console.log("DANE UŻYTKOWNIKA W LAYOUCIE (useAuth):", user);
+      console.log("ROLA UŻYTKOWNIKA W LAYOUCIE (useAuth):", userRole);
+    }
+  }, [user, userRole, authLoading]);
   const router = useRouter();
   const [isMobile, setIsMobile] = useState(false);
   const [isClient, setIsClient] = useState(false);
