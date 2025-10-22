@@ -430,7 +430,7 @@ const PagesView = () => {
   };
 
   const getSupervisorDescription = (code?: string) => code ? supervisorDescriptions[code] || code : null;
-  const isGodRole = userRole === 'free';
+  const isGodRole = userRole === 'payd';
 
   if (isAuthLoading) {
     return (
