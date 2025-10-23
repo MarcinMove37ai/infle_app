@@ -6,7 +6,7 @@ export default function AuthLayout({
 }) {
   return (
     <div
-      className="h-screen bg-[#0A0A0A] text-white antialiased overflow-hidden fixed w-full top-0 left-0 font-sans"
+      className="min-h-screen bg-[#0A0A0A] text-white antialiased w-full font-sans"
       suppressHydrationWarning
     >
       {children}

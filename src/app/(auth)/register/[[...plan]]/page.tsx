@@ -328,11 +328,9 @@ const heroItemVariants = {
       >
         <style jsx global>{`
           .register-page-wrapper {
-            height: 100vh;
+            min-height: 100vh; /* <-- KLUCZOWA ZMIANA */
             background: #0A0A0A;
             color: white;
-            overflow: hidden !important;
-            position: fixed;
             width: 100%;
             top: 0;
             left: 0;
@@ -353,8 +351,13 @@ const heroItemVariants = {
             -webkit-text-fill-color: transparent;
           }
           html, body {
-            overflow: hidden !important;
-            height: 100vh;
+            /* Reguły ukrywające pasek przewijania */
+            -ms-overflow-style: none;  /* IE and Edge */
+            scrollbar-width: none;  /* Firefox */
+          }
+          /* Dodaj też tę nową regułę dla WebKit (Chrome, Safari) */
+          body::-webkit-scrollbar {
+            display: none;
           }
           .register-page-wrapper * {
             will-change: auto;
@@ -363,23 +366,7 @@ const heroItemVariants = {
             backface-visibility: hidden;
             -webkit-font-smoothing: antialiased;
           }
-          .form-scroll-container {
-            overflow-y: auto !important;
-            overflow-x: hidden !important;
-            max-height: calc(100vh - 5rem);
-            scrollbar-width: thin;
-            scrollbar-color: rgba(139, 92, 246, 0.3) transparent;
-          }
-          .form-scroll-container::-webkit-scrollbar {
-            width: 6px;
-          }
-          .form-scroll-container::-webkit-scrollbar-track {
-            background: transparent;
-          }
-          .form-scroll-container::-webkit-scrollbar-thumb {
-            background-color: rgba(139, 92, 246, 0.3);
-            border-radius: 3px;
-          }
+
         `}</style>
 
         <header className="fixed top-0 left-0 right-0 z-50 bg-black/30 backdrop-blur-md border-b border-white/10 h-20">
@@ -413,8 +400,8 @@ const heroItemVariants = {
           </div>
         </header>
 
-        <main className="pt-16 h-screen">
-          <section className="h-full relative">
+        <main className="pt-16 min-h-screen">
+          <section className="relative">
             <div className="absolute top-0 left-0 w-full h-full z-0 lg:flex lg:justify-start">
               <Image
                 src={registrationSuccess ? "/heroS.webp" : "/heroR.webp"}
@@ -431,7 +418,7 @@ const heroItemVariants = {
 
             <div className="absolute top-0 left-0 w-full h-full z-10 bg-[#010101]/80 lg:bg-none lg:bg-gradient-to-r lg:from-transparent lg:via-[#010101]/90 lg:to-[#010101]/90" />
 
-            <div className="container mx-auto px-6 relative z-20 grid grid-cols-1 lg:grid-cols-12 h-full gap-0 lg:gap-0">
+            <div className="container mx-auto px-6 relative z-20 grid grid-cols-1 lg:grid-cols-12 gap-0 lg:gap-0">
 
               <div className="lg:col-span-7 flex flex-col justify-center items-start text-left pr-0 lg:pr-10 pb-0 lg:pb-0 pt-4 lg:pt-0">
                 <motion.div
@@ -472,7 +459,7 @@ const heroItemVariants = {
                 </motion.div>
               </div>
 
-              <div className="lg:col-span-5 lg:h-full flex items-start lg:items-center justify-center lg:justify-end mt-1 lg:mt-0">
+              <div className="lg:col-span-5 flex items-start justify-center lg:justify-end my-16 lg:my-0">
                 <motion.div
                   initial={{ opacity: 0, x: 20 }}
                   animate={{ opacity: 1, x: 0 }}
