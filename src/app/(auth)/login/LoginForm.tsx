@@ -172,7 +172,7 @@ export default function LoginForm() {
         {/* ✅ Header (identyczny, zmieniony tylko link na 'registerHref') */}
         <header className="fixed top-0 left-0 right-0 z-50 bg-black/30 backdrop-blur-md border-b border-white/10 h-20">
           <div className="container mx-auto px-6 h-full flex justify-between items-center">
-            <Link href="/" className="group flex items-center cursor-pointer">
+            <Link href="https://inflee.app" className="group flex items-center cursor-pointer">
               <div className="w-10 h-10 sm:w-12 sm:h-12 bg-slate-800/70 backdrop-blur-sm rounded-lg ring-1 ring-white/20 flex items-center justify-center p-1 sm:p-1.5 group-hover:ring-white/30 transition-all duration-300 mr-2 sm:mr-3">
                 <Image src="/logoW.png" alt="inflee.app logo" width={48} height={48} className="w-full h-full object-contain" priority />
               </div>
@@ -201,7 +201,7 @@ export default function LoginForm() {
         </header>
 
         {/* ✅ Main (identyczna struktura) */}
-        <main className="pt-16 h-screen">
+        <main className="h-screen">
           <section className="h-full relative">
             <div className="absolute top-0 left-0 w-full h-full z-0 lg:flex lg:justify-start">
               {/* ✅ Zmieniona grafika tła */}
@@ -222,7 +222,7 @@ export default function LoginForm() {
             <div className="absolute top-0 left-0 w-full h-full z-10 bg-[#010101]/80 lg:bg-none lg:bg-gradient-to-r lg:from-transparent lg:via-[#010101]/90 lg:to-[#010101]/90" />
 
             {/* ✅ Grid (identyczny) */}
-            <div className="container mx-auto px-6 relative z-20 grid grid-cols-1 lg:grid-cols-12 h-full gap-0 lg:gap-0">
+            <div className="container mx-auto px-6 relative z-20 grid grid-cols-1 lg:grid-cols-12 h-full gap-0 lg:gap-0 pt-20">
 
               {/* ✅ Lewa strona (zmienione teksty na logowanie) */}
               <div className="lg:col-span-7 flex flex-col justify-center items-start text-left pr-0 lg:pr-10 pb-0 lg:pb-0 pt-4 lg:pt-0">
@@ -273,7 +273,7 @@ export default function LoginForm() {
                   {/* ✅ Usunięty ternary 'registrationSuccess' - tu jest tylko formularz */}
                   <div className="bg-black/40 border border-white/10 backdrop-blur-sm rounded-2xl p-4 md:p-6 w-full max-h-full">
                     <div className="mb-4 hidden lg:block">
-                      <h2 className="text-xl font-bold text-white">{lang === 'en' ? 'Log in to inflee.app' : 'Zaloguj się do inflee.app'}</h2>
+                      <h2 className="text-xl text-slate-300 text-center">{lang === 'en' ? 'Log in to inflee.app' : 'Zaloguj się do inflee.app'}</h2>
                     </div>
 
                     <div className="form-scroll-container p-1">

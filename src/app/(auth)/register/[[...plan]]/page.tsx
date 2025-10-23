@@ -326,11 +326,13 @@ const heroItemVariants = {
         style={{ fontFamily: '"Segoe UI", Roboto, -apple-system, BlinkMacSystemFont, sans-serif' }}
         suppressHydrationWarning
       >
+        {/* ✅ ZMIANA 1: Zaktualizowane style globalne (przewijanie włączone) */}
         <style jsx global>{`
           .register-page-wrapper {
-            min-height: 100vh; /* <-- KLUCZOWA ZMIANA */
+            min-height: 100vh;
             background: #0A0A0A;
             color: white;
+            /* Usunięto: overflow: hidden, position: fixed, height: 100vh */
             width: 100%;
             top: 0;
             left: 0;
@@ -351,13 +353,7 @@ const heroItemVariants = {
             -webkit-text-fill-color: transparent;
           }
           html, body {
-            /* Reguły ukrywające pasek przewijania */
-            -ms-overflow-style: none;  /* IE and Edge */
-            scrollbar-width: none;  /* Firefox */
-          }
-          /* Dodaj też tę nową regułę dla WebKit (Chrome, Safari) */
-          body::-webkit-scrollbar {
-            display: none;
+            /* Usunięto: overflow: hidden, height: 100vh */
           }
           .register-page-wrapper * {
             will-change: auto;
@@ -366,12 +362,17 @@ const heroItemVariants = {
             backface-visibility: hidden;
             -webkit-font-smoothing: antialiased;
           }
-
+          .form-scroll-container {
+            overflow-y: visible; /* Zamiast 'auto' */
+            overflow-x: hidden !important;
+            /* Usunięto: max-height, scrollbar-width, scrollbar-color */
+          }
+          /* Usunięto style ::-webkit-scrollbar */
         `}</style>
 
         <header className="fixed top-0 left-0 right-0 z-50 bg-black/30 backdrop-blur-md border-b border-white/10 h-20">
           <div className="container mx-auto px-6 h-full flex justify-between items-center">
-            <Link href="/" className="group flex items-center cursor-pointer">
+            <Link href="https://inflee.app" className="group flex items-center cursor-pointer">
               <div className="w-10 h-10 sm:w-12 sm:h-12 bg-slate-800/70 backdrop-blur-sm rounded-lg ring-1 ring-white/20 flex items-center justify-center p-1 sm:p-1.5 group-hover:ring-white/30 transition-all duration-300 mr-2 sm:mr-3">
                 <Image src="/logoW.png" alt="inflee.app logo" width={48} height={48} className="w-full h-full object-contain" priority />
               </div>
@@ -400,27 +401,32 @@ const heroItemVariants = {
           </div>
         </header>
 
-        <main className="pt-16 min-h-screen">
-          <section className="relative">
-            <div className="absolute top-0 left-0 w-full h-full z-0 lg:flex lg:justify-start">
-              <Image
-                src={registrationSuccess ? "/heroS.webp" : "/heroR.webp"}
-                alt=""
-                aria-hidden="true"
-                width={1920}
-                height={1080}
-                priority
-                quality={85}
-                className="w-full h-full object-cover object-center lg:w-auto"
-                sizes="100vw"
-              />
-            </div>
+        {/* ✅ ZMIANA 2: Zmiana struktury <main> na 'relative', 'min-h-screen' i 'flex' */}
+        <main className="pt-20 min-h-screen relative flex flex-col justify-center">
 
-            <div className="absolute top-0 left-0 w-full h-full z-10 bg-[#010101]/80 lg:bg-none lg:bg-gradient-to-r lg:from-transparent lg:via-[#010101]/90 lg:to-[#010101]/90" />
+          {/* ✅ ZMIANA 3: Tło i Nakładka przeniesione tutaj (bezpośrednio do <main>) */}
+          <div className="absolute top-0 left-0 w-full h-full z-0 lg:flex lg:justify-start">
+            <Image
+              src={registrationSuccess ? "/heroS.webp" : "/heroR.webp"}
+              alt=""
+              aria-hidden="true"
+              width={1920}
+              height={1080}
+              priority
+              quality={85}
+              className="w-full h-full object-cover object-center lg:w-auto"
+              sizes="100vw"
+            />
+          </div>
+          <div className="absolute top-0 left-0 w-full h-full z-10 bg-[#010101]/80 lg:bg-none lg:bg-gradient-to-r lg:from-transparent lg:via-[#010101]/90 lg:to-[#010101]/90" />
 
+          {/* ✅ ZMIANA 4: <section> jest teraz wewnątrz <main>, ale po Tle */}
+          <section>
+            {/* ✅ ZMIANA 5: Usunięto 'h-full' z kontenera siatki (grid) */}
             <div className="container mx-auto px-6 relative z-20 grid grid-cols-1 lg:grid-cols-12 gap-0 lg:gap-0">
 
-              <div className="lg:col-span-7 flex flex-col justify-center items-start text-left pr-0 lg:pr-10 pb-0 lg:pb-0 pt-4 lg:pt-0">
+              {/* ✅ ZMIANA 6: Dodano 'py-12' dla odstępów na mobile */}
+              <div className="lg:col-span-7 flex flex-col justify-center items-start text-left pr-0 lg:pr-10 pt-12 pb-6 lg:py-0">
                 <motion.div
                   initial="hidden"
                   animate="visible"
@@ -459,7 +465,8 @@ const heroItemVariants = {
                 </motion.div>
               </div>
 
-              <div className="lg:col-span-5 flex items-start justify-center lg:justify-end my-16 lg:my-0">
+              {/* ✅ ZMIANA 7: Zmiana klas dla prawej kolumny (formularza) */}
+              <div className="lg:col-span-5 flex flex-col justify-center items-center lg:items-end pt-6 pb-12 lg:py-0">
                 <motion.div
                   initial={{ opacity: 0, x: 20 }}
                   animate={{ opacity: 1, x: 0 }}
@@ -521,9 +528,10 @@ const heroItemVariants = {
                 ) : (
                     <div className="bg-black/40 border border-white/10 backdrop-blur-sm rounded-2xl p-4 md:p-6 w-full max-h-full">
                       <div className="mb-4 hidden lg:block">
-                        <h2 className="text-xl font-bold text-white">{lang === 'en' ? 'Create your inflee.app account' : 'Utwórz konto w inflee.app'}</h2>
+                        <h2 className="text-xl text-slate-300 text-center">{lang === 'en' ? 'Create your inflee.app account' : 'Utwórz konto w inflee.app'}</h2>
                       </div>
 
+                      {/* Ten kontener ma teraz 'overflow-y: visible' dzięki stylom globalnym */}
                       <div className="form-scroll-container p-1">
                         <button
                           onClick={handleGoogleSignUp}
