@@ -14,6 +14,7 @@ export default function LegalLayout({
   const router = useRouter();
   const searchParams = useSearchParams();
   const lang = searchParams.get('lang') || null;
+  const logoHref = lang === 'en' ? 'https://inflee.app/en' : (lang === 'pl' ? 'https://inflee.app/pl' : 'https://inflee.app');
 
   return (
     <LazyMotion features={domAnimation}>
@@ -68,7 +69,7 @@ export default function LegalLayout({
           <div className="container mx-auto px-6 h-full flex justify-between items-center">
             {/* Logo (skopiowane 1:1) */}
             <Link
-              href="https://inflee.app"
+              href={logoHref}
               className="group flex items-center cursor-pointer"
             >
               <div className="w-10 h-10 sm:w-12 sm:h-12 bg-slate-800/70 backdrop-blur-sm rounded-lg ring-1 ring-white/20 flex items-center justify-center p-1 sm:p-1.5 group-hover:ring-white/30 transition-all duration-300 mr-2 sm:mr-3">

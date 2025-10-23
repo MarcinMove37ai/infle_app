@@ -19,6 +19,8 @@ export default function ForgotPasswordClient() {
   const registerHref = lang ? `/register?lang=${lang}` : '/register';
   const loginHref = lang ? `/login?lang=${lang}` : '/login';
 
+  const logoHref = lang === 'en' ? 'https://inflee.app/en' : (lang === 'pl' ? 'https://inflee.app/pl' : 'https://inflee.app');
+
   // --- Warianty animacji (zapożyczone ze strony logowania) ---
   const heroContainerVariants = {
     hidden: { opacity: 0 },
@@ -159,7 +161,7 @@ export default function ForgotPasswordClient() {
         {/* --- Header (identyczny, zmieniony link na 'loginHref') --- */}
         <header className="fixed top-0 left-0 right-0 z-50 bg-black/30 backdrop-blur-md border-b border-white/10 h-20">
           <div className="container mx-auto px-6 h-full flex justify-between items-center">
-            <Link href="https://inflee.app" className="group flex items-center cursor-pointer">
+            <Link href={logoHref} className="group flex items-center cursor-pointer">
               <div className="w-10 h-10 sm:w-12 sm:h-12 bg-slate-800/70 backdrop-blur-sm rounded-lg ring-1 ring-white/20 flex items-center justify-center p-1 sm:p-1.5 group-hover:ring-white/30 transition-all duration-300 mr-2 sm:mr-3">
                 <Image src="/logoW.png" alt="inflee.app logo" width={48} height={48} className="w-full h-full object-contain" priority />
               </div>
