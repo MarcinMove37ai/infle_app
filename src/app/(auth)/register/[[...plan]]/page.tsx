@@ -60,6 +60,9 @@ export default function RegisterPage({
   // ✅ POPRAWKA: Tworzymy dynamiczny link do logowania, który zachowuje parametr 'lang'
   const loginHref = lang ? `/login?lang=${lang}` : '/login';
 
+  const termsHref = lang ? `/terms?lang=${lang}` : '/terms';
+  const privacyHref = lang ? `/privacy?lang=${lang}` : '/privacy';
+
   const heroContainerVariants = {
   hidden: { opacity: 0 },
   visible: {
@@ -744,11 +747,11 @@ const heroItemVariants = {
                               <div className="ml-2 text-xs">
                                 <label htmlFor="termsAccepted" className="text-slate-400">
                                   {lang === 'en' ? 'I have read and agree to the ' : 'Zapoznałem się z '}
-                                  <a href="/terms" target="_blank" className="font-medium text-indigo-400 hover:text-indigo-300 hover:underline">
+                                  <a href={termsHref} target="_blank" className="font-medium text-indigo-400 hover:text-indigo-300 hover:underline">
                                     {lang === 'en' ? 'Terms of Service' : 'regulaminem'}
                                   </a>
                                   {lang === 'en' ? ' and ' : ' i '}
-                                  <a href="/privacy" target="_blank" className="font-medium text-indigo-400 hover:text-indigo-300 hover:underline">
+                                  <a href={privacyHref} target="_blank" className="font-medium text-indigo-400 hover:text-indigo-300 hover:underline">
                                     {lang === 'en' ? 'Privacy Policy' : 'polityką prywatności'}
                                   </a>.
                                 </label>
