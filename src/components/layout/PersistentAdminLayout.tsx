@@ -175,7 +175,7 @@ const menuItems: MenuItem[] = [
     IconComponent: LinkedInIcon,
     label: 'LinkedIn App',
     path: '/linkedin_app',
-    roles: ['ADMIN', 'USER', 'GOD'],
+    roles: ['ADMIN', 'USER', 'GOD',],
     requiredStatus: ['active'],
     iconType: 'linkedin'
   },

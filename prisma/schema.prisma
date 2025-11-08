@@ -396,6 +396,7 @@ enum Role {
   free
   payd
   premium
+  GOD
 }
 
 enum SourceType {
