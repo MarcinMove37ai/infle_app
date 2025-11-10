@@ -50,7 +50,7 @@ interface PagesApiResponse {
 const PagesView = () => {
   const { user, userRole, isAuthenticated, isLoading: isAuthLoading } = useAuth();
   const coverImageSize = 240;
-  const [activeFilter, setActiveFilter] = useState<'all' | 'published' | 'draft'>('all');
+  const [activeFilter, setActiveFilter] = useState<'all' | 'published' | 'draft' | 'pending'>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
   const [pages, setPages] = useState<PageItem[]>([]);
@@ -290,6 +290,8 @@ const PagesView = () => {
         params.append('status', 'published');
       } else if (activeFilter === 'draft') {
         params.append('status', 'draft');
+      } else if (activeFilter === 'pending') {
+        params.append('status', 'pending');
       }
 
       if (searchTerm.trim()) {
@@ -357,7 +359,7 @@ const PagesView = () => {
     setDeleteError(null);
   };
 
-  const handleFilterClick = (filter: 'all' | 'published' | 'draft') => {
+  const handleFilterClick = (filter: 'all' | 'published' | 'draft' | 'pending') => {
     setActiveFilter(filter);
   };
 
@@ -487,9 +489,9 @@ const PagesView = () => {
             </div>
           </button>
           <button
-            onClick={() => handleFilterClick('draft')}
+            onClick={() => handleFilterClick('pending')}
             className={`bg-orange-50 rounded-xl p-4 sm:p-6 border transition-all duration-200 text-left hover:shadow-md sm:col-span-2 lg:col-span-1 cursor-pointer ${
-              activeFilter === 'draft' ? 'border-orange-400 ring-2 ring-orange-200 bg-orange-100' : 'border-orange-200 hover:border-orange-300'
+              activeFilter === 'pending' ? 'border-orange-400 ring-2 ring-orange-200 bg-orange-100' : 'border-orange-200 hover:border-orange-300'
             }`}
           >
             <div className="flex items-center justify-between">
