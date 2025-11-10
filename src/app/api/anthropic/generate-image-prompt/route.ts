@@ -152,10 +152,14 @@ export async function POST(request: Request) {
     } = body;
 
     // ✅ LOGIKA KLUCZY API
+    const BASIC_AI_MODEL = process.env.BASIC_AI_MODEL || 'claude-3-5-haiku-20241022';
+    const PREMIUM_AI_MODEL = process.env.PREMIUM_AI_MODEL || 'claude-sonnet-4-20250514';
+
+    // ✅ LOGIKA KLUCZY API
     let anthropicApiKey: string | null = null;
     let keySource: 'user' | 'env' | 'none' = 'none';
     let userAiSettings: any = null;
-    let modelToUse: string = 'claude-3-5-haiku-20241022';
+    let modelToUse: string = BASIC_AI_MODEL;
 
     if (!isInternalRequest) {
       const session = await getServerSession(authOptions);
@@ -172,8 +176,8 @@ export async function POST(request: Request) {
 
         userAiSettings = await getUserAiSettings(userId);
         modelToUse = userAiSettings.textAiModel === 'claude-3-sonnet'
-          ? 'claude-sonnet-4-20250514'
-          : 'claude-3-5-haiku-20241022';
+          ? PREMIUM_AI_MODEL
+          : BASIC_AI_MODEL;
       }
     } else {
       anthropicApiKey = process.env.ANTHROPIC_API_KEY ?? null;

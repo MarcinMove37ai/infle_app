@@ -70,10 +70,13 @@ export async function POST(request: Request) {
     }
 
     // NOWA LOGIKA: Pobierz ustawienia AI uzytkownika
+    const BASIC_AI_MODEL = process.env.BASIC_AI_MODEL || 'claude-3-5-haiku-20241022';
+    const PREMIUM_AI_MODEL = process.env.PREMIUM_AI_MODEL || 'claude-sonnet-4-20250514';
+
     const userAiSettings = await getUserAiSettings(userId);
     const modelToUse = userAiSettings.textAiModel === 'claude-3-sonnet'
-      ? 'claude-sonnet-4-20250514'
-      : 'claude-3-5-haiku-20241022'; // fallback dla haiku
+      ? PREMIUM_AI_MODEL
+      : BASIC_AI_MODEL;
 
     console.log(`Uzywam modelu: ${modelToUse} (provider: ${userAiSettings.textAiProvider})`);
     console.log(`Zrodlo klucza API: ${keySource} ${keySource === 'user' ? '(klucz uzytkownika)' : '(klucz systemowy)'}`);

@@ -56,7 +56,7 @@ interface PageContentJSON {
 }
 
 // Funkcja do wywołania API Anthropic
-async function callAnthropicAPI(apiKey: string, prompt: string): Promise<AnthropicResponse> {
+async function callAnthropicAPI(apiKey: string, prompt: string, model: string): Promise<AnthropicResponse> {
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -65,7 +65,7 @@ async function callAnthropicAPI(apiKey: string, prompt: string): Promise<Anthrop
       'anthropic-version': '2023-06-01'
     },
     body: JSON.stringify({
-      model: "claude-3-5-sonnet-20241022", // Używamy nowszego modelu niż w Lambda
+      model: model, // ✅ ZMIANA: Używaj parametru zamiast hardcoded
       max_tokens: 4000,
       messages: [
         {
@@ -174,6 +174,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Brak autoryzacji.' }, { status: 401 });
     }
     const userId = session.user.id;
+
+    // ✅ DEFINICJE MODELI ZE ZMIENNYCH ŚRODOWISKOWYCH
+    const BASIC_AI_MODEL = process.env.BASIC_AI_MODEL || 'claude-3-5-haiku-20241022';
+    const PREMIUM_AI_MODEL = process.env.PREMIUM_AI_MODEL || 'claude-sonnet-4-20250514';
+
+    // Domyślnie używamy basic model (możesz dodać logikę wyboru na podstawie ustawień użytkownika)
+    const modelToUse = BASIC_AI_MODEL;
 
     // 2. Pobranie danych z ciała żądania
     const { pageId, ebookId } = await request.json();
@@ -349,7 +356,8 @@ Oto instrukcje dla każdego pola:
 
     // 10. Wywołanie API Anthropic
     console.log('Wysyłanie żądania do API Anthropic...');
-    const apiResponse = await callAnthropicAPI(anthropicApiKey, prompt);
+    console.log(`🤖 Używam modelu: ${modelToUse}`);
+    const apiResponse = await callAnthropicAPI(anthropicApiKey, prompt, modelToUse);
     console.log('Otrzymano odpowiedź z API Anthropic');
 
     // 11. Parsowanie odpowiedzi JSON

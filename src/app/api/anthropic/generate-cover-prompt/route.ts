@@ -97,6 +97,9 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { title, subtitle, chapters, targetModel } = body;
 
+    const BASIC_AI_MODEL = process.env.BASIC_AI_MODEL || 'claude-3-5-haiku-20241022';
+    const PREMIUM_AI_MODEL = process.env.PREMIUM_AI_MODEL || 'claude-sonnet-4-20250514';
+
     if (!title || !chapters || !Array.isArray(chapters)) {
       return NextResponse.json(
         { error: 'Nieprawidłowe dane wejściowe. Wymagany tytuł ebooka i lista rozdziałów.' },
@@ -109,7 +112,7 @@ export async function POST(request: Request) {
     let anthropicApiKey: string | null = null;
     let keySource: 'user' | 'env' | 'none' = 'none';
     let userAiSettings: any = null;
-    let textModelToUse: string = 'claude-3-5-haiku-20241022'; // fallback default
+    let textModelToUse: string = BASIC_AI_MODEL; // fallback default
 
     if (!isInternalRequest) {
       const session = await getServerSession(authOptions);
@@ -129,8 +132,8 @@ export async function POST(request: Request) {
         keySource = source;
 
         textModelToUse = userAiSettings.textAiModel === 'claude-3-sonnet'
-          ? 'claude-sonnet-4-20250514'
-          : 'claude-3-5-haiku-20241022';
+          ? PREMIUM_AI_MODEL
+          : BASIC_AI_MODEL;
 
         console.log(`🖼️ Image Model (target): ${imageModel}`);
         console.log(`🤖 Text Model: ${textModelToUse} (provider: ${userAiSettings.textAiProvider})`);

@@ -394,6 +394,10 @@ enum Role {
   admin
   demo
   free
+  free_ver
+  rookie
+  creator
+  unlimited
   payd
   premium
   GOD

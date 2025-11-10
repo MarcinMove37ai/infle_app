@@ -160,6 +160,11 @@ export async function POST(request: NextRequest) {
 
     // 5. POBRANIE KLUCZA API ANTHROPIC (identycznie jak w generate-single-chapter)
     const userId = session.user.id;
+
+    // ✅ DEFINICJE MODELI ZE ZMIENNYCH ŚRODOWISKOWYCH
+    const BASIC_AI_MODEL = process.env.BASIC_AI_MODEL || 'claude-3-5-haiku-20241022';
+    const PREMIUM_AI_MODEL = process.env.PREMIUM_AI_MODEL || 'claude-sonnet-4-20250514';
+
     const { apiKey: anthropicApiKey, source: keySource } = await getApiKeyForEndpoint(
       userId,
       'anthropic',
@@ -173,11 +178,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 6. ✅ POPRAWKA: WYBÓR MODELU Z USTAWIEŃ UŻYTKOWNIKA (analogicznie jak w generate-toc)
+    // 6. ✅ WYBÓR MODELU Z USTAWIEŃ UŻYTKOWNIKA
     const userAiSettings = await getUserAiSettings(userId);
     const modelToUse = userAiSettings.textAiModel === 'claude-3-sonnet'
-      ? 'claude-sonnet-4-20250514'
-      : 'claude-3-5-haiku-20241022'; // fallback dla haiku
+      ? PREMIUM_AI_MODEL
+      : BASIC_AI_MODEL;
 
     console.log(`🤖 Używam modelu: ${modelToUse} (provider: ${userAiSettings.textAiProvider})`);
     console.log(`🔑 Źródło klucza API: ${keySource} ${keySource === 'user' ? '(klucz użytkownika)' : '(klucz systemowy)'}`);
