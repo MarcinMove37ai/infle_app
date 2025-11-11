@@ -35,8 +35,8 @@ const COVER_MODEL_CONFIGS = {
     supports_text_rendering: true,
     always_returns_base64: true,
     requires_user_key: true,
-    api_model: "imagen-3.0-generate-002",
-    api_method: "generateImages",
+    api_model: "gemini-2.5-flash-image-preview",
+    api_method: "generateContent",
     max_images: 4,
     cover_optimized: true
   },
@@ -304,7 +304,13 @@ const callGoogleCoverGeneration = async (
       }],
       generation_config: {
         temperature: 1,
-        responseModalities: ["TEXT", "IMAGE"] // Gemini wymaga obu
+        responseModalities: ["TEXT", "IMAGE"],
+
+        // ⬇️ --- DODANA SEKCJA --- ⬇️
+        imageConfig: {
+           aspectRatio: "1:1" // Wymagane dla okładki (kwadrat)
+        }
+        // ⬆️ --- KONIEC DODANEJ SEKCJI --- ⬆️
       }
     };
   }

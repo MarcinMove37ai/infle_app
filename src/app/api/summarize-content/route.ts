@@ -75,6 +75,7 @@ interface SummarizeRequest {
   title: string;         // Tytuł źródła
   sourceType: 'web' | 'pdf'; // Typ źródła
   sourceUrl?: string;    // URL źródła (opcjonalny)
+  model?: string;        // Opcjonalny model wysłany z frontendu
 }
 
 // Interfejs dla Anthropic API
@@ -127,7 +128,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { content, targetLength, title, sourceType, sourceUrl } = body;
+    const { content, targetLength, title, sourceType, sourceUrl, model: modelFromRequest } = body;
 
     // 3. WALIDACJA PODSTAWOWYCH DANYCH
     if (!content || !targetLength || !title) {
@@ -180,9 +181,20 @@ export async function POST(request: NextRequest) {
 
     // 6. ✅ WYBÓR MODELU Z USTAWIEŃ UŻYTKOWNIKA
     const userAiSettings = await getUserAiSettings(userId);
-    const modelToUse = userAiSettings.textAiModel === 'claude-3-sonnet'
-      ? PREMIUM_AI_MODEL
-      : BASIC_AI_MODEL;
+
+    let modelToUse: string;
+
+    // Użyj 'modelFromRequest' (z body.model), jeśli zostało wysłane
+    if (modelFromRequest === "PREMIUM_AI_MODEL") {
+      modelToUse = PREMIUM_AI_MODEL;
+      console.log('🤖 Wybrano model PREMIUM (z żądania frontendu)');
+    } else {
+      // W przeciwnym razie użyj domyślnych ustawień użytkownika
+      modelToUse = userAiSettings.textAiModel === 'claude-3-sonnet'
+        ? PREMIUM_AI_MODEL
+        : BASIC_AI_MODEL;
+      console.log(`🤖 Wybrano model DOMYŚLNY (z ustawień użytkownika: ${userAiSettings.textAiModel})`);
+    }
 
     console.log(`🤖 Używam modelu: ${modelToUse} (provider: ${userAiSettings.textAiProvider})`);
     console.log(`🔑 Źródło klucza API: ${keySource} ${keySource === 'user' ? '(klucz użytkownika)' : '(klucz systemowy)'}`);

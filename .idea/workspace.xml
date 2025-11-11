@@ -5,10 +5,15 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="46749596-836e-4f8d-af4b-57221a03aed3" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/public/logo_inflee.webp" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/app/api/admin/upload-default-logo/route.ts" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/app/api/auth/register/route.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/app/api/auth/register/route.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/app/api/anthropic/generate-toc/route.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/app/api/anthropic/generate-toc/route.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/app/api/ebooks/[ebookId]/chapters/[chapterId]/generate-image/route.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/app/api/ebooks/[ebookId]/chapters/[chapterId]/generate-image/route.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/app/api/ebooks/[ebookId]/generate-cover/route.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/app/api/ebooks/[ebookId]/generate-cover/route.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/app/api/summarize-content/route.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/app/api/summarize-content/route.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/components/ebooks/EbookGeneratorModal.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/components/ebooks/EbookGeneratorModal.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/components/ebooks/SourcePreviewModal.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/components/ebooks/SourcePreviewModal.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/components/layout/PersistentAdminLayout.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/components/layout/PersistentAdminLayout.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/components/pages/UstawieniaContent.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/components/pages/UstawieniaContent.tsx" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />

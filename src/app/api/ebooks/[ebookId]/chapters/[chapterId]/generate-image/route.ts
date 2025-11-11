@@ -29,15 +29,15 @@ const MODEL_CONFIGS = {
     optimalLength: 1500,
     quality: "high" as const,
     costEstimate: 0.03,
-    sizes: ['1024x1024', '1024x1536', '1536x1024'],
+    sizes: ['1536x1024'],
     landscape_size: '1536x1024',
     enhancement_level: "standard",
     supports_transparency: false,
     supports_text_rendering: true,
     always_returns_base64: true,
     requires_user_key: true,
-    api_model: "imagen-3.0-generate-002", // ✅ POPRAWNE ID
-    api_method: "generateImages" // ✅ METODA DLA IMAGEN
+    api_model: "gemini-2.5-flash-image-preview",
+    api_method: "generateContent"
   ,
     max_images: 4
   },
@@ -230,10 +230,12 @@ const selectOptimalModel = async (userId: string | null): Promise<{
 // ✅ POPRAWIONA FUNKCJA callGoogleImageGeneration
 // src/app/api/ebooks/[ebookId]/chapters/[chapterId]/generate-image/route.ts
 
+// src/app/api/ebooks/[ebookId]/chapters/[chapterId]/generate-image/route.ts
+
 const callGoogleImageGeneration = async (
   model: string,
   prompt: string,
-  size: string,
+  size: string, // Zmienna 'size' nie będzie już używana do ustawiania proporcji
   apiKey: string | null
 ): Promise<any> => {
   console.log(`🎨 === GOOGLE ${model.toUpperCase()} GENERATION ===`);
@@ -255,42 +257,47 @@ const callGoogleImageGeneration = async (
   let apiUrl: string;
   let requestBody: any;
 
+  // ⬇️ --- POCZĄTEK POPRAWKI --- ⬇️
+  // Na stałe ustawiamy proporcje poziome dla wszystkich modeli w tym endpoincie
+  const horizontalAspectRatio = "16:9";
+  // ⬆️ --- KONIEC POPRAWKI --- ⬆️
+
   if (modelConfig.provider === 'google' && 'api_method' in modelConfig && (modelConfig as any).api_method === 'generateImages') {
+    // --- BLOK DLA IMAGEN (:predict) ---
     apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${(modelConfig as any).api_model}:predict`;
 
-    // <-- ZMIANA: Domyślnie ustawiamy proporcje poziome (landscape) -->
-    let aspectRatio = "16:9"; // Poprzednio było "1:1"
-    if (size === "1024x1024") {
-      aspectRatio = "1:1";
-    } else if (size === "1024x1536") {
-      aspectRatio = "3:4";
-    }
-    // Warunek dla "1536x1024" nie jest już potrzebny, ponieważ stał się wartością domyślną.
-    // <-- KONIEC ZMIANY -->
-
+    // Usunięto logikę warunkową. Wymuszamy format poziomy 16:9
     requestBody = {
       instances: [{ prompt: prompt }],
       parameters: {
         sampleCount: 1,
-        aspectRatio: aspectRatio,
+        aspectRatio: horizontalAspectRatio, // Zawsze poziomo
         personGeneration: "allow_adult"
       }
     };
+
   } else {
+    // --- BLOK DLA GEMINI (:generateContent) ---
     apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${(modelConfig as any).api_model}:generateContent`;
+
+    // Dodano 'imageConfig' aby wymusić format poziomy 16:9
     requestBody = {
       contents: [{
         parts: [{ text: prompt }]
       }],
       generation_config: {
         temperature: 0.8,
-        responseModalities: ["TEXT", "IMAGE"]
+        responseModalities: ["TEXT", "IMAGE"],
+        imageConfig: { // Dodano konfigurację obrazu
+          aspectRatio: horizontalAspectRatio // Zawsze poziomo
+        }
       }
     };
   }
 
   console.log(`   - API URL: ${apiUrl}`);
   console.log(`   - Request type: ${'api_method' in modelConfig ? (modelConfig as any).api_method : 'OpenAI'}`);
+  console.log(`   - Aspect Ratio: ${horizontalAspectRatio} (forced)`); // Dodatkowy log dla pewności
 
   const response = await fetch(apiUrl, {
     method: 'POST',

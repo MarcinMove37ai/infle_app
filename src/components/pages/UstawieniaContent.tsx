@@ -2,7 +2,7 @@
 'use client';
 
 import DiskExplorerModal from '@/components/ui/DiskExplorerModal';
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   User, Key, Eye, EyeOff, Save, Trash2, CheckCircle, AlertCircle, Loader2,
   Palette, Type, ChevronDown, Check, Image as ImageIcon, X, AlertTriangle, FolderOpen,
@@ -316,7 +316,42 @@ const ProviderSelector = ({
 };
 
 export default function SettingsContent() {
-  const { user } = useAuth();
+  const { user, userRole } = useAuth();
+  console.log("DEBUG: ROLA UŻYTKOWNIKA:", userRole, "CAŁY UŻYTKOWNIK:", user);
+
+  // 1) PRZENIESIONE TU — zanim użyjesz w useMemo
+  const [subscriptionBasics, setSubscriptionBasics] = useState<{
+    status: string;
+    planName: string;
+    isActive: boolean;
+    renewsAt: string | null;
+    loading: boolean;
+  } | null>(null);
+
+  // 2) POPRAWIONE — uprawnienia do logo na podstawie ROLI
+  const canCustomizeLogo = useMemo(() => {
+      // Pobierz rolę użytkownika
+      const roleRaw = userRole ?? ''; // <-- POPRAWKA
+      const role = String(roleRaw).toLowerCase();
+
+      // Zestaw ról, które NIE MOGĄ edytować
+      const restricted = new Set(['free', 'free_ver', 'rookie']);
+
+      // Jeśli rola nie jest określona, blokuj
+      if (!role) return false;
+
+      // Zwróć 'true' (może edytować), jeśli rola NIE ZNAJDUJE SIĘ na liście zablokowanych
+      return !restricted.has(role);
+
+  }, [userRole]); // <-- POPRAWKA
+
+
+
+
+
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+  const defaultAppLogoUrl = `${baseUrl}/api/assets/uploads/logo_inflee.webp`;
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   const [settings, setSettings] = useState<UserSettings>({
     username: '',
@@ -337,14 +372,6 @@ export default function SettingsContent() {
   const [imageAspectRatio, setImageAspectRatio] = useState<number | null>(null);
   const [isLoadingApiKeys, setIsLoadingApiKeys] = useState(false);
   const [isSavingAiSettings, setIsSavingAiSettings] = useState(false);
-
-  const [subscriptionBasics, setSubscriptionBasics] = useState<{
-    status: string;
-    planName: string;
-    isActive: boolean;
-    renewsAt: string | null;
-    loading: boolean;
-  } | null>(null);
 
   const [apiKeys, setApiKeys] = useState<Record<string, ApiKey>>({
     anthropic: { value: '', showValue: false, isSaved: false },
@@ -491,7 +518,7 @@ export default function SettingsContent() {
             setSettings(prev => ({
               ...prev,
               username: authorSettings.authorDisplayName || authorSettings.fallbackName,
-              logo: logoUrl,
+              logo: logoUrl || defaultAppLogoUrl,
               textProvider: authorSettings.textAiProvider || 'anthropic',
               textModel: authorSettings.textAiModel || 'claude-3-haiku',
               imageProvider: authorSettings.imageAiProvider || 'google',
@@ -1057,7 +1084,7 @@ export default function SettingsContent() {
         const data = await response.json();
         const authorSettings: AuthorSettings = data.authorSettings;
 
-        setSettings(prev => ({ ...prev, logo: null }));
+        setSettings(prev => ({ ...prev, logo: defaultAppLogoUrl }));
 
         setMessage({ type: 'success', text: 'Avatar has been removed' });
         console.log('✅ Avatar removed');
@@ -1123,6 +1150,12 @@ export default function SettingsContent() {
     setConfirmModal(prev => ({ ...prev, isOpen: false }));
   }, []);
 
+  const triggerFileInput = useCallback(() => {
+    if (canCustomizeLogo) {
+      fileInputRef.current?.click();
+    }
+  }, [canCustomizeLogo]);
+
   return (
     <div className="space-y-8">
       {/* Author Profile */}
@@ -1135,7 +1168,7 @@ export default function SettingsContent() {
           )}
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div>
+          <div className="space-y-6">
             <label className="block text-sm font-medium text-gray-700 mb-2">Author Name</label>
             <div className="relative">
               <input
@@ -1162,99 +1195,216 @@ export default function SettingsContent() {
                 </button>
               )}
             </div>
-            <p className="text-xs text-gray-500 mt-1">Visible in the ebook footer and on landing pages</p>
+
+            {/* Subskrypcja w tej samej kolumnie */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Subskrypcja</label>
+              {subscriptionBasics && !subscriptionBasics.loading ? (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border-2 border-gray-200">
+                    <div>
+                      <p className="text-sm text-gray-600">Aktualny plan</p>
+                      <p className="text-lg font-semibold text-gray-900">{subscriptionBasics.planName}</p>
+                    </div>
+                    <div>
+                      {subscriptionBasics.isActive ? (
+                        <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-medium">
+                          Aktywna
+                        </span>
+                      ) : (
+                        <span className="px-3 py-1 bg-gray-200 text-gray-700 rounded-full text-sm font-medium">
+                          Nieaktywna
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {subscriptionBasics.renewsAt && (
+                    <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg">
+                      <p className="text-sm text-blue-900">
+                        <span className="font-medium">Odnowienie:</span>{' '}
+                        {new Date(subscriptionBasics.renewsAt).toLocaleDateString('pl-PL', {
+                          day: 'numeric',
+                          month: 'long',
+                          year: 'numeric'
+                        })}
+                      </p>
+                    </div>
+                  )}
+
+                  <Link
+                    href="/subscription"
+                    className="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors w-full justify-center"
+                  >
+                    <CreditCard className="h-4 w-4 mr-2" />
+                    Zarządzaj subskrypcją
+                  </Link>
+                </div>
+              ) : (
+                <div className="flex items-center justify-center py-8 border-2 border-gray-200 rounded-lg">
+                  <Loader2 className="h-6 w-6 text-gray-400 animate-spin" />
+                </div>
+              )}
+            </div>
           </div>
+
+          {/* Prawa kolumna - Logo */}
+          {/* Prawa kolumna - Logo */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Author Logo / Photo</label>
-            {settings.logo || isUploadingAvatar ? (
-              <div
-                className="relative group border-2 border-gray-200 rounded-lg overflow-hidden flex items-center justify-center bg-gray-50"
-                style={{
-                  width: '100%',
-                  height: imageAspectRatio
-                    ? imageAspectRatio >= 1
-                      ? '200px'
-                      : `${Math.min(400 / imageAspectRatio, 400)}px`
-                    : '200px',
-                  minHeight: '200px',
-                  maxHeight: '400px'
-                }}
-              >
-                {isUploadingAvatar ? (
-                  <div className="flex flex-col items-center justify-center text-gray-500">
-                    <Loader2 className="h-8 w-8 animate-spin mb-2" />
-                    <span className="text-sm font-medium">Processing...</span>
-                  </div>
-                ) : (
-                  <img
-                    src={settings.logo!}
-                    alt="Logo"
-                    className="max-w-full max-h-full object-contain"
-                    style={{
-                      objectFit: 'contain',
-                      width: '100%',
-                      height: '100%'
-                    }}
-                    key={settings.logo}
-                    onLoad={handleImageLoad}
-                    onError={(e) => {
-                      console.error('❌ Error loading image:', settings.logo);
-                      resetImageAspectRatio();
-                    }}
-                  />
-                )}
-                {isDeletingAvatar && (
-                  <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-                    <Loader2 className="h-6 w-6 text-white animate-spin" />
-                  </div>
-                )}
-                <button
-                  onClick={removeLogo}
-                  disabled={isDeletingAvatar || isUploadingAvatar}
-                  className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed"
+            <div className="relative group">
+              {settings.logo || isUploadingAvatar ? (
+                <div
+                  // ZAKTUALIZUJ TĘ LINIĘ:
+                  className={`relative border-2 border-gray-200 rounded-lg overflow-hidden flex items-center justify-center bg-white ${canCustomizeLogo ? 'cursor-pointer hover:border-gray-300' : ''}`}
+                  style={{
+                    width: '100%',
+                    height: '200px',
+                    padding: '16px'
+                  }}
+                  onClick={triggerFileInput} // <-- DODAJ TĘ LINIĘ
                 >
-                  {isDeletingAvatar ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
+                  {isUploadingAvatar ? (
+                    <div className="flex flex-col items-center justify-center text-gray-500">
+                      <Loader2 className="h-8 w-8 animate-spin mb-2" />
+                      <span className="text-sm font-medium">Processing...</span>
+                    </div>
                   ) : (
-                    <X className="h-4 w-4" />
+                    <img
+                      src={settings.logo!}
+                      alt="Logo"
+                      className="max-w-full max-h-full"
+                      style={{
+                        objectFit: 'contain',
+                        width: 'auto',
+                        height: 'auto',
+                        maxWidth: '100%',
+                        maxHeight: '100%'
+                      }}
+                      key={settings.logo}
+                      onLoad={handleImageLoad}
+                      onError={(e) => {
+                        console.error('❌ Error loading image:', settings.logo);
+                        resetImageAspectRatio();
+                      }}
+                    />
                   )}
-                </button>
-              </div>
-            ) : (
-              <label className="w-full h-32 bg-gray-50 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-gray-400 hover:bg-gray-100 transition-colors flex flex-col items-center justify-center relative">
-                {isUploadingAvatar ? (
-                  <>
-                    <Loader2 className="h-8 w-8 text-gray-400 mb-2 animate-spin" />
-                    <span className="text-sm font-medium text-gray-600">Uploading...</span>
-                    <span className="text-xs text-gray-500">Processing avatar</span>
-                  </>
-                ) : (
-                  <>
-                    <ImageIcon className="h-8 w-8 text-gray-400 mb-2" />
-                    <span className="text-sm font-medium text-gray-600">Add logo</span>
-                    <span className="text-xs text-gray-500">PNG, JPG up to 5MB</span>
-                  </>
-                )}
-                <input
-                  type="file"
-                  className="hidden"
-                  accept="image/*"
-                  onChange={handleLogoUpload}
-                  disabled={isUploadingAvatar || isDeletingAvatar}
-                />
-              </label>
+                  {isDeletingAvatar && (
+                    <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+                      <Loader2 className="h-6 w-6 text-white animate-spin" />
+                    </div>
+                  )}
+
+                  {/* ⛔️ CAŁY TEN BLOK ZOSTAŁ USUNIĘTY ⛔️ */}
+                  {/* {canCustomizeLogo && (
+                    <button
+                      onClick={removeLogo}
+                      disabled={isDeletingAvatar || isUploadingAvatar}
+                      className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isDeletingAvatar ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <X className="h-4 w-4" />
+                      )}
+                    </button>
+                  )} */}
+
+                  {/* Overlay z monitem dla użytkowników bez uprawnień */}
+                  {!canCustomizeLogo && (
+                    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center p-4">
+                      <div className="text-center space-y-2">
+                        <AlertTriangle className="w-8 h-8 text-amber-400 mx-auto" />
+                        <p className="text-white text-sm font-medium">Własne logo dostępne w planach Creator oraz Unlimited</p>
+                        <Link
+                          href="/subscribe"
+                          className="inline-flex items-center px-3 py-1.5 bg-white text-gray-900 text-xs font-medium rounded-lg hover:bg-gray-100 transition-colors"
+                        >
+                          <CreditCard className="w-3 h-3 mr-1.5" />
+                          Zaktualizuj swój Plan Inflee.app
+                        </Link>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <label
+                  onClick={triggerFileInput}
+                  className={`w-full h-32 bg-gray-50 border-2 border-dashed border-gray-300 rounded-lg ${canCustomizeLogo ? 'cursor-pointer hover:border-gray-400 hover:bg-gray-100' : 'cursor-not-allowed'} transition-colors flex flex-col items-center justify-center relative`}>
+                  {isUploadingAvatar ? (
+                    <>
+                      <Loader2 className="h-8 w-8 text-gray-400 mb-2 animate-spin" />
+                      <span className="text-sm font-medium text-gray-600">Uploading...</span>
+                      <span className="text-xs text-gray-500">Processing avatar</span>
+                    </>
+                  ) : (
+                    <>
+                      <ImageIcon className="h-8 w-8 text-gray-400 mb-2" />
+                      <span className="text-sm font-medium text-gray-600">Add logo</span>
+                      <span className="text-xs text-gray-500">PNG, JPG up to 5MB</span>
+                    </>
+                  )}
+
+
+                  {/* Overlay dla użytkowników bez uprawnień */}
+                  {!canCustomizeLogo && (
+                    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm opacity-0 hover:opacity-100 transition-opacity duration-200 flex items-center justify-center p-4 rounded-lg">
+                      <div className="text-center space-y-2">
+                        <AlertTriangle className="w-8 h-8 text-amber-400 mx-auto" />
+                        <p className="text-white text-sm font-medium">Custom logo available in paid plans</p>
+                        <Link
+                          href="/subscription"
+                          className="inline-flex items-center px-3 py-1.5 bg-white text-gray-900 text-xs font-medium rounded-lg hover:bg-gray-100 transition-colors"
+                        >
+                          <CreditCard className="w-3 h-3 mr-1.5" />
+                          Upgrade
+                        </Link>
+                      </div>
+                    </div>
+                  )}
+                </label>
+              )}
+            </div>
+
+            {canCustomizeLogo && (
+              <input
+                type="file"
+                className="hidden"
+                accept="image/*"
+                onChange={handleLogoUpload}
+                disabled={isUploadingAvatar || isDeletingAvatar}
+                ref={fileInputRef}
+              />
             )}
+
+            {/* DODAJ TEN NOWY PRZYCISK PONIŻEJ */}
+            {canCustomizeLogo && settings.logo !== defaultAppLogoUrl && !isUploadingAvatar && (
+              <button
+                onClick={removeLogo} // Wywołuje zmodyfikowaną funkcję 'removeLogo'
+                disabled={isDeletingAvatar}
+                className="mt-2 w-full flex items-center justify-center px-3 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50"
+              >
+                {isDeletingAvatar ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : (
+                  <ImageIcon className="h-4 w-4 mr-2" />
+                )}
+                Przywróć domyślne logo
+              </button>
+            )}
+
             <p className="text-xs text-gray-500 mt-1">Visible in the cover header and on landing pages</p>
           </div>
         </div>
       </div>
 
-      {/* AI Configuration */}
-      <div className="space-y-8">
-        <div className="text-center space-y-2">
-          <h2 className="text-2xl font-semibold text-gray-900">AI Configuration</h2>
-          <p className="text-gray-600">Choose models and configure API keys</p>
-        </div>
+      {/* AI Configuration - tylko dla GOD */}
+      {userRole?.toUpperCase() === 'GOD' && (
+        <div className="space-y-8">
+          <div className="text-center space-y-2">
+            <h2 className="text-2xl font-semibold text-gray-900">AI Configuration</h2>
+            <p className="text-gray-600">Choose models and configure API keys</p>
+          </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           {/* Text Generation */}
@@ -1453,93 +1603,38 @@ export default function SettingsContent() {
             )}
           </div>
         </div>
-      </div>
+        </div>
+      )}
 
       {/* Grid for Subscription and System Management */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Subscription Management */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <div className="flex items-center mb-6">
-            <CreditCard className="h-5 w-5 text-blue-600 mr-2" />
-            <h2 className="text-xl font-bold text-gray-900">Subskrypcja</h2>
-            {subscriptionBasics?.loading && (
-              <Loader2 className="h-4 w-4 text-gray-400 ml-2 animate-spin" />
-            )}
-          </div>
+        {/* System Management - teraz widoczny tylko dla GOD */}
+        {userRole?.toUpperCase() === 'GOD' && (
+          <div className="bg-white rounded-xl border border-gray-200 p-6">
+            <div className="flex items-center mb-6">
+              <FolderOpen className="h-5 w-5 text-gray-600 mr-2" />
+              <h2 className="text-xl font-bold text-gray-900">System Management</h2>
+            </div>
 
-          {subscriptionBasics && !subscriptionBasics.loading ? (
             <div className="space-y-4">
-              <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                <div>
-                  <p className="text-sm text-gray-600">Aktualny plan</p>
-                  <p className="text-lg font-semibold text-gray-900">{subscriptionBasics.planName}</p>
-                </div>
-                <div>
-                  {subscriptionBasics.isActive ? (
-                    <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-medium">
-                      Aktywna
-                    </span>
-                  ) : (
-                    <span className="px-3 py-1 bg-gray-200 text-gray-700 rounded-full text-sm font-medium">
-                      Nieaktywna
-                    </span>
-                  )}
-                </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Disk Explorer
+                </label>
+                <p className="text-sm text-gray-500 mb-3">
+                  Browse and manage files stored on the Railway server
+                </p>
+                <button
+                  onClick={() => setIsDiskExplorerOpen(true)}
+                  className="inline-flex items-center px-4 py-2 bg-gray-600 text-white text-sm font-medium rounded-lg hover:bg-gray-700 transition-colors"
+                >
+                  <FolderOpen className="h-4 w-4 mr-2" />
+                  Explore Disk
+                </button>
               </div>
-
-              {subscriptionBasics.renewsAt && (
-                <div className="p-4 bg-blue-50 border border-blue-100 rounded-lg">
-                  <p className="text-sm text-blue-900">
-                    <span className="font-medium">Odnowienie:</span>{' '}
-                    {new Date(subscriptionBasics.renewsAt).toLocaleDateString('pl-PL', {
-                      day: 'numeric',
-                      month: 'long',
-                      year: 'numeric'
-                    })}
-                  </p>
-                </div>
-              )}
-
-              <Link
-                href="/subscription"
-                className="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors w-full justify-center"
-              >
-                <CreditCard className="h-4 w-4 mr-2" />
-                Zarządzaj subskrypcją
-              </Link>
-            </div>
-          ) : (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-6 w-6 text-gray-400 animate-spin" />
-            </div>
-          )}
-        </div>
-
-        {/* System Management */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <div className="flex items-center mb-6">
-            <FolderOpen className="h-5 w-5 text-gray-600 mr-2" />
-            <h2 className="text-xl font-bold text-gray-900">System Management</h2>
-          </div>
-
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Disk Explorer
-              </label>
-              <p className="text-sm text-gray-500 mb-3">
-                Browse and manage files stored on the Railway server
-              </p>
-              <button
-                onClick={() => setIsDiskExplorerOpen(true)}
-                className="inline-flex items-center px-4 py-2 bg-gray-600 text-white text-sm font-medium rounded-lg hover:bg-gray-700 transition-colors"
-              >
-                <FolderOpen className="h-4 w-4 mr-2" />
-                Explore Disk
-              </button>
             </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Disk Explorer Modal */}

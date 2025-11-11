@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { X, Check, AlertCircle, Loader2, RotateCcw, Eye, Settings, Key } from 'lucide-react';
+import { useAuth } from '@/hooks/useAuth';
 
 // Interfejs dla pobranej treści
 interface ScrapedContent {
@@ -67,10 +68,12 @@ const SourcePreviewModal: React.FC<SourcePreviewModalProps> = ({
   onAccept,
   onReject
 }) => {
+
+  const { userRole } = useAuth();
+  const [isMobile, setIsMobile] = useState(false);
   // Stany dla podsumowywania
   const [isSummarizing, setIsSummarizing] = useState(false);
   const [summaryLength, setSummaryLength] = useState<number | null>(null);
-  const [selectedMethod, setSelectedMethod] = useState<'ai' | 'traditional'>('ai');
   const [selectedLength, setSelectedLength] = useState<number | null>(null);
   const [originalContent, setOriginalContent] = useState<string>('');
   const [summarizedContent, setSummarizedContent] = useState<string | null>(null);
@@ -149,71 +152,67 @@ const SourcePreviewModal: React.FC<SourcePreviewModalProps> = ({
   };
 
   // Funkcja generowania opcji długości na podstawie modelu i kluczy
-  const generateLengthOptions = (contentLength: number): LengthOption[] => {
-    const baseLengthOptions = [
+  // Funkcja generowania opcji długości NA BAZIE ROLI UŻYTKOWNIKA
+  const generateLengthOptions = (contentLength: number, userRole: string | null, isMobile: boolean): LengthOption[] => {
+
+    // 1. Zdefiniuj wszystkie możliwe opcje (TYLKO te z nowych wymagań)
+    const allLengthOptions: Omit<LengthOption, 'isAvailable' | 'reason' | 'hint'>[] = [
       { value: 1000, label: 'ok. 1 000 znaków' },
-      { value: 2000, label: 'ok. 2 000 znaków' },
       { value: 5000, label: 'ok. 5 000 znaków' },
       { value: 10000, label: 'ok. 10 000 znaków' }
     ];
 
-    // Filtruj opcje które są mniejsze od treści źródłowej
-    const availableBasicOptions = baseLengthOptions.filter(option => option.value < contentLength);
+    // 2. Filtruj opcje, które są krótsze od treści źródłowej
+    // (Nie ma sensu "skracać" tekstu 5k do opcji 10k)
+    const relevantOptions = allLengthOptions.filter(option => option.value < contentLength);
 
-    if (!userAiSettings || !apiKeysStatus) {
-      // Jeśli nie ma ustawień, pokaż wszystkie opcje jako niedostępne
-      return availableBasicOptions.map(option => ({
-        ...option,
-        isAvailable: false,
-        reason: 'Ładowanie ustawień...'
-      }));
+    // 3. Ustal dozwolone wartości na podstawie roli
+    const role = String(userRole).toLowerCase();
+    let allowedValues: Set<number>;
+
+    if (role === 'free' || role === 'free_ver') {
+      // Dla free i free_ver TYLKO 1000
+      allowedValues = new Set([1000]);
+    } else if (role === 'rookie') {
+      // Dla rookie 1000 i 5000
+      allowedValues = new Set([1000, 5000]);
+    } else if (!userRole) {
+      // Bezpieczny fallback - jeśli rola nie jest załadowana
+      console.warn('SourcePreviewModal: Rola użytkownika niezaładowana, stosowanie uprawnień FREE');
+      allowedValues = new Set([1000]);
+    } else {
+      // Wszyscy pozostali (creator, unlimited, god, etc.)
+      allowedValues = new Set([1000, 5000, 10000]);
     }
 
-    const hasAnthropicKey = apiKeysStatus.anthropic?.hasKey || false;
-    const isHaiku = userAiSettings.textAiModel === 'claude-3-haiku';
-    const isSonnet = userAiSettings.textAiModel === 'claude-3-sonnet';
+    // 4. Zmapuj odfiltrowane opcje i ustaw ich dostępność
+    return relevantOptions.map(option => {
+      const isAvailable = allowedValues.has(option.value);
 
-    return availableBasicOptions.map(option => {
-      // Sonnet: wszystkie opcje dostępne
-      if (isSonnet) {
-        return {
-          ...option,
-          isAvailable: true
-        };
-      }
-
-      // Haiku: tylko 1000 i 2000 znaków
-      if (isHaiku) {
-        if (option.value <= 2000) {
-          return {
-            ...option,
-            isAvailable: true
-          };
+      let reason = 'Niedostępne'; // Domyślne
+      if (!isAvailable) {
+        if (isMobile) {
+          // Skrócone etykiety dla mobile
+          if (option.value === 5000) {
+            reason = 'Rookie +';
+          } else if (option.value === 10000) {
+            reason = 'Creator +';
+          }
         } else {
-          // Opcje 5000 i 10000 niedostępne dla haiku
-          if (hasAnthropicKey) {
-            return {
-              ...option,
-              isAvailable: false,
-              reason: 'Tylko dla Sonnet',
-              hint: 'Przełącz na model Sonnet w ustawieniach'
-            };
-          } else {
-            return {
-              ...option,
-              isAvailable: false,
-              reason: 'Niedostępne dla modelu Haiku',
-              hint: 'Wymagany klucz API Anthropic lub model Sonnet'
-            };
+          // Standardowe etykiety dla desktop
+          if (option.value === 5000) {
+            reason = 'Od planu Rookie';
+          } else if (option.value === 10000) {
+            reason = 'Od planu Creator';
           }
         }
       }
 
-      // Fallback: opcja niedostępna
       return {
         ...option,
-        isAvailable: false,
-        reason: 'Nieznany model'
+        isAvailable: isAvailable,
+        reason: isAvailable ? undefined : reason, // Użyj nowej, dynamicznej przyczyny
+        hint: isAvailable ? undefined : 'Zaktualizuj plan aby odblokować tę opcję'
       };
     });
   };
@@ -225,6 +224,20 @@ const SourcePreviewModal: React.FC<SourcePreviewModalProps> = ({
     }
   }, [isVisible, content]);
 
+  useEffect(() => {
+    // Sprawdza rozmiar ekranu i ustawia stan isMobile
+    const checkScreenSize = () => {
+      // Używamy 640px (Tailwind 'sm' breakpoint) jako limitu dla mobile
+      setIsMobile(window.innerWidth < 640);
+    };
+
+    checkScreenSize(); // Sprawdź przy pierwszym ładowaniu
+    window.addEventListener('resize', checkScreenSize); // Sprawdzaj przy zmianie rozmiaru
+
+    // Sprzątanie po odmontowaniu komponentu
+    return () => window.removeEventListener('resize', checkScreenSize);
+  }, []); // Pusta tablica zależności zapewnia, że uruchomi się to tylko raz
+
   // Reset stanów gdy zmienia się content
   useEffect(() => {
     if (content) {
@@ -234,17 +247,16 @@ const SourcePreviewModal: React.FC<SourcePreviewModalProps> = ({
       setSummaryGenerated(false);
       setSummaryError(null);
       setSummaryLength(null);
-      setSelectedMethod('ai');
       setSelectedLength(null);
     }
   }, [content]);
 
   // Funkcja obliczająca dostępne opcje długości na podstawie tekstu źródłowego i ustawień
   const getAvailableLengthOptions = (contentLength: number) => {
-    return generateLengthOptions(contentLength);
+    // Przekazujemy rolę użytkownika do generatora opcji
+    return generateLengthOptions(contentLength, userRole, isMobile);
   };
 
-  // Główna funkcja podsumowywania treści
   const handleSummarizeContent = async (targetLength: number) => {
     if (!content) return;
 
@@ -252,19 +264,30 @@ const SourcePreviewModal: React.FC<SourcePreviewModalProps> = ({
     setSummaryError(null);
     setSummaryLength(targetLength);
 
+    // Zbuduj dynamicznie ciało zapytania
+    const requestBody: any = {
+      content: originalContent,
+      targetLength: targetLength,
+      title: content.title,
+      sourceType: sourceType,
+      sourceUrl: content.url
+    };
+
+    // START ZMIANY: Dodaj model premium dla opcji 10000 znaków
+    if (targetLength === 10000) {
+      requestBody.model = "PREMIUM_AI_MODEL";
+    }
+    // Dla pozostałych opcji (1000, 5000) pole 'model' nie jest
+    // wysyłane, więc backend użyje domyślnej logiki.
+    // KONIEC ZMIANY
+
     try {
       const response = await fetch('/api/summarize-content', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          content: originalContent,
-          targetLength: targetLength,
-          title: content.title,
-          sourceType: sourceType,
-          sourceUrl: content.url
-        }),
+        body: JSON.stringify(requestBody), // Użyj dynamicznego ciała
       });
 
       const data: SummarizeResponse = await response.json();
@@ -293,59 +316,15 @@ const SourcePreviewModal: React.FC<SourcePreviewModalProps> = ({
     setSummaryGenerated(false);
     setSummaryError(null);
     setSummaryLength(null);
-    setSelectedMethod('ai');
     setSelectedLength(null);
     setContentToDisplay(originalContent); // Zawsze wróć do oryginału
   };
 
-  // Funkcja tradycyjnego skracania tekstu (mechaniczne)
-  const handleTraditionalSummary = (targetLength: number) => {
-    if (!content) return;
-
-    setIsSummarizing(true);
-    setSummaryError(null);
-    setSummaryLength(targetLength);
-
-    // Symulujemy krótkie opóźnienie dla UX
-    setTimeout(() => {
-      let finalText: string;
-
-      if (originalContent.length <= targetLength) {
-        // Jeśli tekst jest krótszy niż docelowa długość, pozostaw bez zmian
-        finalText = originalContent;
-      } else {
-        // Jeśli tekst jest dłuższy, skróć dokładnie do wybranej długości
-        // Uwzględnij "..." w limicie znaków
-        const ellipsis = '...';
-        const availableLength = targetLength - ellipsis.length;
-
-        if (availableLength > 0) {
-          finalText = originalContent.slice(0, availableLength) + ellipsis;
-        } else {
-          // Jeśli targetLength jest mniejsze niż długość "...", po prostu obetnij bez wielokropka
-          finalText = originalContent.slice(0, targetLength);
-        }
-      }
-
-      setSummarizedContent(finalText);
-      setSummaryGenerated(true);
-      setContentToDisplay(finalText); // Automatycznie przełącz na podsumowanie
-      setIsSummarizing(false);
-
-      console.log(`Skrócenie tradycyjne ukończone: ${finalText.length}/${originalContent.length} znaków`);
-    }, 500);
-  };
-
-  // Funkcja obsługi podsumowania na podstawie wybranej metody
-  const handleSummaryExecution = () => {
-    if (!selectedLength) return;
-
-    if (selectedMethod === 'ai') {
-      handleSummarizeContent(selectedLength);
-    } else {
-      handleTraditionalSummary(selectedLength);
-    }
-  };
+  // Funkcja obsługi podsumowania
+const handleSummaryExecution = () => {
+  if (!selectedLength) return;
+  handleSummarizeContent(selectedLength); // Zawsze wywołuj podsumowanie AI
+};
 
   // Przełączanie między oryginałem a podsumowaniem
   const toggleContentView = (showOriginal: boolean) => {
@@ -625,7 +604,7 @@ const SourcePreviewModal: React.FC<SourcePreviewModalProps> = ({
             )}
           </div>
 
-          {/* Sekcja podsumowania AI - elegancka jak w głównym komponencie */}
+
           {shouldShowSummarySection && status === 'success' && !summaryGenerated && !isSummarizing && (
             <div className="bg-blue-50 p-4 rounded-lg border border-blue-200 mb-4">
               <div className="flex items-center mb-3">
@@ -639,27 +618,24 @@ const SourcePreviewModal: React.FC<SourcePreviewModalProps> = ({
                 )}
               </div>
 
-              {/* Status podsumowywania */}
+              {/* Status podsumowywania (uproszczony) */}
               {isSummarizing && (
                 <div className="bg-blue-50 p-3 rounded border border-blue-200 mb-3">
                   <div className="flex items-center text-blue-700">
                     <Loader2 size={16} className="mr-2 animate-spin" />
                     <div>
                       <span className="font-medium block">
-                        {selectedMethod === 'ai' ? 'Podsumowywanie treści przez AI...' : 'Skracanie treści...'}
+                        Podsumowywanie treści przez AI...
                       </span>
                       <span className="text-sm">
-                        {selectedMethod === 'ai'
-                          ? `To może potrwać 10-30 sekund. Skracam do ${summaryLength} znaków.`
-                          : `Mechaniczne skracanie do ${summaryLength} znaków.`
-                        }
+                        To może potrwać 10-30 sekund. Skracam do {summaryLength} znaków.
                       </span>
                     </div>
                   </div>
                 </div>
               )}
 
-              {/* Błąd podsumowywania */}
+              {/* Błąd podsumowywania (bez zmian) */}
               {summaryError && (
                 <div className="bg-red-50 p-3 rounded border border-red-200 mb-3">
                   <div className="flex items-start text-red-700">
@@ -672,49 +648,63 @@ const SourcePreviewModal: React.FC<SourcePreviewModalProps> = ({
                 </div>
               )}
 
-              {/* Opcje podsumowania - nowy design z selectami */}
+              {/* Opcje podsumowania - UPROSZCZONY BLOK */}
               {!isSummarizing && !summaryGenerated && availableSummaryOptions.length > 0 && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {/* Select metody */}
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">
-                      Wybierz metodę skracania:
-                    </label>
-                    <select
-                      value={selectedMethod}
-                      onChange={(e) => setSelectedMethod(e.target.value as 'ai' | 'traditional')}
-                      className="w-full px-3 py-2 border border-blue-200 rounded-lg text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
-                    >
-                      <option value="ai">Podsumowanie AI (TL;DR)</option>
-                      <option value="traditional">Skrócenie "mechaniczne"</option>
-                    </select>
-                  </div>
+                <div>
+                  {/* Select metody został USUNIĘTY */}
+                  {/* Grid został USUNIĘTY */}
 
-                  {/* Select długości */}
+                  {/* Select długości (teraz jedyny element) */}
                   <div>
                     <label className="block text-xs font-medium text-gray-700 mb-1">
-                      Wybierz długość docelową:
+                      Wybierz długość docelową (skrócenie AI):
                     </label>
                     <select
                       value={selectedLength || ''}
-                      onChange={(e) => setSelectedLength(Number(e.target.value) || null)}
-                      className="w-full px-3 py-2 border border-blue-200 rounded-lg text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                      onChange={(e) => {
+                        setSelectedLength(Number(e.target.value) || null);
+                      }}
+                      className="w-full pl-3 pr-10 py-2 border border-blue-200 rounded-lg text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
                     >
                       <option value="">Wybierz długość</option>
-                      {availableSummaryOptions.map((option) => (
-                        <option
-                          key={option.value}
-                          value={option.isAvailable ? option.value : ''}
-                          disabled={!option.isAvailable}
-                          className={!option.isAvailable ? 'text-gray-400' : ''}
-                        >
-                          {option.label} (~{Math.round((option.value / content.content.length) * 100)}%)
-                          {!option.isAvailable && ` - ${option.reason}`}
-                        </option>
-                      ))}
+
+                      {availableSummaryOptions.map((option) => {
+                        // Bezpieczne obliczanie procentów
+                        const percentage = (content.content.length > 0)
+                          ? Math.round((option.value / content.content.length) * 100)
+                          : 0;
+
+                        // START: Logika dla etykiet mobile ("1k")
+                        let displayLabel = option.label;
+                        if (isMobile) {
+                          displayLabel = displayLabel
+                            .replace('1 000', '1k')
+                            .replace('5 000', '5k')
+                            .replace('10 000', '10k');
+
+                        }
+                        // KONIEC: Logika dla etykiet mobile
+
+                        // Zbuduj pełny tekst opcji
+                        const fullText = `${displayLabel} (~${percentage}%)` +
+                                         (!option.isAvailable ? ` - ${option.reason}` : '');
+
+                        return (
+                          <option
+                            key={option.value}
+                            value={option.value}
+                            disabled={!option.isAvailable}
+                            className={!option.isAvailable ? "text-gray-400" : ""}
+                          >
+                            {/* Hack dla prawego marginesu (bez zmian) */}
+                            {fullText}{'\u00A0\u00A0\u00A0\u00A0'}
+                          </option>
+                        );
+                      })}
+
                     </select>
 
-                    {/* Podpowiedzi dla niedostępnych opcji */}
+                    {/* Podpowiedzi dla niedostępnych opcji (bez zmian) */}
                     {selectedLength && availableSummaryOptions.find(opt => opt.value === selectedLength && !opt.isAvailable) && (
                       <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs text-yellow-700">
                         💡 {availableSummaryOptions.find(opt => opt.value === selectedLength)?.hint}
@@ -736,13 +726,6 @@ const SourcePreviewModal: React.FC<SourcePreviewModalProps> = ({
                     Tekst skrócony pomyślnie do {formatNumber(summarizedContent?.length || 0)} znaków
                   </span>
                 </div>
-                <button
-                  onClick={resetSummaryState}
-                  className="flex items-center text-sm text-blue-600 hover:text-blue-700 border border-blue-200 rounded-lg px-3 py-1.5 hover:bg-blue-50 transition-colors cursor-pointer"
-                >
-                  <RotateCcw size={14} className="mr-1" />
-                  Ponownie
-                </button>
               </div>
             </div>
           )}

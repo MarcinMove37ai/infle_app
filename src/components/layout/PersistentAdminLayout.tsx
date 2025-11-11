@@ -183,21 +183,21 @@ const menuItems: MenuItem[] = [
     IconComponent: BookOpen,
     label: 'Ebooks',
     path: '/ebooki',
-    roles: ['ADMIN', 'USER', 'GOD', 'free'],
+    roles: ['ADMIN', 'USER', 'GOD', 'free', 'rookie', 'creator', 'unlimited'],
     requiredStatus: ['active']
   },
   {
     IconComponent: FileSignature,
     label: 'Landing Pages',
     path: '/strony-zapisu',
-    roles: ['ADMIN', 'USER', 'GOD', 'free'],
+    roles: ['ADMIN', 'USER', 'GOD', 'free', 'rookie', 'creator'],
     requiredStatus: ['active']
   },
   {
     IconComponent: UserCheck,
     label: 'Leads',
     path: '/leady',
-    roles: ['ADMIN', 'USER', 'GOD', 'free'],
+    roles: ['ADMIN', 'USER', 'GOD', 'free', 'rookie', 'creator'],
     requiredStatus: ['active']
   },
   {
@@ -211,7 +211,7 @@ const menuItems: MenuItem[] = [
     IconComponent: Settings,
     label: 'Settings',
     path: '/ustawienia',
-    roles: ['ADMIN', 'USER', 'GOD','free'],
+    roles: ['ADMIN', 'USER', 'GOD','free', 'rookie', 'creator'],
     requiredStatus: ['active']
   }
 

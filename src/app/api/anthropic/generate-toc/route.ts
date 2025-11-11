@@ -52,6 +52,8 @@ export async function POST(request: Request) {
 
     // ✅ NOWA LOGIKA: Pobierz klucz API użytkownika z fallback na env var
     const userId = session.user.id;
+    // POBIERAMY ROLĘ UŻYTKOWNIKA Z SESJI
+    const userRole = (session.user as any).role || 'free';
     const { apiKey: anthropicApiKey, source: keySource } = await getApiKeyForEndpoint(
       userId,
       'anthropic',
@@ -119,6 +121,18 @@ export async function POST(request: Request) {
       return `\n\n=== PREFERENCJE UŻYTKOWNIKA ===\n${userDescription.trim()}\n\n=== INSTRUKCJE DLA PREFERENCJI ===\n• Uwzględnij powyższe preferencje przy generowaniu struktury spisu treści\n• Dostosuj poziom szczegółowości do grupy docelowej\n• Zachowaj spójność ze stylem pisania preferowanym przez użytkownika\n• Priorytetyzuj tematy wskazane przez użytkownika\n\n`;
     };
 
+    let maxChapters = 15; // Domyślna wartość (dla Unlimited/God)
+    let minChapters = 10;
+    const role = userRole.toLowerCase();
+
+    if (role === 'free' || role === 'free_ver' || role === 'rookie') {
+      maxChapters = 6;
+      minChapters = 4;
+    } else if (role === 'creator') {
+      maxChapters = 12;
+      minChapters = 8;
+    }
+
     // Przygotowanie rozszerzonego promptu
     let prompt = `Wygeneruj spis treści do e-booka o tytule: "${title}"`;
 
@@ -140,7 +154,7 @@ export async function POST(request: Request) {
 
     // Dodaj podstawowe instrukcje generowania
     prompt += `=== WYMAGANIA SPISU TREŚCI ===\n`;
-    prompt += `• Spis powinien zawierać od 5 do 8 rozdziałów\n`;
+    prompt += `• Spis powinien zawierać optymalnie ${maxChapters} rozdziałów (minimum ${minChapters}, maksimum ${maxChapters}).\n`;
     prompt += `• Rozdziały powinny być logicznie uporządkowane i tworzyć spójną całość\n`;
     prompt += `• Każdy rozdział powinien mieć konkretny, praktyczny cel\n`;
 
@@ -190,6 +204,8 @@ export async function POST(request: Request) {
       subtitle: subtitle || 'brak',
       hasDescription: !!description,
       sourcesCount: scrapedContent?.length || 0,
+      userRole: role, // <-- DODANY LOG
+      chapterLimit: `${minChapters}-${maxChapters}`,
       promptLength: prompt.length,
       model: modelToUse,
       keySource: keySource
