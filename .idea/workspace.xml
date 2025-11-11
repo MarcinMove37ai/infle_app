@@ -5,8 +5,10 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="46749596-836e-4f8d-af4b-57221a03aed3" name="Changes" comment="">
+      <change afterPath="$PROJECT_DIR$/public/logo_inflee.webp" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/app/api/admin/upload-default-logo/route.ts" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/app/api/pages/ai-content/route.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/app/api/pages/ai-content/route.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/app/api/auth/register/route.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/app/api/auth/register/route.ts" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -27,41 +29,41 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent">{
-  &quot;keyToString&quot;: {
-    &quot;Python tests.Python tests in 2_enrich_with_api_data.py.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests in advanece.py.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests in movie_finder.py.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests in step4_create_table.py.executor&quot;: &quot;Run&quot;,
-    &quot;Python.1_movie_database_setup.executor&quot;: &quot;Run&quot;,
-    &quot;Python.2_enrich_with_api_data.executor&quot;: &quot;Run&quot;,
-    &quot;Python.analize.executor&quot;: &quot;Run&quot;,
-    &quot;Python.check_voyageai_version.executor&quot;: &quot;Run&quot;,
-    &quot;Python.copetence_extraction.executor&quot;: &quot;Run&quot;,
-    &quot;Python.create_project_schema.executor&quot;: &quot;Run&quot;,
-    &quot;Python.create_sanity_check.executor&quot;: &quot;Run&quot;,
-    &quot;Python.hybrid_pro.executor&quot;: &quot;Run&quot;,
-    &quot;Python.movie_finder.executor&quot;: &quot;Run&quot;,
-    &quot;Python.movie_search.executor&quot;: &quot;Run&quot;,
-    &quot;Python.movie_search4.executor&quot;: &quot;Run&quot;,
-    &quot;Python.pinecone_full_upsert.executor&quot;: &quot;Run&quot;,
-    &quot;Python.pinecone_model_upsert_test.executor&quot;: &quot;Run&quot;,
-    &quot;Python.pinecone_test_100.executor&quot;: &quot;Run&quot;,
-    &quot;Python.process_all_files_to_parquet.executor&quot;: &quot;Run&quot;,
-    &quot;Python.project_analyzer.executor&quot;: &quot;Run&quot;,
-    &quot;Python.random_movies_export.executor&quot;: &quot;Run&quot;,
-    &quot;Python.script.executor&quot;: &quot;Run&quot;,
-    &quot;Python.step2_test_kdbai.executor&quot;: &quot;Run&quot;,
-    &quot;Python.step3_test_voyage.executor&quot;: &quot;Run&quot;,
-    &quot;Python.step4_create_table.executor&quot;: &quot;Run&quot;,
-    &quot;Python.step5_batch_loading.executor&quot;: &quot;Run&quot;,
-    &quot;Python.verify_parquet.executor&quot;: &quot;Run&quot;,
-    &quot;Python.view_first_record.executor&quot;: &quot;Run&quot;,
-    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
-    &quot;git-widget-placeholder&quot;: &quot;master&quot;,
-    &quot;last_opened_file_path&quot;: &quot;D:/inflee.app/landing&quot;
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "Python tests.Python tests in 2_enrich_with_api_data.py.executor": "Run",
+    "Python tests.Python tests in advanece.py.executor": "Run",
+    "Python tests.Python tests in movie_finder.py.executor": "Run",
+    "Python tests.Python tests in step4_create_table.py.executor": "Run",
+    "Python.1_movie_database_setup.executor": "Run",
+    "Python.2_enrich_with_api_data.executor": "Run",
+    "Python.analize.executor": "Run",
+    "Python.check_voyageai_version.executor": "Run",
+    "Python.copetence_extraction.executor": "Run",
+    "Python.create_project_schema.executor": "Run",
+    "Python.create_sanity_check.executor": "Run",
+    "Python.hybrid_pro.executor": "Run",
+    "Python.movie_finder.executor": "Run",
+    "Python.movie_search.executor": "Run",
+    "Python.movie_search4.executor": "Run",
+    "Python.pinecone_full_upsert.executor": "Run",
+    "Python.pinecone_model_upsert_test.executor": "Run",
+    "Python.pinecone_test_100.executor": "Run",
+    "Python.process_all_files_to_parquet.executor": "Run",
+    "Python.project_analyzer.executor": "Run",
+    "Python.random_movies_export.executor": "Run",
+    "Python.script.executor": "Run",
+    "Python.step2_test_kdbai.executor": "Run",
+    "Python.step3_test_voyage.executor": "Run",
+    "Python.step4_create_table.executor": "Run",
+    "Python.step5_batch_loading.executor": "Run",
+    "Python.verify_parquet.executor": "Run",
+    "Python.view_first_record.executor": "Run",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "git-widget-placeholder": "master",
+    "last_opened_file_path": "D:/HealthProCRM/hps_app/wyciagi"
   }
-}</component>
+}]]></component>
   <component name="RecentsManager">
     <key name="CopyFile.RECENT_KEYS">
       <recent name="D:\inflee.app\infle_app\public" />
@@ -71,8 +73,8 @@
       <recent name="D:\inflee.app\infle_app\src\components\views" />
     </key>
     <key name="MoveFile.RECENT_KEYS">
-      <recent name="D:\inflee.app\infle_app\src\app\(auth)\register\[[...plan]]" />
       <recent name="D:\inflee.app\infle_app\public" />
+      <recent name="D:\inflee.app\infle_app\src\app\(auth)\register\[[...plan]]" />
       <recent name="D:\inflee.app\infle_app\src\components\ui" />
       <recent name="D:\inflee.app\infle_app\public\templates" />
       <recent name="D:\inflee.app\infle_app\ignore_py_files\Konrad\gif" />

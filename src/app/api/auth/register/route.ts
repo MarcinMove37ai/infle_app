@@ -105,7 +105,11 @@ export async function POST(request: Request) {
     // Generuj token weryfikacyjny
     const verificationToken = crypto.randomBytes(32).toString('hex');
 
-    // Utworzenie użytkownika z tokenem weryfikacyjnym i powiązaniem profilu
+    // Generuj URL do domyślnego logo
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+    const defaultLogoUrl = `${baseUrl}/api/assets/uploads/logo_inflee.webp`;
+
+    // Utworzenie użytkownika z tokenem weryfikacyjnym, domyślnym logo i powiązaniem profilu
     const user = await prisma.user.create({
       data: {
         firstName,
@@ -120,6 +124,8 @@ export async function POST(request: Request) {
         instagramProfileId,
         linkedinProfileId,
         socialProfileType,
+        // Domyślne logo dla nowego użytkownika
+        authorLogoUrl: defaultLogoUrl,
       }
     });
 
