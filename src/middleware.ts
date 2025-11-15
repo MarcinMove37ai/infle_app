@@ -30,11 +30,11 @@ export async function middleware(request: NextRequest) {
 
   // Definiuj które strony są chronione
   const isProtectedPage = pathname.startsWith('/dashboard') ||
-                         pathname.startsWith('/ebooki') ||
+                         pathname.startsWith('/ebooks') ||
                          pathname.startsWith('/statystyki') ||
                          pathname.startsWith('/raport-tworcy') ||
                          pathname.startsWith('/raport-odbiorcow') ||
-                         pathname.startsWith('/strony-zapisu') ||
+                         pathname.startsWith('/landings') ||
                          pathname.startsWith('/trendy');
 
   console.log('📍 PAGE TYPE:', {
@@ -43,10 +43,10 @@ export async function middleware(request: NextRequest) {
     isAuth
   });
 
-  // 1. Jeśli zalogowany user próbuje wejść na strony auth - przekieruj na dashboard
+  // 1. Jeśli zalogowany user próbuje wejść na strony auth - przekieruj na ebooks
   if (isAuthPage && isAuth) {
     console.log('🔄 Redirect: Zalogowany na auth page -> dashboard');
-    return NextResponse.redirect(new URL('/dashboard', request.url));
+    return NextResponse.redirect(new URL('/ebooks', request.url));
   }
 
   // 2. Jeśli niezalogowany próbuje wejść na chronione strony - przekieruj na login

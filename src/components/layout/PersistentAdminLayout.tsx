@@ -1,10 +1,10 @@
 // src/components/layout/PersistentAdminLayout.tsx
 "use client"
 
-import React, { useState, ReactNode, useEffect, createContext, useContext } from 'react';
+import React, { useState, ReactNode, useEffect, createContext, useContext, Suspense } from 'react';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
 import type { LucideIcon } from 'lucide-react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   Home,
   Users,
@@ -79,6 +79,42 @@ const LinkedInIcon: React.FC<CustomIconProps> = ({ size = 20, className = '', is
   );
 };
 
+// Słownik tłumaczeń dla menu
+const translations = {
+  pl: {
+    dashboard: 'Dashboard',
+    creatorReport: 'Raport Twórcy',
+    instagramApp: 'Instagram App',
+    linkedinApp: 'LinkedIn App',
+    ebooks: 'Ebooki',
+    landingPages: 'Strony zapisu',
+    leads: 'Leady',
+    statistics: 'Statystyki',
+    settings: 'Ustawienia',
+    tagline: 'Edukuj | Rośnij | Zarabiaj',
+    logout: 'Wyloguj się',
+    navigating: 'Loading...',
+    loading: 'Loading...',
+    user: 'Użytkownik'
+  },
+  en: {
+    dashboard: 'Dashboard',
+    creatorReport: 'Creator Report',
+    instagramApp: 'Instagram App',
+    linkedinApp: 'LinkedIn App',
+    ebooks: 'Ebooks',
+    landingPages: 'Landing Pages',
+    leads: 'Leads',
+    statistics: 'Statistics',
+    settings: 'Settings',
+    tagline: 'Educate | Grow | Earn',
+    logout: 'Log out',
+    navigating: 'Loading...',
+    loading: 'Loading...',
+    user: 'User'
+  }
+};
+
 type UserStatus = 'pending' | 'active' | 'blocked';
 
 interface MenuItem {
@@ -146,76 +182,7 @@ const useLayout = () => {
   return context;
 };
 
-// POPRAWIONA LISTA MENU ITEMS
-const menuItems: MenuItem[] = [
-  {
-    IconComponent: Home,
-    label: 'Dashboard',
-    path: '/dashboard',
-    roles: ['ADMIN', 'USER', 'GOD', 'payd'],
-    requiredStatus: ['active'],
-    fullWidth: true
-  },
-  {
-    IconComponent: Users,
-    label: 'Raport Twórcy',
-    path: '/raport-tworcy',
-    roles: ['ADMIN', 'GOD'],
-    requiredStatus: ['active']
-  },
-  {
-    IconComponent: InstagramIcon,
-    label: 'Instagram App',
-    path: '/instagram_app',
-    roles: ['ADMIN', 'USER', 'GOD'],
-    requiredStatus: ['active'],
-    iconType: 'instagram'
-  },
-  {
-    IconComponent: LinkedInIcon,
-    label: 'LinkedIn App',
-    path: '/linkedin_app',
-    roles: ['ADMIN', 'USER', 'GOD',],
-    requiredStatus: ['active'],
-    iconType: 'linkedin'
-  },
-  {
-    IconComponent: BookOpen,
-    label: 'Ebooks',
-    path: '/ebooki',
-    roles: ['ADMIN', 'USER', 'GOD', 'free', 'rookie', 'creator', 'unlimited'],
-    requiredStatus: ['active']
-  },
-  {
-    IconComponent: FileSignature,
-    label: 'Landing Pages',
-    path: '/strony-zapisu',
-    roles: ['ADMIN', 'USER', 'GOD', 'free', 'rookie', 'creator'],
-    requiredStatus: ['active']
-  },
-  {
-    IconComponent: UserCheck,
-    label: 'Leads',
-    path: '/leady',
-    roles: ['ADMIN', 'USER', 'GOD', 'free', 'rookie', 'creator'],
-    requiredStatus: ['active']
-  },
-  {
-    IconComponent: BarChart3,
-    label: 'Statystyki',
-    path: '/statystyki',
-    roles: ['ADMIN', 'USER', 'GOD'],
-    requiredStatus: ['active']
-  },
-  {
-    IconComponent: Settings,
-    label: 'Settings',
-    path: '/ustawienia',
-    roles: ['ADMIN', 'USER', 'GOD','free', 'rookie', 'creator'],
-    requiredStatus: ['active']
-  }
 
-];
 
 // FUNKCJA POMOCNICZA DO RENDEROWANIA IKON
 const renderMenuIcon = (item: MenuItem, isActive: boolean, size: number = 20) => {
@@ -230,18 +197,26 @@ const renderMenuIcon = (item: MenuItem, isActive: boolean, size: number = 20) =>
   }
 };
 
-const getCurrentPageLabel = (path: string | null) => {
+const getCurrentPageLabel = (path: string | null, lang: 'pl' | 'en' = 'pl') => {
   if (!path) return 'Dashboard';
   const normalizedPath = path.endsWith('/') ? path.slice(0, -1) : path;
+  const menuItems = getMenuItems(lang);
   const menuItem = menuItems.find(item => normalizedPath === item.path);
   return menuItem?.label || 'Dashboard';
 };
 
 // SIDEBAR KOMPONENT - PERSISTENT Z POPRAWKAMI
-const Sidebar: React.FC = () => {
+interface SidebarProps {
+  currentLang: 'pl' | 'en';
+}
+
+const Sidebar: React.FC<SidebarProps> = ({ currentLang }) => {
   const { hoveredSidebar, setHoveredSidebar, isMobileMenuOpen, setIsMobileMenuOpen, setIsNavigating } = useLayout();
   const pathname = usePathname();
   const { user, userRole, isLoading: authLoading, signOut } = useAuth();
+  const menuItems = getMenuItems(currentLang);
+
+
   useEffect(() => {
     if (!authLoading) {
       console.log("DANE UŻYTKOWNIKA W LAYOUCIE (useAuth):", user);
@@ -496,7 +471,12 @@ const Sidebar: React.FC = () => {
 };
 
 // HEADER KOMPONENT - bez zmian
-const Header: React.FC = () => {
+interface HeaderProps {
+  currentLang: 'pl' | 'en';
+  langReady: boolean;
+}
+
+const Header: React.FC<HeaderProps> = ({ currentLang, langReady }) => {
   const { isMobileMenuOpen, setIsMobileMenuOpen, hoveredSidebar } = useLayout();
   const { signOut, user, isLoading: authLoading } = useAuth();
   const router = useRouter();
@@ -531,7 +511,7 @@ const Header: React.FC = () => {
   };
 
   const goToHome = () => {
-    router.push('/dashboard');
+    router.push('/ebooks');
   };
 
   const headerPaddingLeft = isMobile || !isScreenSizeDetected ? '1rem' : '1rem';
@@ -575,8 +555,8 @@ const Header: React.FC = () => {
                 <span className="text-xl font-bold bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent">
                   inflee.app
                 </span>
-                <span className="hidden md:block text-xs text-gray-500 font-medium tracking-wide uppercase leading-tight max-w-xs">
-                  Edukuj | Rośnij | Zarabiaj
+                <span className="hidden md:block text-xs text-gray-500 font-medium tracking-wide uppercase leading-tight max-w-xs" suppressHydrationWarning>
+                  {langReady ? translations[currentLang].tagline : '\u00A0'}
                 </span>
               </div>
             </div>
@@ -643,8 +623,8 @@ const Header: React.FC = () => {
               className={`p-2.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all duration-200 cursor-pointer shadow-sm hover:shadow-md ${
                 isLoggingOut ? 'opacity-50 cursor-not-allowed' : ''
               }`}
-              aria-label="Wyloguj się"
-              title="Wyloguj się"
+              aria-label={translations[currentLang].logout}
+              title={translations[currentLang].logout}
             >
               {isLoggingOut ? (
                 <div className="h-5 w-5 border-2 border-red-300 border-t-red-600 rounded-full animate-spin"></div>
@@ -659,11 +639,84 @@ const Header: React.FC = () => {
   );
 };
 
+
+
 // GŁÓWNY PERSISTENT LAYOUT - bez zmian
 interface PersistentAdminLayoutProps {
   children: ReactNode;
   disableMenu?: boolean;
 }
+
+// Funkcja do pobierania tłumaczeń
+const getMenuItems = (lang: 'pl' | 'en'): MenuItem[] => [
+  {
+    IconComponent: Home,
+    label: translations[lang].dashboard,
+    path: '/dashboard',
+    roles: ['ADMIN', 'USER', 'GOD', 'payd'],
+    requiredStatus: ['active'],
+    fullWidth: true
+  },
+  {
+    IconComponent: Users,
+    label: translations[lang].creatorReport,
+    path: '/raport-tworcy',
+    roles: ['ADMIN', 'GOD'],
+    requiredStatus: ['active']
+  },
+  {
+    IconComponent: InstagramIcon,
+    label: translations[lang].instagramApp,
+    path: '/instagram_app',
+    roles: ['ADMIN', 'USER', 'GOD'],
+    requiredStatus: ['active'],
+    iconType: 'instagram'
+  },
+  {
+    IconComponent: LinkedInIcon,
+    label: translations[lang].linkedinApp,
+    path: '/linkedin_app',
+    roles: ['ADMIN', 'USER', 'GOD'],
+    requiredStatus: ['active'],
+    iconType: 'linkedin'
+  },
+  {
+    IconComponent: BookOpen,
+    label: translations[lang].ebooks,
+    path: '/ebooks',
+    roles: ['ADMIN', 'USER', 'GOD', 'free', 'rookie', 'creator', 'unlimited'],
+    requiredStatus: ['active']
+  },
+  {
+    IconComponent: FileSignature,
+    label: translations[lang].landingPages,
+    path: '/landings',
+    roles: ['ADMIN', 'USER', 'GOD', 'free', 'rookie', 'creator'],
+    requiredStatus: ['active']
+  },
+  {
+    IconComponent: UserCheck,
+    label: translations[lang].leads,
+    path: '/leads',
+    roles: ['ADMIN', 'USER', 'GOD', 'free', 'rookie', 'creator'],
+    requiredStatus: ['active']
+  },
+  {
+    IconComponent: BarChart3,
+    label: translations[lang].statistics,
+    path: '/statystyki',
+    roles: ['ADMIN', 'USER', 'GOD'],
+    requiredStatus: ['active']
+  },
+  {
+    IconComponent: Settings,
+    label: translations[lang].settings,
+    path: '/settings',
+    roles: ['ADMIN', 'USER', 'GOD','free', 'rookie', 'creator'],
+    requiredStatus: ['active']
+  }
+];
+
 
 const PersistentAdminLayout: React.FC<PersistentAdminLayoutProps> = ({
   children,
@@ -671,15 +724,35 @@ const PersistentAdminLayout: React.FC<PersistentAdminLayoutProps> = ({
 }) => {
   const { hoveredSidebar, isNavigating, isMobileMenuOpen, setIsMobileMenuOpen } = useLayout();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { isLoading: authLoading } = useAuth();
   const [isMobile, setIsMobile] = useState(false);
   const [isClient, setIsClient] = useState(false);
   const [isScreenSizeDetected, setIsScreenSizeDetected] = useState(false);
   const [isVerySmallScreen, setIsVerySmallScreen] = useState(false);
+  const [currentLang, setCurrentLang] = useState<'pl' | 'en'>('pl');
+  const [langReady, setLangReady] = useState(false);
 
   useEffect(() => {
     setIsClient(true);
-  }, []);
+
+    // PRIORYTET 1: Odczytaj język z URL
+    const langFromUrl = searchParams.get('lang');
+    if (langFromUrl === 'en' || langFromUrl === 'pl') {
+      setCurrentLang(langFromUrl);
+      localStorage.setItem('appLanguage', langFromUrl);
+      setLangReady(true);
+      return;
+    }
+
+    // PRIORYTET 2: Odczytaj język z localStorage
+    const savedLang = localStorage.getItem('appLanguage');
+    if (savedLang === 'en' || savedLang === 'pl') {
+      setCurrentLang(savedLang);
+    }
+    setLangReady(true);
+  }, [searchParams]);
+
 
   useEffect(() => {
     const handleResize = () => {
@@ -692,6 +765,7 @@ const PersistentAdminLayout: React.FC<PersistentAdminLayoutProps> = ({
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  const menuItems = getMenuItems(currentLang);
   const currentMenuItem = menuItems.find(item =>
     (pathname?.endsWith('/') ? pathname.slice(0, -1) : pathname) === item.path
   );
@@ -699,7 +773,7 @@ const PersistentAdminLayout: React.FC<PersistentAdminLayoutProps> = ({
 
   return (
     <div className="flex h-screen bg-gray-100 font-sans overflow-hidden">
-      {!disableMenu && <Sidebar />}
+      {!disableMenu && <Sidebar currentLang={currentLang} />}
       {isMobile && isMobileMenuOpen && (
         <div
           className="fixed inset-0 z-30 bg-black/40 backdrop-blur-sm transition-opacity duration-300"
@@ -720,18 +794,26 @@ const PersistentAdminLayout: React.FC<PersistentAdminLayoutProps> = ({
           height: '100vh'
         }}
       >
-        <Header />
+        <Header currentLang={currentLang} langReady={langReady} />
 
         <main className="flex-1 px-2 pb-4 pt-1.5 overflow-auto bg-gray-100 relative">
           {isNavigating && (
             <div className="absolute inset-0 z-[100] bg-white/80 backdrop-blur-sm flex items-center justify-center rounded-xl">
-              <LoadingSpinner message="Przechodzę do strony" fullScreen={false} size="md" />
+              <LoadingSpinner
+                message={langReady ? translations[currentLang].navigating : undefined}
+                fullScreen={false}
+                size="md"
+              />
             </div>
           )}
 
           {authLoading && (
             <div className="absolute inset-0 z-[99] bg-white/90 backdrop-blur-sm flex items-center justify-center rounded-xl">
-              <LoadingSpinner message="Ładowanie aplikacji" fullScreen={false} size="lg" />
+              <LoadingSpinner
+                message={translations[currentLang].loading}
+                fullScreen={false}
+                size="lg"
+              />
             </div>
           )}
 
@@ -740,7 +822,7 @@ const PersistentAdminLayout: React.FC<PersistentAdminLayoutProps> = ({
               <div className="flex flex-row items-center w-full md:w-auto gap-3">
                 <div className="bg-white px-3 py-1.5 md:px-5 md:py-3 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-shadow duration-200">
                   <h2 className="text-base md:text-xl font-semibold text-gray-700 whitespace-nowrap">
-                    {getCurrentPageLabel(pathname)}
+                    {getCurrentPageLabel(pathname, currentLang)}
                   </h2>
                 </div>
               </div>
@@ -749,7 +831,7 @@ const PersistentAdminLayout: React.FC<PersistentAdminLayoutProps> = ({
                 {isClient && (
                   <div className="bg-white px-5 py-3 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-shadow duration-200">
                     <span className="text-sm font-medium text-gray-600">
-                      {new Date().toLocaleDateString('pl-PL', {
+                      {new Date().toLocaleDateString(currentLang === 'pl' ? 'pl-PL' : 'en-US', {
                         weekday: 'long',
                         year: 'numeric',
                         month: 'long',
@@ -782,7 +864,16 @@ const PersistentAdminLayout: React.FC<PersistentAdminLayoutProps> = ({
 const PersistentAdminLayoutWithProvider: React.FC<PersistentAdminLayoutProps> = (props) => {
   return (
     <LayoutProvider>
-      <PersistentAdminLayout {...props} />
+      <Suspense fallback={
+        <div className="flex h-screen items-center justify-center bg-gray-100">
+          <div className="text-center">
+            <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-purple-600 border-r-transparent"></div>
+            <p className="mt-4 text-gray-600">Loading...</p>
+          </div>
+        </div>
+      }>
+        <PersistentAdminLayout {...props} />
+      </Suspense>
     </LayoutProvider>
   );
 };

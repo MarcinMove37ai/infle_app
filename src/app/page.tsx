@@ -17,7 +17,7 @@ export default function HomePage() {
     const timer = setTimeout(() => {
       // Jeśli zalogowany - idź do dashboard
       if (session) {
-        router.push('/dashboard');
+        router.push('/ebooks');
       } else {
         // Jeśli niezalogowany - idź do login
         router.push('/login');

@@ -1,7 +1,7 @@
 // src/app/(auth)/login/page.tsx
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -21,6 +21,20 @@ export default function LoginForm() {
   const registerHref = lang ? `/register?lang=${lang}` : '/register';
   const forgotPasswordHref = lang ? `/forgot-password?lang=${lang}` : '/forgot-password';
   const logoHref = lang === 'en' ? 'https://inflee.app/en' : (lang === 'pl' ? 'https://inflee.app/pl' : 'https://inflee.app');
+
+  // ✅ Automatyczne wykrywanie języka przy wejściu bez parametru
+  useEffect(() => {
+    if (!lang && typeof window !== 'undefined') {
+      // Wykryj język przeglądarki
+      const browserLang = navigator.language.split('-')[0]; // np. 'pl-PL' -> 'pl'
+
+      // Jeśli polski -> ustaw pl, w przeciwnym razie -> en
+      const detectedLang = browserLang === 'pl' ? 'pl' : 'en';
+
+      // Przekieruj z parametrem języka
+      router.replace(`/login?lang=${detectedLang}`);
+    }
+  }, [lang, router]);
 
   // Warianty animacji (skopiowane 1:1 ze strony rejestracji)
   const heroContainerVariants = {
@@ -91,8 +105,13 @@ export default function LoginForm() {
         setError(lang === 'en' ? 'Invalid email or password.' : 'Nieprawidłowy email lub hasło.');
         setLoading(false);
       } else if (result?.ok) {
-        // Sukces - przekierowujemy na dashboard
-        window.location.href = '/dashboard';
+        // Zapisz język do localStorage przed przekierowaniem
+        // lang będzie zawsze ustawiony dzięki useEffect, ale na wszelki wypadek:
+        const languageToSave = lang || 'en';
+        localStorage.setItem('appLanguage', languageToSave);
+
+        // Sukces - przekierowujemy na ebooki z parametrem języka
+        window.location.href = `/ebooks?lang=${languageToSave}`;
       }
     } catch (error) {
       console.error('Login error:', error);

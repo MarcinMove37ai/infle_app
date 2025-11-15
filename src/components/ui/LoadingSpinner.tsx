@@ -10,7 +10,7 @@ interface LoadingSpinnerProps {
 }
 
 export default function LoadingSpinner({ 
-  message = "Ładowanie...", 
+  message = "Ładowanie...",
   fullScreen = true,
   size = 'md' 
 }: LoadingSpinnerProps) {

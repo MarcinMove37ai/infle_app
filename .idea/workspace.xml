@@ -6,14 +6,15 @@
   <component name="ChangeListManager">
     <list default="true" id="46749596-836e-4f8d-af4b-57221a03aed3" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/app/api/anthropic/generate-toc/route.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/app/api/anthropic/generate-toc/route.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/app/api/ebooks/[ebookId]/chapters/[chapterId]/generate-image/route.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/app/api/ebooks/[ebookId]/chapters/[chapterId]/generate-image/route.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/app/api/ebooks/[ebookId]/generate-cover/route.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/app/api/ebooks/[ebookId]/generate-cover/route.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/app/api/summarize-content/route.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/app/api/summarize-content/route.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/components/ebooks/EbookGeneratorModal.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/components/ebooks/EbookGeneratorModal.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/components/ebooks/SourcePreviewModal.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/components/ebooks/SourcePreviewModal.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/app/(auth)/login/LoginForm.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/app/(auth)/login/LoginForm.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/app/(dashboard)/ebooki/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/app/(dashboard)/ebooks/page.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/app/(dashboard)/leady/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/app/(dashboard)/leads/page.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/app/(dashboard)/strony-zapisu/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/app/(dashboard)/landings/page.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/app/(dashboard)/ustawienia/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/app/(dashboard)/settings/page.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/app/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/app/page.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/components/layout/PersistentAdminLayout.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/components/layout/PersistentAdminLayout.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/components/pages/UstawieniaContent.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/components/pages/UstawieniaContent.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/components/ui/LoadingSpinner.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/components/ui/LoadingSpinner.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/middleware.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/middleware.ts" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
