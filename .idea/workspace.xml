@@ -5,14 +5,17 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="46749596-836e-4f8d-af4b-57221a03aed3" name="Changes" comment="">
+      <change afterPath="$PROJECT_DIR$/src/app/api/stripe/create-setup-intent/route.ts" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/app/verify-payment/VerifyPaymentForm.tsx" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/app/verify-payment/page.tsx" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/lib/subscription-plans.ts" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/app/preview/[token]/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/app/preview/[token]/page.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/app/subscription/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/app/subscription/page.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/components/layout/PersistentAdminLayout.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/components/layout/PersistentAdminLayout.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/components/pages/EbookiContent.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/components/pages/EbookiContent.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/components/pages/LeadsContent.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/components/pages/LeadsContent.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/components/pages/StronyZapisuContent.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/components/pages/StronyZapisuContent.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/components/pages/UstawieniaContent.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/components/pages/UstawieniaContent.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/package-lock.json" beforeDir="false" afterPath="$PROJECT_DIR$/package-lock.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/package.json" beforeDir="false" afterPath="$PROJECT_DIR$/package.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/app/api/user/subscription-status/route.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/app/api/user/subscription-status/route.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/app/api/webhooks/stripe/route.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/app/api/webhooks/stripe/route.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/app/subscribe/success/SuccessContent.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/app/subscribe/success/SuccessContent.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/middleware.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/middleware.ts" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />

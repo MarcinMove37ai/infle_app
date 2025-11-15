@@ -51,7 +51,7 @@ export default function SuccessContent() {
         )}
         <div className="space-y-3">
           <Link
-            href="/strony-zapisu"
+            href="/landings"
             className="flex items-center justify-center w-full bg-blue-600 text-white py-3 px-4 rounded-lg font-medium hover:bg-blue-700 transition-all"
           >
             Przejdź do moich stron

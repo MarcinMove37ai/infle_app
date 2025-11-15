@@ -8,11 +8,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { headers } from 'next/headers';
 import Stripe from 'stripe';
 import { prisma } from '@/lib/prisma';
-
-// ❌ 2. USUŃ TO (linijki 7-9 z twojego pliku):
-// const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-//   apiVersion: '2025-09-30.clover',
-// });
+import { Role } from '@prisma/client';
 
 // ✅ 3. DODAJ LAZY INITIALIZATION
 let stripeInstance: Stripe | null = null;
@@ -62,6 +58,10 @@ export async function POST(request: NextRequest) {
         await handleCheckoutCompleted(event.data.object as Stripe.Checkout.Session);
         break;
 
+      case 'setup_intent.succeeded':
+        await handleSetupIntentSucceeded(event.data.object as Stripe.SetupIntent);
+        break;
+
       case 'invoice.payment_succeeded':
         await handleInvoicePaymentSucceeded(event.data.object as Stripe.Invoice);
         break;
@@ -83,6 +83,70 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('❌ Webhook error:', error);
     return NextResponse.json({ error: 'Webhook handler failed' }, { status: 500 });
+  }
+}
+
+// Handler dla setup_intent.succeeded (weryfikacja karty Rookie)
+async function handleSetupIntentSucceeded(setupIntent: Stripe.SetupIntent) {
+  console.log('🔐 Processing setup_intent.succeeded');
+
+  const stripe = getStripe();
+  const userId = setupIntent.metadata?.userId;
+  const planId = setupIntent.metadata?.planId;
+
+  if (!userId || planId !== 'rookie') {
+    console.error('❌ Invalid metadata in setup intent');
+    return;
+  }
+
+  try {
+    // Pobierz payment method ID
+    const paymentMethodId = setupIntent.payment_method as string;
+
+    // Ustaw datę końca trial (21 dni od teraz)
+    const trialEndsAt = new Date();
+    trialEndsAt.setDate(trialEndsAt.getDate() + 21);
+
+    // Zaktualizuj użytkownika - zmień status na free_ver
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        role: 'free_ver', // Status: zweryfikowany, w trial
+        stripePaymentMethodId: paymentMethodId,
+        paymentMethod: 'card',
+        paymentVerifiedAt: new Date(),
+        trialEndsAt: trialEndsAt,
+      },
+    });
+
+    console.log(`✅ User ${userId} verified card - trial until:`, trialEndsAt);
+
+    // Zaplanuj subskrypcję, która rozpocznie się po 21 dniach
+    const subscription = await stripe.subscriptions.create({
+      customer: setupIntent.customer as string,
+      items: [{
+        price: process.env.STRIPE_ROOKIE_CARD_PRICE_ID!,
+      }],
+      trial_end: Math.floor(trialEndsAt.getTime() / 1000), // Unix timestamp
+      default_payment_method: paymentMethodId,
+      metadata: {
+        userId: userId,
+        planId: 'rookie',
+      },
+    });
+
+    // Zapisz subscription ID
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        stripeSubscriptionId: subscription.id,
+      },
+    });
+
+    console.log(`✅ Scheduled subscription ${subscription.id} for user ${userId}`);
+
+  } catch (error) {
+    console.error('❌ Error handling setup intent:', error);
   }
 }
 
@@ -124,18 +188,18 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   }
 
   // Określ nowy status i datę wygaśnięcia
-  let subscriptionStatus: string;
+  let role: string;
   let subscriptionEndsAt: Date | null = null;
 
   if (paymentMethod === 'blik') {
     // BLIK - jednorazowa płatność na 30 dni
-    subscriptionStatus = planId === 'premium' ? 'premium' : 'standard';
+    role = planId === 'rookie' ? 'rookie' : planId === 'creator' ? 'creator' : 'unlimited';
     subscriptionEndsAt = new Date();
     subscriptionEndsAt.setDate(subscriptionEndsAt.getDate() + 30);
     console.log('📅 BLIK subscription ends at:', subscriptionEndsAt);
   } else {
     // Karta - recurring subscription
-    subscriptionStatus = planId === 'premium' ? 'premium' : 'standard';
+    role = planId === 'rookie' ? 'rookie' : planId === 'creator' ? 'creator' : 'unlimited';
 
     // Dla karty też ustawiamy subscription_ends_at na następny billing cycle
     if (session.subscription) {
@@ -157,7 +221,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     await prisma.user.update({
       where: { id: userId },
       data: {
-        subscriptionStatus: subscriptionStatus,
+        role: role as Role,
         stripeSubscriptionId: session.subscription as string | null,
         stripePaymentMethodId: stripePaymentMethodId,
         paymentMethod: paymentMethod, // 'card' lub 'blik'
@@ -167,7 +231,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     });
 
     console.log(`✅ User ${userId} updated:`, {
-      status: subscriptionStatus,
+      role: role,
       paymentMethod: paymentMethod,
       paymentMethodId: stripePaymentMethodId,
       endsAt: subscriptionEndsAt
@@ -184,12 +248,8 @@ async function handleInvoicePaymentSucceeded(invoice: Stripe.Invoice) {
   // ✅ 6. DODAJ getStripe() TUTAJ
   const stripe = getStripe();
 
-  // ---> POCZĄTEK ZMIANY <---
-  // Ignorujemy błąd, ponieważ definicje typów są niekompletne,
-  // ale właściwość 'subscription' istnieje w rzeczywistych danych.
   // @ts-ignore
   const subscriptionId = invoice.subscription as string;
-  // ---> KONIEC ZMIANY <---
 
   if (!subscriptionId) return;
 
@@ -210,16 +270,21 @@ async function handleInvoicePaymentSucceeded(invoice: Stripe.Invoice) {
     // @ts-ignore
     const subscriptionEndsAt = new Date(subscription.current_period_end * 1000);
 
+    // Jeśli user był w trial (free_ver), zmień na rookie po pierwszej płatności
+    const newRole = user.role === 'free_ver' ? 'rookie' : user.role;
+
     // Odśwież datę weryfikacji płatności i datę wygaśnięcia
     await prisma.user.update({
       where: { id: user.id },
       data: {
+        role: newRole,
         paymentVerifiedAt: new Date(),
         subscriptionEndsAt: subscriptionEndsAt,
+        trialEndsAt: null, // Wyczyść trial po pierwszej płatności
       }
     });
 
-    console.log(`✅ Payment verified for user ${user.id}, new period ends:`, subscriptionEndsAt);
+    console.log(`✅ Payment verified for user ${user.id}, role: ${newRole}, new period ends:`, subscriptionEndsAt);
   } catch (error) {
     console.error('❌ Error processing invoice payment:', error);
   }
@@ -229,9 +294,6 @@ async function handleInvoicePaymentSucceeded(invoice: Stripe.Invoice) {
 async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
   console.log('🔄 Processing customer.subscription.updated');
 
-  // ✅ 7. DODAJ getStripe() TUTAJ (jeśli będzie potrzebne w przyszłości)
-  // const stripe = getStripe();
-
   const user = await prisma.user.findFirst({
     where: { stripeSubscriptionId: subscription.id }
   });
@@ -239,7 +301,7 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
   if (!user) return;
 
   // Zaktualizuj status subskrypcji i datę wygaśnięcia
-  let newStatus = user.subscriptionStatus;
+  let newRole = user.role;
   let subscriptionEndsAt: Date | null = null;
 
   if (subscription.status === 'active') {
@@ -247,20 +309,20 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
     // @ts-ignore
     subscriptionEndsAt = new Date(subscription.current_period_end * 1000);
   } else if (subscription.status === 'canceled' || subscription.status === 'unpaid') {
-    newStatus = 'free';
+    newRole = 'free';
     subscriptionEndsAt = null;
   }
 
   await prisma.user.update({
     where: { id: user.id },
     data: {
-      subscriptionStatus: newStatus,
+      role: newRole,
       subscriptionEndsAt: subscriptionEndsAt,
     }
   });
 
   console.log(`✅ Subscription updated for user ${user.id}:`, {
-    status: newStatus,
+    role: newRole,
     endsAt: subscriptionEndsAt
   });
 }
@@ -268,9 +330,6 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
 // Handler dla customer.subscription.deleted
 async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
   console.log('🗑️ Processing customer.subscription.deleted');
-
-  // ✅ 8. DODAJ getStripe() TUTAJ (jeśli będzie potrzebne w przyszłości)
-  // const stripe = getStripe();
 
   const user = await prisma.user.findFirst({
     where: { stripeSubscriptionId: subscription.id }
@@ -282,7 +341,7 @@ async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
   await prisma.user.update({
     where: { id: user.id },
     data: {
-      subscriptionStatus: 'free',
+      role: 'free',
       stripeSubscriptionId: null,
       stripePaymentMethodId: null,
       subscriptionEndsAt: null,

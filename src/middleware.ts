@@ -1,3 +1,5 @@
+// src/middleware.ts
+
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { getToken } from 'next-auth/jwt'
@@ -23,10 +25,22 @@ export async function middleware(request: NextRequest) {
   const isAuth = !!token;
   const { pathname } = request.nextUrl;
 
+  // ==================================================
+  // ⭐ KOREKTA: Dodajemy wyjątek dla strony weryfikacji
+  // ==================================================
+  if (pathname.startsWith('/verify-payment')) {
+    // Jeśli to strona weryfikacji płatności, przepuść request.
+    // Musi być dostępna dla zalogowanego użytkownika.
+    console.log('✅ ALLOWED: Strona weryfikacji płatności, przepuszczam.');
+    return NextResponse.next();
+  }
+  // ==================================================
+
+
   // Definiuj które strony to auth pages
   const isAuthPage = pathname.startsWith('/login') ||
                     pathname.startsWith('/register') ||
-                    pathname.startsWith('/verify');
+                    pathname.startsWith('/verify'); // Ta linia jest teraz bezpieczna
 
   // Definiuj które strony są chronione
   const isProtectedPage = pathname.startsWith('/dashboard') ||
