@@ -47,6 +47,168 @@ interface PagesApiResponse {
   stats: PageStats;
 }
 
+// Tłumaczenia
+const translations = {
+  pl: {
+    // Filtry i Statystyki
+    allPages: 'Wszystkie Strony',
+    published: 'Opublikowane',
+    pending: 'Oczekujące',
+    drafts: 'Szkice',
+
+    // Wyszukiwanie i Nagłówki
+    searchPages: 'Szukaj stron...',
+    search: 'Szukaj',
+    clear: 'Wyczyść',
+    yourPages: 'Twoje Strony',
+    showing: 'Wyświetlanie',
+    of: 'z',
+    pages: 'stron',
+
+    // Stany
+    mustBeLoggedIn: 'Musisz być zalogowany, aby zobaczyć tę stronę.',
+    errorLoadingPages: 'Błąd ładowania stron',
+    noPages: 'Brak Stron',
+    noPagesMatch: 'Brak stron pasujących do kryteriów.',
+    noPagesFound: 'Nie znaleziono żadnych stron.',
+    loading: 'Ładowanie...',
+
+    // Karta Strony
+    mockupPreview: 'Podgląd mockupu',
+    visits: 'wizyt',
+    leads: 'leadów',
+    author: 'Autor:',
+    created: 'Utworzono:',
+    supervisor: 'Opiekun:',
+    password: 'Hasło:',
+    copied: 'Skopiowano!',
+    awaitingModeration: 'Oczekuje na moderację',
+    ebook: 'e-book',
+    sales: 'sprzedaż',
+    link: 'Link:',
+    awaitingPublication: 'Oczekuje na publikację',
+    noCover: 'Brak okładki',
+
+    // Akcje na karcie
+    edit: 'Edytuj',
+    preview: 'Podgląd',
+    delete: 'Usuń',
+
+    // Błąd akcji (Toast)
+    actionError: 'Błąd Akcji',
+
+    // Modal Usuwania
+    confirmDeletion: 'Potwierdź Usunięcie',
+    deleteConfirmation: 'Czy na pewno chcesz usunąć stronę',
+    deleteWarning: 'Ta akcja jest nieodwracalna. Wszystkie pliki i dane powiązane z tą stroną zostaną usunięte.',
+    cancel: 'Anuluj',
+    deleting: 'Usuwanie...',
+    deletePage: 'Usuń Stronę',
+
+    // Modal Podgladu
+    ebookMockupPreview: 'Podgląd mockupu e-booka',
+    pageInfo: 'Informacje o Stronie',
+    title: 'Tytuł',
+    subtitle: 'Podtytuł',
+    close: 'Zamknij',
+
+    // Toast (nowa karta)
+    openingPreview: 'Otwieranie podglądu w nowej karcie...',
+
+    // Modal QR
+    creator: 'Autor:',
+    scanQrCode: 'Zeskanuj kod QR, aby odwiedzić stronę',
+    copying: 'Kopiowanie...',
+    copiedToClipboard: 'Skopiowano do schowka!',
+    copyQrCode: 'Skopiuj kod QR do schowka',
+
+    // Statusy
+    status_published: 'Opublikowana',
+    status_pending: 'Oczekująca',
+    status_draft: 'Szkic',
+    status_unknown: 'Nieznany',
+  },
+  en: {
+    // Filters and Stats
+    allPages: 'All Pages',
+    published: 'Published',
+    pending: 'Pending',
+    drafts: 'Drafts',
+
+    // Search and Headers
+    searchPages: 'Search pages...',
+    search: 'Search',
+    clear: 'Clear',
+    yourPages: 'Your Pages',
+    showing: 'Showing',
+    of: 'of',
+    pages: 'pages',
+
+    // States
+    mustBeLoggedIn: 'You must be logged in to view this page.',
+    errorLoadingPages: 'Error Loading Pages',
+    noPages: 'No Pages',
+    noPagesMatch: 'No pages match the search criteria.',
+    noPagesFound: 'No pages were found.',
+    loading: 'Loading...',
+
+    // Page Card
+    mockupPreview: 'Mockup preview',
+    visits: 'visits',
+    leads: 'leads',
+    author: 'Author:',
+    created: 'Created:',
+    supervisor: 'Supervisor:',
+    password: 'Password:',
+    copied: 'Copied!',
+    awaitingModeration: 'Awaiting moderation',
+    ebook: 'e-book',
+    sales: 'sales',
+    link: 'Link:',
+    awaitingPublication: 'Awaiting publication',
+    noCover: 'No cover',
+
+    // Card Actions
+    edit: 'Edit',
+    preview: 'Preview',
+    delete: 'Delete',
+
+    // Action Error (Toast)
+    actionError: 'Action Error',
+
+    // Delete Modal
+    confirmDeletion: 'Confirm Deletion',
+    deleteConfirmation: 'Are you sure you want to delete the page',
+    deleteWarning: 'This action is irreversible. All files and data associated with this page will be deleted.',
+    cancel: 'Cancel',
+    deleting: 'Deleting...',
+    deletePage: 'Delete Page',
+
+    // Preview Modal
+    ebookMockupPreview: 'Ebook mockup preview',
+    pageInfo: 'Page Information',
+    title: 'Title',
+    subtitle: 'Subtitle',
+    close: 'Close',
+
+    // Toast (new tab)
+    openingPreview: 'Opening preview in a new tab...',
+
+    // QR Modal
+    creator: 'Creator:',
+    scanQrCode: 'Scan the QR code to visit the page',
+    copying: 'Copying...',
+    copiedToClipboard: 'Copied to clipboard!',
+    copyQrCode: 'Copy QR Code to clipboard',
+
+    // Statuses
+    status_published: 'Published',
+    status_pending: 'Pending',
+    status_draft: 'Draft',
+    status_unknown: 'Unknown',
+  }
+};
+
 const PagesView = () => {
   const { user, userRole, isAuthenticated, isLoading: isAuthLoading } = useAuth();
   const coverImageSize = 240;
@@ -71,8 +233,46 @@ const PagesView = () => {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
+  const [currentLang, setCurrentLang] = useState<'pl' | 'en'>('pl');
+
   const qrCodeRef = React.useRef<SVGSVGElement>(null);
   const previewModalRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const savedLang = localStorage.getItem('appLanguage');
+    if (savedLang === 'en' || savedLang === 'pl') {
+      setCurrentLang(savedLang);
+    }
+  }, []);
+
+  const t = translations[currentLang];
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString(
+      currentLang === 'pl' ? 'pl-PL' : 'en-US',
+      {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+      }
+    );
+  };
+
+  const getStatusLabel = (status: string | null) => {
+    switch (status) {
+      case 'published': return t.status_published;
+      case 'pending': return t.status_pending;
+      case 'draft': return t.status_draft;
+      default: return t.status_unknown;
+    }
+  };
+
+  const VideoCoverPlaceholder = ({ width, height, className = "" }: { width: number | string; height: number | string; className?: string; }) => (
+    <div className={`bg-gray-100 rounded-md flex flex-col items-center justify-center border border-gray-200 ${className}`} style={{ width, height }}>
+      <Video size={typeof width === 'number' ? width/3 : 48} className="text-gray-400 mb-2" />
+      <span className="text-gray-400 text-xs">{t.noCover}</span>
+    </div>
+  );
 
   const getOrCreatePreviewUrl = useCallback(async (pageId: string, existingDraftUrl?: string): Promise<string | null> => {
     if (existingDraftUrl) {
@@ -120,13 +320,6 @@ const PagesView = () => {
     }
     return `/api/assets/uploads/${coverImagePath}`;
   };
-
-  const VideoCoverPlaceholder = ({ width, height, className = "" }: { width: number | string; height: number | string; className?: string; }) => (
-    <div className={`bg-gray-100 rounded-md flex flex-col items-center justify-center border border-gray-200 ${className}`} style={{ width, height }}>
-      <Video size={typeof width === 'number' ? width/3 : 48} className="text-gray-400 mb-2" />
-      <span className="text-gray-400 text-xs">No cover</span>
-    </div>
-  );
 
   const PlaceholderCard = () => (
     <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden animate-pulse">
@@ -365,10 +558,13 @@ const PagesView = () => {
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
+    fetchPages(); // Dodane wywołanie fetchPages po wyszukaniu
   };
 
   const handleClearSearch = () => {
     setSearchTerm('');
+    // fetchPages() zostanie wywołane przez useEffect po zmianie searchTerm, ale dla pewności można dodać
+    // Jeśli fetchPages jest w zależnościach useEffect od searchTerm
   };
 
   const confirmDeletePage = async () => {
@@ -423,14 +619,6 @@ const PagesView = () => {
     setDeleteError(null);
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    });
-  };
-
   const getSupervisorDescription = (code?: string) => code ? supervisorDescriptions[code] || code : null;
   const isGodRole = userRole === 'payd';
 
@@ -445,7 +633,7 @@ const PagesView = () => {
   if (!isAuthenticated) {
     return (
       <div className="text-center py-20 text-gray-500">
-        <p>You must be logged in to view this page.</p>
+        <p>{t.mustBeLoggedIn}</p>
       </div>
     );
   }
@@ -468,7 +656,7 @@ const PagesView = () => {
           >
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-blue-600 text-sm font-medium">All Pages</p>
+                <p className="text-blue-600 text-sm font-medium">{t.allPages}</p>
                 <p className="text-xl sm:text-2xl font-bold text-blue-900">{stats.total}</p>
               </div>
               <BookOpen className="text-blue-600" size={28} />
@@ -482,7 +670,7 @@ const PagesView = () => {
           >
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-green-600 text-sm font-medium">Published</p>
+                <p className="text-green-600 text-sm font-medium">{t.published}</p>
                 <p className="text-xl sm:text-2xl font-bold text-green-900">{stats.published}</p>
               </div>
               <Sparkles className="text-green-600" size={28} />
@@ -496,7 +684,7 @@ const PagesView = () => {
           >
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-orange-600 text-sm font-medium">Pending</p>
+                <p className="text-orange-600 text-sm font-medium">{t.pending}</p>
                 <p className="text-xl sm:text-2xl font-bold text-orange-900">{stats.pending}</p>
               </div>
               <Edit className="text-orange-600" size={28} />
@@ -509,7 +697,7 @@ const PagesView = () => {
                 <div className="relative flex-1">
                     <input
                         type="text"
-                        placeholder="Search pages..."
+                        placeholder={t.searchPages}
                         className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:border-gray-400"
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
@@ -521,15 +709,15 @@ const PagesView = () => {
                     disabled={isLoading}
                     className="hidden sm:inline-flex px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors disabled:opacity-50 whitespace-nowrap cursor-pointer"
                 >
-                    Search
+                    {t.search}
                 </button>
                 {searchTerm && (
                     <button
                         type="button"
                         onClick={handleClearSearch}
-                        className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors whitespace-nowrap"
+                        className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors whitespace-nowrap cursor-pointer"
                     >
-                        Clear
+                        {t.clear}
                     </button>
                 )}
             </form>
@@ -537,10 +725,10 @@ const PagesView = () => {
 
         <div className="bg-transparent sm:bg-white rounded-none border-0 sm:rounded-xl sm:border border-gray-200 overflow-hidden -mx-4 sm:mx-0">
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50">
-                <h2 className="text-lg font-semibold text-gray-800">Your Pages</h2>
+                <h2 className="text-lg font-semibold text-gray-800">{t.yourPages}</h2>
                 {stats && stats.total > 0 && (
                 <p className="text-sm text-gray-600">
-                    Showing {pages.length} of {stats.total} pages
+                    {t.showing} {pages.length} {t.of} {stats.total} {t.pages}
                 </p>
                 )}
             </div>
@@ -557,7 +745,7 @@ const PagesView = () => {
                     <div className="col-span-full">
                         <div className="text-center py-20 text-red-600">
                             <AlertTriangle size={48} className="mx-auto text-red-300 mb-4" />
-                            <h3 className="text-lg font-medium text-red-900 mb-2">Error Loading Pages</h3>
+                            <h3 className="text-lg font-medium text-red-900 mb-2">{t.errorLoadingPages}</h3>
                             <p>{error}</p>
                         </div>
                     </div>
@@ -566,8 +754,8 @@ const PagesView = () => {
                     <div className="col-span-full">
                         <div className="text-center py-20 text-gray-500">
                             <FileText size={48} className="mx-auto text-gray-300 mb-4" />
-                            <h3 className="text-lg font-medium text-gray-900 mb-2">No Pages</h3>
-                            <p>{searchTerm || activeFilter !== 'all' ? 'No pages match the search criteria.' : 'No pages were found.'}</p>
+                            <h3 className="text-lg font-medium text-gray-900 mb-2">{t.noPages}</h3>
+                            <p>{searchTerm || activeFilter !== 'all' ? t.noPagesMatch : t.noPagesFound}</p>
                         </div>
                     </div>
                 ) : (
@@ -592,26 +780,26 @@ const PagesView = () => {
                                         <VideoCoverPlaceholder width="100%" height="160px" />
                                     )}
                                     {page.coverImage && (
-                                        <p className="text-xs text-gray-500 text-center mt-1">Mockup preview</p>
+                                        <p className="text-xs text-gray-500 text-center mt-1">{t.mockupPreview}</p>
                                     )}
                                 </div>
                                 <div className="w-2/3 flex flex-col gap-2">
                                     <div className="bg-blue-50 rounded-lg p-2 border border-blue-100">
                                         <p className="text-blue-600 text-lg font-semibold">{page.visits}</p>
-                                        <p className="text-blue-500 text-xs uppercase tracking-wide font-medium">visits</p>
+                                        <p className="text-blue-500 text-xs uppercase tracking-wide font-medium">{t.visits}</p>
                                     </div>
                                     <div className="bg-green-50 rounded-lg p-2 border border-green-100">
                                         <p className="text-green-600 text-lg font-semibold">{page.leads}</p>
-                                        <p className="text-green-500 text-xs uppercase tracking-wide font-medium">leads</p>
+                                        <p className="text-green-500 text-xs uppercase tracking-wide font-medium">{t.leads}</p>
                                     </div>
                                     {/* PRZENIESIONY BLOK */}
                                     <div className="bg-gray-50 rounded-lg p-3 mt-2 space-y-2 border border-gray-100">
                                         <dl className="text-xs space-y-2">
-                                            <div className="flex"><dt className="w-1/3 text-gray-500">Author:</dt><dd className="w-2/3 font-medium text-gray-800 truncate">{page.creator}</dd></div>
+                                            <div className="flex justify-between items-center"><dt className="text-gray-500 flex-shrink-0">{t.author}</dt><dd className="font-medium text-gray-800 truncate text-right pl-2">{page.creator}</dd></div>
                                             <div className="border-t border-gray-200"></div>
-                                            <div className="flex pt-1"><dt className="w-1/3 text-gray-500">Created:</dt><dd className="w-2/3 font-medium text-gray-800 truncate">{formatDate(page.createdAt)}</dd></div>
-                                            {page.supervisorCode && !isGodRole && <div className="flex"><dt className="w-1/3 text-gray-500">Supervisor:</dt><dd className="w-2/3 font-medium text-gray-800 truncate">{getSupervisorDescription(page.supervisorCode)}</dd></div>}
-                                            {page.isOwnedByUser && page.videoPassword && <div className="flex items-center"><dt className="w-1/3 text-gray-500 flex items-center"><Lock size={12} className="mr-1 text-amber-500"/>Password:</dt><dd className="w-2/3 font-medium text-amber-600 truncate">{page.videoPassword}</dd></div>}
+                                            <div className="flex justify-between items-center pt-1"><dt className="text-gray-500 flex-shrink-0">{t.created}</dt><dd className="font-medium text-gray-800 truncate text-right pl-2">{formatDate(page.createdAt)}</dd></div>
+                                            {page.supervisorCode && !isGodRole && <div className="flex justify-between items-center"><dt className="text-gray-500 flex-shrink-0">{t.supervisor}</dt><dd className="font-medium text-gray-800 truncate text-right pl-2">{getSupervisorDescription(page.supervisorCode)}</dd></div>}
+                                            {page.isOwnedByUser && page.videoPassword && <div className="flex justify-between items-center"><dt className="text-gray-500 flex items-center flex-shrink-0"><Lock size={12} className="mr-1 text-amber-500"/>{t.password}</dt><dd className="font-medium text-amber-600 truncate text-right pl-2">{page.videoPassword}</dd></div>}
                                         </dl>
                                     </div>
                                 </div>
@@ -623,13 +811,13 @@ const PagesView = () => {
                                         <div className="flex items-center relative">
                                             <p className="text-xs text-gray-500 truncate flex-grow"><span className="text-sky-600 font-medium">{page.url}</span></p>
                                             <div className="flex items-center ml-2 flex-shrink-0">
-                                                <button onClick={() => openQrCode(page.url, page.headline || page.title, page.creator)} className="p-1 text-gray-500 hover:text-sky-600 rounded" title="Generate QR Code"><QrCode className="h-4 w-4" /></button>
-                                                <button onClick={() => copyUrlToClipboard(page.id, page.url)} className="p-1 text-gray-500 hover:text-sky-600 rounded" title="Copy link"><Copy className="h-4 w-4" /></button>
+                                                <button onClick={() => openQrCode(page.url, page.headline || page.title, page.creator)} className="p-1 text-gray-500 hover:text-sky-600 rounded cursor-pointer" title="Generate QR Code"><QrCode className="h-4 w-4" /></button>
+                                                <button onClick={() => copyUrlToClipboard(page.id, page.url)} className="p-1 text-gray-500 hover:text-sky-600 rounded cursor-pointer" title="Copy link"><Copy className="h-4 w-4" /></button>
                                             </div>
-                                            {copiedUrl === page.id && <div className="absolute right-0 -top-7 bg-green-100 text-green-800 px-2 py-1 rounded-md text-xs z-10">Copied!</div>}
+                                            {copiedUrl === page.id && <div className="absolute right-0 -top-7 bg-green-100 text-green-800 px-2 py-1 rounded-md text-xs z-10">{t.copied}</div>}
                                         </div>
                                     )}
-                                    {page.status === 'pending' && <div className="text-amber-600 flex items-center text-sm mt-2"><Clock size={16} className="mr-2" />Awaiting moderation</div>}
+                                    {page.status === 'pending' && <div className="text-amber-600 flex items-center text-sm mt-2"><Clock size={16} className="mr-2" />{t.awaitingModeration}</div>}
                                 </div>
                             </div>
                         </div>
@@ -653,32 +841,32 @@ const PagesView = () => {
 
                                 <div className="w-1/2 flex flex-col justify-center">
                                     <div className="flex flex-nowrap space-x-1.5 min-w-fit justify-end">
-                                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap ${page.type === 'ebook' ? 'bg-indigo-100 text-indigo-700' : 'bg-purple-100 text-purple-700'}`}>{page.type === 'ebook' ? 'e-book' : 'sales'}</span>
-                                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap ${page.status === 'published' ? 'bg-green-100 text-green-700' : page.status === 'pending' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-700'}`}>{page.status}</span>
+                                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap ${page.type === 'ebook' ? 'bg-indigo-100 text-indigo-700' : 'bg-purple-100 text-purple-700'}`}>{page.type === 'ebook' ? t.ebook : t.sales}</span>
+                                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap ${page.status === 'published' ? 'bg-green-100 text-green-700' : page.status === 'pending' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-700'}`}>{getStatusLabel(page.status)}</span>
                                     </div>
 
                                     <div className="border-t border-gray-200 my-4"></div>
 
                                     <dl className="text-sm space-y-2.5">
                                         <div className="flex">
-                                            <dt className="w-1/2 text-gray-500 flex-shrink-0">Author:</dt>
+                                            <dt className="w-1/2 text-gray-500 flex-shrink-0">{t.author}</dt>
                                             <dd className="w-1/2 font-medium text-gray-800 truncate min-w-0">{page.creator}</dd>
                                         </div>
                                         <div className="border-t border-gray-200"></div>
                                         <div className="flex pt-2">
-                                            <dt className="w-1/2 text-gray-500 flex-shrink-0">Created:</dt>
+                                            <dt className="w-1/2 text-gray-500 flex-shrink-0">{t.created}</dt>
                                             <dd className="w-1/2 font-medium text-gray-800 truncate min-w-0">{formatDate(page.createdAt)}</dd>
                                         </div>
                                         {page.supervisorCode && !isGodRole &&
                                             <div className="flex">
-                                                <dt className="w-1/4 text-gray-500 flex-shrink-0">Supervisor:</dt>
+                                                <dt className="w-1/4 text-gray-500 flex-shrink-0">{t.supervisor}</dt>
                                                 <dd className="w-3/4 font-medium text-gray-800 truncate min-w-0">{getSupervisorDescription(page.supervisorCode)}</dd>
                                             </div>
                                         }
                                         {page.isOwnedByUser && page.videoPassword &&
                                             <div className="flex items-center">
                                                 <dt className="w-1/2 text-gray-500 flex items-center flex-shrink-0">
-                                                    <Lock size={14} className="mr-1.5 text-amber-500"/>Password:
+                                                    <Lock size={14} className="mr-1.5 text-amber-500"/>{t.password}
                                                 </dt>
                                                 <dd className="w-1/2 font-medium text-amber-600 truncate min-w-0">{page.videoPassword}</dd>
                                             </div>
@@ -690,11 +878,11 @@ const PagesView = () => {
                                     <div className="flex gap-4">
                                         <div className="flex-1 bg-blue-50 rounded-lg p-3 border border-blue-100 hover:border-blue-200 transition-colors">
                                             <p className="text-blue-600 text-2xl font-semibold">{page.visits}</p>
-                                            <p className="text-blue-500 text-xs uppercase tracking-wide font-medium">visits</p>
+                                            <p className="text-blue-500 text-xs uppercase tracking-wide font-medium">{t.visits}</p>
                                         </div>
                                         <div className="flex-1 bg-green-50 rounded-lg p-3 border border-green-100 hover:border-green-200 transition-colors">
                                             <p className="text-green-600 text-2xl font-semibold">{page.leads}</p>
-                                            <p className="text-green-500 text-xs uppercase tracking-wide font-medium">leads</p>
+                                            <p className="text-green-500 text-xs uppercase tracking-wide font-medium">{t.leads}</p>
                                         </div>
                                     </div>
                                 </div>
@@ -704,33 +892,33 @@ const PagesView = () => {
                                  <div className="bg-gray-50 rounded-lg p-2.5 border border-gray-100">
                                     {page.url && (
                                         <div className="flex items-center relative">
-                                            <p className="text-xs text-gray-500 truncate flex-grow"><span className="text-gray-400 mr-1">Link:</span><span className="text-sky-600 font-medium">{page.url}</span></p>
+                                            <p className="text-xs text-gray-500 truncate flex-grow"><span className="text-gray-400 mr-1">{t.link}</span><span className="text-sky-600 font-medium">{page.url}</span></p>
                                             <div className="flex items-center ml-2 flex-shrink-0">
-                                                <button onClick={() => openQrCode(page.url, page.headline || page.title, page.creator)} className="p-1 text-gray-500 hover:text-sky-600 rounded" title="Generate QR Code"><QrCode className="h-4 w-4" /></button>
-                                                <button onClick={() => copyUrlToClipboard(page.id, page.url)} className="p-1 text-gray-500 hover:text-sky-600 rounded" title="Copy link"><Copy className="h-4 w-4" /></button>
+                                                <button onClick={() => openQrCode(page.url, page.headline || page.title, page.creator)} className="p-1 text-gray-500 hover:text-sky-600 rounded cursor-pointer" title="Generate QR Code"><QrCode className="h-4 w-4" /></button>
+                                                <button onClick={() => copyUrlToClipboard(page.id, page.url)} className="p-1 text-gray-500 hover:text-sky-600 rounded cursor-pointer" title="Copy link"><Copy className="h-4 w-4" /></button>
                                             </div>
-                                            {copiedUrl === page.id && <div className="absolute right-0 -top-7 bg-green-100 text-green-800 px-2 py-1 rounded-md text-xs z-10">Copied!</div>}
+                                            {copiedUrl === page.id && <div className="absolute right-0 -top-7 bg-green-100 text-green-800 px-2 py-1 rounded-md text-xs z-10">{t.copied}</div>}
                                         </div>
                                     )}
-                                    {page.status === 'pending' && <div className="text-amber-600 flex items-center text-sm mt-2"><Clock size={16} className="mr-2" />Awaiting publication</div>}
+                                    {page.status === 'pending' && <div className="text-amber-600 flex items-center text-sm mt-2"><Clock size={16} className="mr-2" />{t.awaitingPublication}</div>}
                                 </div>
                             </div>
                         </div>
 
                         <div className="px-4 py-3 border-t border-gray-100 flex justify-between items-center bg-gray-50/50">
                             <div className="space-x-2">
-                                <button className="text-sm text-sky-600 hover:text-sky-700 font-medium bg-sky-50 hover:bg-sky-100 px-3 py-1.5 rounded-md transition-colors inline-flex items-center" onClick={() => openEditor(page.id, page.draft_url)} disabled={actionLoading === page.id}>
+                                <button className="text-sm text-sky-600 hover:text-sky-700 font-medium bg-sky-50 hover:bg-sky-100 px-3 py-1.5 rounded-md transition-colors inline-flex items-center cursor-pointer disabled:cursor-not-allowed" onClick={() => openEditor(page.id, page.draft_url)} disabled={actionLoading === page.id}>
                                     {actionLoading === page.id ? <div className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent mr-1.5"></div> : <Edit size={14} className="inline mr-1.5" />}
-                                    Edit
+                                    {t.edit}
                                 </button>
-                                <button className="text-sm text-gray-600 hover:text-gray-700 font-medium bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-md transition-colors inline-flex items-center disabled:opacity-50" onClick={() => openPreview(page.id, page.draft_url)} disabled={actionLoading === page.id}>
+                                <button className="text-sm text-gray-600 hover:text-gray-700 font-medium bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-md transition-colors inline-flex items-center disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed" onClick={() => openPreview(page.id, page.draft_url)} disabled={actionLoading === page.id}>
                                     {actionLoading === page.id ? <div className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent mr-1.5"></div> : <Eye size={14} className="inline mr-1.5" />}
-                                    Preview
+                                    {t.preview}
                                 </button>
                             </div>
-                            <button className="text-sm text-red-600 hover:text-red-700 font-medium bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-md transition-colors inline-flex items-center" onClick={() => handleDeletePage(page)} title="Delete page">
+                            <button className="text-sm text-red-600 hover:text-red-700 font-medium bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-md transition-colors inline-flex items-center cursor-pointer" onClick={() => handleDeletePage(page)} title={t.delete}>
                                 <Trash2 size={14} className="inline mr-1.5" />
-                                Delete
+                                {t.delete}
                             </button>
                         </div>
                     </div>
@@ -743,12 +931,12 @@ const PagesView = () => {
       <div className="fixed bottom-4 left-4 bg-red-600 text-white px-4 py-3 rounded-lg shadow-lg z-50 flex items-center max-w-md">
         <AlertTriangle className="h-5 w-5 mr-3 flex-shrink-0" />
         <div>
-          <p className="font-medium">Action Error</p>
+          <p className="font-medium">{t.actionError}</p>
           <p className="text-sm opacity-90">{actionError}</p>
         </div>
         <button
           onClick={() => setActionError(null)}
-          className="ml-3 text-white hover:text-gray-200"
+          className="ml-3 text-white hover:text-gray-200 cursor-pointer"
         >
           <X size={16} />
         </button>
@@ -757,15 +945,15 @@ const PagesView = () => {
 
       {isDeleteModalOpen && pageToDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={cancelDeletePage} />
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm cursor-pointer" onClick={cancelDeletePage} />
           <div className="relative bg-white rounded-lg shadow-lg w-full max-w-md p-6 mx-4">
-            <h3 className="text-lg font-semibold text-gray-800 mb-2">Confirm Deletion</h3>
+            <h3 className="text-lg font-semibold text-gray-800 mb-2">{t.confirmDeletion}</h3>
             <div className="my-4">
               <p className="text-gray-600 mb-2">
-                Are you sure you want to delete the page <span className="font-semibold text-gray-800">{pageToDelete.headline || pageToDelete.title}</span>?
+                {t.deleteConfirmation} <span className="font-semibold text-gray-800">{pageToDelete.headline || pageToDelete.title}</span>?
               </p>
               <p className="text-sm text-red-600">
-                This action is irreversible. All files and data associated with this page will be deleted.
+                {t.deleteWarning}
               </p>
             </div>
             {deleteError && (
@@ -774,9 +962,9 @@ const PagesView = () => {
               </div>
             )}
             <div className="flex justify-end space-x-3 mt-6">
-              <button type="button" onClick={cancelDeletePage} disabled={isDeleting} className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 disabled:opacity-50">Cancel</button>
-              <button type="button" onClick={confirmDeletePage} disabled={isDeleting} className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-md text-white disabled:bg-red-400">
-                {isDeleting ? (<div className="flex items-center"><div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full mr-2"></div><span>Deleting...</span></div>) : ('Delete Page')}
+              <button type="button" onClick={cancelDeletePage} disabled={isDeleting} className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed">{t.cancel}</button>
+              <button type="button" onClick={confirmDeletePage} disabled={isDeleting} className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-md text-white disabled:bg-red-400 cursor-pointer disabled:cursor-not-allowed">
+                {isDeleting ? (<div className="flex items-center"><div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full mr-2"></div><span>{t.deleting}</span></div>) : (t.deletePage)}
               </button>
             </div>
           </div>
@@ -789,9 +977,9 @@ const PagesView = () => {
                 <div className="flex items-center justify-between p-4 flex-shrink-0 border-b border-white/10">
                     <div className="flex items-center space-x-3 min-w-0">
                         <ImageIcon className="h-5 w-5 text-white flex-shrink-0" />
-                        <h3 className="text-white font-medium truncate">Ebook mockup preview</h3>
+                        <h3 className="text-white font-medium truncate">{t.ebookMockupPreview}</h3>
                     </div>
-                    <button onClick={closeCoverPreview} className="text-white hover:text-gray-300 transition-colors flex-shrink-0 ml-4">
+                    <button onClick={closeCoverPreview} className="text-white hover:text-gray-300 transition-colors flex-shrink-0 ml-4 cursor-pointer">
                         <X size={24} />
                     </button>
                 </div>
@@ -811,18 +999,18 @@ const PagesView = () => {
                         <div className="p-3 flex-shrink-0 bg-black/20">
                         <h4 className="font-semibold text-white flex items-center">
                             <FileText size={18} className="mr-2 text-gray-300"/>
-                            Page Information
+                            {t.pageInfo}
                         </h4>
                         </div>
                         <div className="flex-1 overflow-y-auto p-3">
                             <ul className="space-y-4">
                                 <li>
-                                    <span className="block text-xs text-gray-400 font-medium uppercase tracking-wider">Title</span>
+                                    <span className="block text-xs text-gray-400 font-medium uppercase tracking-wider">{t.title}</span>
                                     <p className="text-gray-200 text-base">{previewImage.title}</p>
                                 </li>
                                 {previewImage.subtitle && (
                                     <li>
-                                        <span className="block text-xs text-gray-400 font-medium uppercase tracking-wider">Subtitle</span>
+                                        <span className="block text-xs text-gray-400 font-medium uppercase tracking-wider">{t.subtitle}</span>
                                         <p className="text-gray-300 text-sm">{previewImage.subtitle}</p>
                                     </li>
                                 )}
@@ -832,8 +1020,8 @@ const PagesView = () => {
                 </div>
 
                 <div className="flex justify-center items-center p-4 flex-shrink-0 space-x-3">
-                    <button onClick={closeCoverPreview} className="px-6 py-2 bg-white/10 text-white rounded-lg hover:bg-white/20 transition-colors font-medium">
-                        Close
+                    <button onClick={closeCoverPreview} className="px-6 py-2 bg-white/10 text-white rounded-lg hover:bg-white/20 transition-colors font-medium cursor-pointer">
+                        {t.close}
                     </button>
                 </div>
             </div>
@@ -843,33 +1031,33 @@ const PagesView = () => {
       {previewNotification && (
         <div className="fixed bottom-4 right-4 bg-indigo-600 text-white px-4 py-3 rounded-lg shadow-lg z-50 flex items-center animate-fade-in">
           <Eye className="h-5 w-5 mr-3" />
-          <span>Opening preview in a new tab...</span>
+          <span>{t.openingPreview}</span>
         </div>
       )}
 
       {qrCodeData && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={closeQrCode} />
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm cursor-pointer" onClick={closeQrCode} />
           <div className="relative bg-white rounded-lg shadow-lg p-6 mx-4 max-w-md w-full">
-            <button onClick={closeQrCode} className="absolute top-2 right-2 p-2 rounded-full bg-white/80 text-gray-700 hover:bg-gray-200 transition-colors"><X size={24} /></button>
+            <button onClick={closeQrCode} className="absolute top-2 right-2 p-2 rounded-full bg-white/80 text-gray-700 hover:bg-gray-200 transition-colors cursor-pointer"><X size={24} /></button>
             <div className="flex flex-col items-center">
               <h3 className="text-lg font-semibold text-gray-800 mb-4">{qrCodeData.title}</h3>
               <div className="mb-4 text-center">
                 <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center mx-auto mb-2 overflow-hidden border border-gray-200">{qrCodeData.logoUrl ? (<img src={qrCodeData.logoUrl} alt="Company Logo" className="w-full h-full object-contain p-1" onError={(e) => { const imgElement = e.currentTarget as HTMLImageElement; imgElement.style.display = 'none'; const parent = imgElement.parentElement; if (parent) { const fallbackIcon = document.createElement('div'); fallbackIcon.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-blue-600"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8"y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>`; parent.appendChild(fallbackIcon); } }} />) : (<FileText size={32} className="text-blue-600" />)}</div>
-                <p className="text-sm text-gray-600 mb-1">Creator: {qrCodeData.creator}</p>
+                <p className="text-sm text-gray-600 mb-1">{t.creator} {qrCodeData.creator}</p>
                 <p className="text-xs text-gray-500 truncate max-w-xs">{qrCodeData.url}</p>
               </div>
               <div className="w-64 h-64 bg-white border border-gray-200 rounded-lg p-4 flex items-center justify-center relative">
                 <QRCodeSVG value={qrCodeData.url} size={200} bgColor={"#ffffff"} fgColor={"#000000"} level={"H"} includeMargin={true} ref={qrCodeRef} />
                 <div className="absolute -bottom-8 text-center w-full">
-                  <p className="text-xs text-gray-500">Scan the QR code to visit the page</p>
+                  <p className="text-xs text-gray-500">{t.scanQrCode}</p>
                 </div>
               </div>
               <div className="mt-14 flex flex-col space-y-3">
-                <button className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors flex items-center justify-center" onClick={copyQrCodeToClipboard} disabled={copyingQr || qrCopied}>
-                  {copyingQr ? (<><div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full mr-2"></div><span>Copying...</span></>) : qrCopied ? (<><Check className="h-4 w-4 mr-2" /><span>Copied to clipboard!</span></>) : (<><Copy className="h-4 w-4 mr-2" /><span>Copy QR Code to clipboard</span></>)}
+                <button className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors flex items-center justify-center cursor-pointer disabled:cursor-not-allowed" onClick={copyQrCodeToClipboard} disabled={copyingQr || qrCopied}>
+                  {copyingQr ? (<><div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full mr-2"></div><span>{t.copying}</span></>) : qrCopied ? (<><Check className="h-4 w-4 mr-2" /><span>{t.copiedToClipboard}</span></>) : (<><Copy className="h-4 w-4 mr-2" /><span>{t.copyQrCode}</span></>)}
                 </button>
-                <button className="px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors" onClick={closeQrCode}>Close</button>
+                <button className="px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors cursor-pointer" onClick={closeQrCode}>{t.close}</button>
               </div>
             </div>
           </div>

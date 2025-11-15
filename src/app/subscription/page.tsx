@@ -158,11 +158,11 @@ export default function SubscriptionPage() {
       <div className="max-w-4xl mx-auto">
         <div className="mb-8">
           <Link
-            href="/strony-zapisu"
+            href="/settings"
             className="inline-flex items-center text-blue-600 hover:text-blue-700 mb-4 text-sm font-medium"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
-            Powrót do listy stron
+            Powrót do Ustawień
           </Link>
 
           <h1 className="text-3xl font-bold text-gray-900">Zarządzanie subskrypcją</h1>

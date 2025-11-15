@@ -14,7 +14,7 @@ import Link from 'next/link';
 interface Model {
   id: string;
   name: string;
-  description: string;
+  description: string; // Teraz to jest klucz tłumaczenia
   tier: 'basic' | 'premium';
   cost?: string;
 }
@@ -53,6 +53,204 @@ interface AuthorSettings {
   imageAiModel: string | null;
 }
 
+// --- Tłumaczenia ---
+const translations = {
+  pl: {
+    // Komunikaty (Toast)
+    apiKeyStatusError: 'Nie udało się pobrać statusu kluczy API',
+    serverError: 'Błąd połączenia z serwerem',
+    settingsFetchError: 'Nie udało się pobrać ustawień autora',
+    apiKeySaved: 'Klucz API dla {providerName} został zapisany.',
+    apiKeySaveError: 'Nie udało się zapisać klucza API dla {providerName}',
+    apiKeyRemoved: 'Klucz API dla {providerName} został usunięty.',
+    apiKeyRemoveError: 'Nie udało się usunąć klucza API dla {providerName}',
+    avatarUpdated: 'Awatar został zaktualizowany',
+    avatarUploadError: 'Nie udało się wgrać awatara',
+    avatarRemoved: 'Awatar został usunięty',
+    avatarRemoveError: 'Nie udało się usunąć awatara',
+    usernameUpdated: 'Nazwa autora została zaktualizowana',
+    usernameSaveError: 'Nie udało się zapisać nazwy autora',
+
+    // Modal potwierdzający
+    confirmRemoveApiKeyTitle: 'Usuń klucz API',
+    confirmRemoveApiKeyMsg: 'Czy na pewno chcesz usunąć klucz API dla {providerName}?',
+    confirmCancel: 'Anuluj',
+    confirmRemove: 'Usuń klucz',
+
+    // Selektor Modeli
+    selectModel: 'Wybierz model',
+    activeModel: 'Aktywny model',
+    modelAvailable: 'Model dostępny',
+    apiKeyRequired: 'Wymagany klucz API',
+
+    // Placeholder Klucza API
+    apiKeyPlaceholderAnthropic: 'sk-ant-... lub sk-ant-api03-...',
+    apiKeyPlaceholderOpenAI: 'sk-...',
+    apiKeyPlaceholderGoogle: 'AIza... (z Google AI Studio)',
+    apiKeyPlaceholderDefault: 'Wklej swój klucz API',
+
+    // Selektor Providera
+    providerSoon: 'wkrótce',
+
+    // Ustawienia Główne
+    authorProfile: 'Profil Autora',
+    authorName: 'Nazwa Autora',
+    usernamePlaceholder: 'Wpisz swoją nazwę',
+    save: 'Zapisz',
+    saving: 'Zapisywanie...',
+    subscription: 'Subskrypcja',
+    currentPlan: 'Aktualny plan',
+    planFree: 'Darmowy',
+    planStandard: 'Standard',
+    planPremium: 'Premium',
+    planActive: 'Aktywna',
+    planInactive: 'Nieaktywna',
+    renewsAt: 'Odnowienie:',
+    manageSubscription: 'Zarządzaj subskrypcją',
+    authorLogo: 'Logo Autora / Zdjęcie',
+    processing: 'Przetwarzanie...',
+    logoRestrictedTitle: 'Własne logo dostępne w płatnych planach',
+    logoRestrictedBtn: 'Zaktualizuj swój Plan Inflee.app',
+    uploading: 'Wgrywanie...',
+    processingAvatar: 'Przetwarzanie awatara',
+    addLogo: 'Dodaj logo',
+    logoFormats: 'PNG, JPG do 5MB',
+    restoreDefaultLogo: 'Przywróć domyślne logo',
+    logoHint: 'Widoczne w nagłówku okładki i na stronach lądowania',
+
+    // Konfiguracja AI
+    aiConfig: 'Konfiguracja AI',
+    aiConfigDesc: 'Wybierz modele i skonfiguruj klucze API',
+    aiForText: 'AI dla Tekstu',
+    textGeneration: 'Generowanie Tekstu',
+    apiActive: 'API Aktywne',
+    provider: 'Provider',
+    apiKey: 'Klucz API',
+    pasteApiKey: 'Wklej swój klucz API...',
+    keyIncomplete: 'Klucz wydaje się niekompletny',
+    keySecured: 'Kryptograficznie zabezpieczone:',
+    keySecuredDesc: 'Twój klucz będzie tutaj bezpieczny!',
+    aiForImages: 'AI dla Obrazów',
+    imageGeneration: 'Generowanie Obrazów',
+
+    // Zarządzanie Systemem
+    systemManagement: 'Zarządzanie Systemem',
+    diskExplorer: 'Eksplorator Dysku',
+    diskExplorerDesc: 'Przeglądaj i zarządzaj plikami na serwerze',
+    exploreDisk: 'Eksploruj Dysk',
+
+    // Opisy Modeli (Klucze)
+    modelDescClaudeHaiku: 'Dostępny za darmo przez 30 dni',
+    modelDescClaudeSonnet: 'Input $3 / MTo | Output $15 / MTok',
+    modelDescGpt4o: 'Najnowszy model ($0.030)',
+    modelDescGeminiPro: 'Model Google ($0.020)',
+    modelDescGrok2: 'Model X.AI ($0.040)',
+    modelDescBielik: 'Polski model ($0.015)',
+    modelDescImagen3: 'Dostępny za darmo przez 30 dni',
+    modelDescImagen4: 'Wysoka jakość ($0.04) - wymaga własnego klucza API',
+    modelDescImagen4Ultra: 'Najwyższa jakość ($0.06) - wymaga własnego klucza API',
+    modelDescDalle3: 'Standard - nie wymaga klucza',
+    modelDescGptImage1: 'Premium ($0.19) - wymaga klucza'
+  },
+  en: {
+    // Komunikaty (Toast)
+    apiKeyStatusError: 'Failed to fetch API key status',
+    serverError: 'Server connection error',
+    settingsFetchError: 'Failed to fetch author settings',
+    apiKeySaved: 'API key for {providerName} has been saved.',
+    apiKeySaveError: 'Failed to save API key for {providerName}',
+    apiKeyRemoved: 'API key for {providerName} has been removed.',
+    apiKeyRemoveError: 'Failed to remove API key for {providerName}',
+    avatarUpdated: 'Avatar has been updated',
+    avatarUploadError: 'Failed to upload avatar',
+    avatarRemoved: 'Avatar has been removed',
+    avatarRemoveError: 'Failed to remove avatar',
+    usernameUpdated: 'Author name has been updated',
+    usernameSaveError: 'Failed to save author name',
+
+    // Modal potwierdzający
+    confirmRemoveApiKeyTitle: 'Remove API Key',
+    confirmRemoveApiKeyMsg: 'Are you sure you want to remove the API key for {providerName}?',
+    confirmCancel: 'Cancel',
+    confirmRemove: 'Remove Key',
+
+    // Selektor Modeli
+    selectModel: 'Select a model',
+    activeModel: 'Active Model',
+    modelAvailable: 'Model available',
+    apiKeyRequired: 'API key required',
+
+    // Placeholder Klucza API
+    apiKeyPlaceholderAnthropic: 'sk-ant-... or sk-ant-api03-...',
+    apiKeyPlaceholderOpenAI: 'sk-...',
+    apiKeyPlaceholderGoogle: 'AIza... (from Google AI Studio)',
+    apiKeyPlaceholderDefault: 'Paste your API key',
+
+    // Selektor Providera
+    providerSoon: 'soon',
+
+    // Ustawienia Główne
+    authorProfile: 'Author Profile',
+    authorName: 'Author Name',
+    usernamePlaceholder: 'Enter your name',
+    save: 'Save',
+    saving: 'Saving...',
+    subscription: 'Subscription',
+    currentPlan: 'Current Plan',
+    planFree: 'Free',
+    planStandard: 'Standard',
+    planPremium: 'Premium',
+    planActive: 'Active',
+    planInactive: 'Inactive',
+    renewsAt: 'Renews at:',
+    manageSubscription: 'Manage Subscription',
+    authorLogo: 'Author Logo / Photo',
+    processing: 'Processing...',
+    logoRestrictedTitle: 'Custom logo available in paid plans',
+    logoRestrictedBtn: 'Upgrade your Inflee.app Plan',
+    uploading: 'Uploading...',
+    processingAvatar: 'Processing avatar',
+    addLogo: 'Add logo',
+    logoFormats: 'PNG, JPG up to 5MB',
+    restoreDefaultLogo: 'Restore default logo',
+    logoHint: 'Visible in the cover header and on landing pages',
+
+    // Konfiguracja AI
+    aiConfig: 'AI Configuration',
+    aiConfigDesc: 'Choose models and configure API keys',
+    aiForText: 'AI for Text',
+    textGeneration: 'Text Generation',
+    apiActive: 'API Active',
+    provider: 'Provider',
+    apiKey: 'API Key',
+    pasteApiKey: 'Paste your API key...',
+    keyIncomplete: 'The key seems incomplete',
+    keySecured: 'Cryptographically secured:',
+    keySecuredDesc: 'Your key will be safe here!',
+    aiForImages: 'AI for Images',
+    imageGeneration: 'Image Generation',
+
+    // Zarządzanie Systemem
+    systemManagement: 'System Management',
+    diskExplorer: 'Disk Explorer',
+    diskExplorerDesc: 'Browse and manage files stored on the server',
+    exploreDisk: 'Explore Disk',
+
+    // Opisy Modeli (Klucze)
+    modelDescClaudeHaiku: 'Available for free for 30 days',
+    modelDescClaudeSonnet: 'Input $3 / MTo | Output $15 / MTok',
+    modelDescGpt4o: 'The latest model ($0.030)',
+    modelDescGeminiPro: 'Google\'s model ($0.020)',
+    modelDescGrok2: 'X.AI\'s model ($0.040)',
+    modelDescBielik: 'Polish model ($0.015)',
+    modelDescImagen3: 'Available for free for 30 days',
+    modelDescImagen4: 'High quality ($0.04) - requires your own API key',
+    modelDescImagen4Ultra: 'Highest quality ($0.06) - requires your own API key',
+    modelDescDalle3: 'Standard - no key needed',
+    modelDescGptImage1: 'Premium ($0.19) - key required'
+  }
+};
+
 // Text provider configuration
 const TEXT_PROVIDERS: Provider[] = [
   {
@@ -61,8 +259,8 @@ const TEXT_PROVIDERS: Provider[] = [
     icon: '🧠',
     available: true,
     models: [
-      { id: 'claude-3-haiku', name: 'Claude Haiku 3.5', description: 'Available for free for 30 days', tier: 'basic' },
-      { id: 'claude-3-sonnet', name: 'Claude Sonnet 4', description: 'Input $3 / MTo | Output $15 / MTok', tier: 'premium', cost: '$0.025' },
+      { id: 'claude-3-haiku', name: 'Claude Haiku 3.5', description: 'modelDescClaudeHaiku', tier: 'basic' },
+      { id: 'claude-3-sonnet', name: 'Claude Sonnet 4', description: 'modelDescClaudeSonnet', tier: 'premium', cost: '$0.025' },
     ]
   },
   {
@@ -70,28 +268,28 @@ const TEXT_PROVIDERS: Provider[] = [
     name: 'OpenAI',
     icon: '🤖',
     available: false,
-    models: [{ id: 'gpt-4o', name: 'GPT-4o', description: 'The latest model ($0.030)', tier: 'premium', cost: '$0.030' }]
+    models: [{ id: 'gpt-4o', name: 'GPT-4o', description: 'modelDescGpt4o', tier: 'premium', cost: '$0.030' }]
   },
   {
     id: 'gemini',
     name: 'Google Gemini',
     icon: '✨',
     available: false,
-    models: [{ id: 'gemini-pro', name: 'Gemini Pro', description: 'Google\'s model ($0.020)', tier: 'premium', cost: '$0.020' }]
+    models: [{ id: 'gemini-pro', name: 'Gemini Pro', description: 'modelDescGeminiPro', tier: 'premium', cost: '$0.020' }]
   },
   {
     id: 'grok',
     name: 'Grok (X.AI)',
     icon: '⚡',
     available: false,
-    models: [{ id: 'grok-2', name: 'Grok 2', description: 'X.AI\'s model ($0.040)', tier: 'premium', cost: '$0.040' }]
+    models: [{ id: 'grok-2', name: 'Grok 2', description: 'modelDescGrok2', tier: 'premium', cost: '$0.040' }]
   },
   {
     id: 'bielik',
     name: 'Bielik',
     icon: '🦅',
     available: false,
-    models: [{ id: 'bielik-11b', name: 'Bielik 11B', description: 'Polish model ($0.015)', tier: 'premium', cost: '$0.015' }]
+    models: [{ id: 'bielik-11b', name: 'Bielik 11B', description: 'modelDescBielik', tier: 'premium', cost: '$0.015' }]
   }
 ];
 
@@ -105,20 +303,20 @@ const IMAGE_PROVIDERS: Provider[] = [
       {
         id: 'imagen-3',
         name: 'Imagen 3',
-        description: 'Available for free for 30 days',
+        description: 'modelDescImagen3',
         tier: 'basic'
       },
       {
         id: 'imagen-4',
         name: 'Imagen 4',
-        description: 'High quality ($0.04) - requires your own API key',
+        description: 'modelDescImagen4',
         tier: 'premium',
         cost: '$0.04'
       },
       {
         id: 'imagen-4-ultra',
         name: 'Imagen 4 Ultra',
-        description: 'Highest quality ($0.06) - requires your own API key',
+        description: 'modelDescImagen4Ultra',
         tier: 'premium',
         cost: '$0.06'
       }
@@ -133,13 +331,13 @@ const IMAGE_PROVIDERS: Provider[] = [
       {
         id: 'dall-e-3',
         name: 'DALL-E 3',
-        description: 'Standard - no key needed',
+        description: 'modelDescDalle3',
         tier: 'basic'
       },
       {
         id: 'gpt-image-1',
         name: 'GPT-Image-1',
-        description: 'Premium ($0.19) - key required',
+        description: 'modelDescGptImage1',
         tier: 'premium',
         cost: '$0.19'
       },
@@ -147,177 +345,19 @@ const IMAGE_PROVIDERS: Provider[] = [
   }
 ];
 
-
-// Status helpers
-const getModelDisplayInfo = (model: any, apiKey: any, isSelected: boolean) => {
-  if (!model) {
-    return { text: 'Select a model', indicator: 'default' };
-  }
-
-  if (model.tier === 'basic') {
-    if (isSelected) {
-      return { text: 'Active Model', indicator: 'active' };
-    }
-    return { text: 'Model available', indicator: 'active' };
-  }
-
-  const hasApiKey = apiKey?.isSaved;
-
-  if (hasApiKey) {
-    if (isSelected) {
-      return { text: 'Active Model', indicator: 'active' };
-    }
-    return { text: 'Model available', indicator: 'active' };
-  } else {
-    return { text: 'API key required', indicator: 'key-needed' };
-  }
-};
-
-const StatusIndicator = ({ status, size = 'sm' }: { status: string, size?: 'sm' | 'xs' }) => {
-  const sizeClass = size === 'xs' ? 'w-1.5 h-1.5' : 'w-2 h-2';
-
-  switch (status) {
-    case 'active':
-      return <div className={`${sizeClass} rounded-full bg-emerald-500`} />;
-    case 'key-needed':
-      return <div className={`${sizeClass} rounded-full bg-red-500`} />;
-    default:
-      return <div className={`${sizeClass} rounded-full bg-gray-300`} />;
-  }
-};
-
-const ProviderSelector = ({
-  label,
-  providers,
-  currentProviderId,
-  currentModelId,
-  onProviderChange,
-  onModelChange,
-  apiKey,
-  type,
-  dropdowns,
-  toggleDropdown
-}: {
-  label: string;
-  providers: Provider[];
-  currentProviderId: string;
-  currentModelId: string;
-  onProviderChange: (providerId: string) => void;
-  onModelChange: (modelId: string) => void;
-  apiKey: any;
-  type: 'text' | 'image';
-  dropdowns: any;
-  toggleDropdown: any;
-}) => {
-  const currentProvider = providers.find(p => p.id === currentProviderId);
-  const currentModel = currentProvider?.models.find(m => m.id === currentModelId);
-  const dropdownKey = `${type}Provider` as keyof typeof dropdowns;
-  const modelDropdownKey = `${type}Model` as keyof typeof dropdowns;
-
-  const currentModelInfo = getModelDisplayInfo(currentModel, apiKey, true);
-
-  return (
-    <div className="space-y-3">
-      <div className="relative">
-        <label className="block text-sm font-medium text-gray-700 mb-2">{label}</label>
-        <button
-          onClick={() => toggleDropdown(dropdownKey)}
-          className="w-full px-4 py-3 bg-white border border-gray-200 rounded-lg text-left flex items-center justify-between hover:border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-        >
-          <span className="font-medium text-gray-900">{currentProvider?.name}</span>
-          <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${dropdowns[dropdownKey] ? 'rotate-180' : ''}`} />
-        </button>
-
-        {dropdowns[dropdownKey] && (
-          <div className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg">
-            {providers.map((provider) => (
-              <button
-                key={provider.id}
-                onClick={() => {
-                  if (provider.available !== false) {
-                    onProviderChange(provider.id);
-                    toggleDropdown(dropdownKey);
-                  }
-                }}
-                disabled={provider.available === false}
-                className={`w-full px-4 py-3 text-left flex items-center justify-between first:rounded-t-lg last:rounded-b-lg transition-colors ${
-                  provider.available === false
-                    ? 'cursor-not-allowed opacity-50'
-                    : 'hover:bg-gray-50'
-                } ${currentProviderId === provider.id ? 'bg-blue-50' : ''}`}
-              >
-                <span className="font-medium text-gray-900">{provider.name}</span>
-                {provider.available === false && (
-                  <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full">soon</span>
-                )}
-                {currentProviderId === provider.id && provider.available !== false && (
-                  <Check className="w-4 h-4 text-blue-600" />
-                )}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <div className="relative">
-        <button
-          onClick={() => toggleDropdown(modelDropdownKey)}
-          className="w-full px-4 py-3 bg-white border border-gray-200 rounded-lg text-left flex items-center justify-between hover:border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-        >
-          <div className="flex items-center space-x-3">
-            <StatusIndicator status={currentModelInfo.indicator} />
-            <div>
-              <div className="font-medium text-gray-900">{currentModel?.name}</div>
-              <div className="text-xs text-gray-500">
-                {currentModelInfo.text}
-              </div>
-            </div>
-          </div>
-          <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${dropdowns[modelDropdownKey] ? 'rotate-180' : ''}`} />
-        </button>
-
-        {dropdowns[modelDropdownKey] && currentProvider && (
-          <div className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-y-auto">
-            {currentProvider.models
-              .filter(model => model.id !== currentModelId)
-              .map((model) => {
-                const isSelected = false;
-                const modelInfo = getModelDisplayInfo(model, apiKey, isSelected);
-
-                return (
-                  <button
-                    key={model.id}
-                    onClick={() => {
-                      onModelChange(model.id);
-                      toggleDropdown(modelDropdownKey);
-                    }}
-                    className="w-full px-4 py-3 text-left hover:bg-gray-50 first:rounded-t-lg last:rounded-b-lg transition-colors"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-3">
-                        <StatusIndicator status={modelInfo.indicator} />
-                        <div>
-                          <div className="font-medium text-gray-900">{model.name}</div>
-                          <div className="text-xs text-gray-500">
-                            {modelInfo.text}
-                          </div>
-                        </div>
-                      </div>
-                      {isSelected && <Check className="w-4 h-4 text-blue-600" />}
-                    </div>
-                  </button>
-                );
-            })}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-};
-
 export default function SettingsContent() {
   const { user, userRole } = useAuth();
   console.log("DEBUG: ROLA UŻYTKOWNIKA:", userRole, "CAŁY UŻYTKOWNIK:", user);
+
+  // 🆕 Język
+  const [currentLang, setCurrentLang] = useState<'pl' | 'en'>('pl');
+  useEffect(() => {
+    const savedLang = localStorage.getItem('appLanguage');
+    if (savedLang === 'en' || savedLang === 'pl') {
+      setCurrentLang(savedLang);
+    }
+  }, []);
+  const t = translations[currentLang];
 
   // 1) PRZENIESIONE TU — zanim użyjesz w useMemo
   const [subscriptionBasics, setSubscriptionBasics] = useState<{
@@ -344,10 +384,6 @@ export default function SettingsContent() {
       return !restricted.has(role);
 
   }, [userRole]); // <-- POPRAWKA
-
-
-
-
 
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
   const defaultAppLogoUrl = `${baseUrl}/api/assets/uploads/logo_inflee.webp`;
@@ -396,6 +432,188 @@ export default function SettingsContent() {
   const [message, setMessage] = useState<{type: 'success' | 'error', text: string} | null>(null);
   const [isDiskExplorerOpen, setIsDiskExplorerOpen] = useState(false);
 
+  // --- Przeniesione komponenty i funkcje pomocnicze (aby miały dostęp do `t`) ---
+
+  // Status helpers
+  const getModelDisplayInfo = (model: any, apiKey: any, isSelected: boolean) => {
+    if (!model) {
+      return { text: t.selectModel, indicator: 'default' };
+    }
+
+    if (model.tier === 'basic') {
+      if (isSelected) {
+        return { text: t.activeModel, indicator: 'active' };
+      }
+      return { text: t.modelAvailable, indicator: 'active' };
+    }
+
+    const hasApiKey = apiKey?.isSaved;
+
+    if (hasApiKey) {
+      if (isSelected) {
+        return { text: t.activeModel, indicator: 'active' };
+      }
+      return { text: t.modelAvailable, indicator: 'active' };
+    } else {
+      return { text: t.apiKeyRequired, indicator: 'key-needed' };
+    }
+  };
+
+  const StatusIndicator = ({ status, size = 'sm' }: { status: string, size?: 'sm' | 'xs' }) => {
+    const sizeClass = size === 'xs' ? 'w-1.5 h-1.5' : 'w-2 h-2';
+
+    switch (status) {
+      case 'active':
+        return <div className={`${sizeClass} rounded-full bg-emerald-500`} />;
+      case 'key-needed':
+        return <div className={`${sizeClass} rounded-full bg-red-500`} />;
+      default:
+        return <div className={`${sizeClass} rounded-full bg-gray-300`} />;
+    }
+  };
+
+  const ProviderSelector = ({
+    label,
+    providers,
+    currentProviderId,
+    currentModelId,
+    onProviderChange,
+    onModelChange,
+    apiKey,
+    type,
+    dropdowns,
+    toggleDropdown
+  }: {
+    label: string;
+    providers: Provider[];
+    currentProviderId: string;
+    currentModelId: string;
+    onProviderChange: (providerId: string) => void;
+    onModelChange: (modelId: string) => void;
+    apiKey: any;
+    type: 'text' | 'image';
+    dropdowns: any;
+    toggleDropdown: any;
+  }) => {
+    const currentProvider = providers.find(p => p.id === currentProviderId);
+    const currentModel = currentProvider?.models.find(m => m.id === currentModelId);
+    const dropdownKey = `${type}Provider` as keyof typeof dropdowns;
+    const modelDropdownKey = `${type}Model` as keyof typeof dropdowns;
+
+    const currentModelInfo = getModelDisplayInfo(currentModel, apiKey, true);
+
+    return (
+      <div className="space-y-3">
+        <div className="relative">
+          <label className="block text-sm font-medium text-gray-700 mb-2">{label}</label>
+          <button
+            onClick={() => toggleDropdown(dropdownKey)}
+            className="w-full px-4 py-3 bg-white border border-gray-200 rounded-lg text-left flex items-center justify-between hover:border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all cursor-pointer"
+          >
+            <span className="font-medium text-gray-900">{currentProvider?.name}</span>
+            <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${dropdowns[dropdownKey] ? 'rotate-180' : ''}`} />
+          </button>
+
+          {dropdowns[dropdownKey] && (
+            <div className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg">
+              {providers.map((provider) => (
+                <button
+                  key={provider.id}
+                  onClick={() => {
+                    if (provider.available !== false) {
+                      onProviderChange(provider.id);
+                      toggleDropdown(dropdownKey);
+                    }
+                  }}
+                  disabled={provider.available === false}
+                  className={`w-full px-4 py-3 text-left flex items-center justify-between first:rounded-t-lg last:rounded-b-lg transition-colors ${
+                    provider.available === false
+                      ? 'cursor-not-allowed opacity-50'
+                      : 'hover:bg-gray-50 cursor-pointer'
+                  } ${currentProviderId === provider.id ? 'bg-blue-50' : ''}`}
+                >
+                  <span className="font-medium text-gray-900">{provider.name}</span>
+                  {provider.available === false && (
+                    <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full">{t.providerSoon}</span>
+                  )}
+                  {currentProviderId === provider.id && provider.available !== false && (
+                    <Check className="w-4 h-4 text-blue-600" />
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="relative">
+          <button
+            onClick={() => toggleDropdown(modelDropdownKey)}
+            className="w-full px-4 py-3 bg-white border border-gray-200 rounded-lg text-left flex items-center justify-between hover:border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all cursor-pointer"
+          >
+            <div className="flex items-center space-x-3">
+              <StatusIndicator status={currentModelInfo.indicator} />
+              <div>
+                <div className="font-medium text-gray-900">{currentModel?.name}</div>
+                <div className="text-xs text-gray-500">
+                  {currentModelInfo.text}
+                </div>
+              </div>
+            </div>
+            <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${dropdowns[modelDropdownKey] ? 'rotate-180' : ''}`} />
+          </button>
+
+          {dropdowns[modelDropdownKey] && currentProvider && (
+            <div className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-y-auto">
+              {currentProvider.models
+                .filter(model => model.id !== currentModelId)
+                .map((model) => {
+                  const isSelected = false;
+                  const modelInfo = getModelDisplayInfo(model, apiKey, isSelected);
+
+                  return (
+                    <button
+                      key={model.id}
+                      onClick={() => {
+                        onModelChange(model.id);
+                        toggleDropdown(modelDropdownKey);
+                      }}
+                      className="w-full px-4 py-3 text-left hover:bg-gray-50 first:rounded-t-lg last:rounded-b-lg transition-colors cursor-pointer"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-3">
+                          <StatusIndicator status={modelInfo.indicator} />
+                          <div>
+                            <div className="font-medium text-gray-900">{model.name}</div>
+                            <div className="text-xs text-gray-500">
+                              {/* Użycie 't' do tłumaczenia opisu */}
+                              {t[model.description as keyof typeof t] || model.description}
+                            </div>
+                          </div>
+                        </div>
+                        {isSelected && <Check className="w-4 h-4 text-blue-600" />}
+                      </div>
+                    </button>
+                  );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  const getApiKeyPlaceholder = useCallback((provider: string) => {
+    switch (provider) {
+      case 'anthropic': return t.apiKeyPlaceholderAnthropic;
+      case 'openai': return t.apiKeyPlaceholderOpenAI;
+      case 'google': return t.apiKeyPlaceholderGoogle;
+      default: return t.apiKeyPlaceholderDefault;
+    }
+  }, [t]);
+
+  // --- Koniec przeniesionych komponentów ---
+
+
   const loadApiKeysStatus = useCallback(async () => {
     if (!user?.id) return;
 
@@ -426,16 +644,16 @@ export default function SettingsContent() {
         });
       } else {
         console.error('❌ Error fetching API key status:', response.status);
-        setMessage({ type: 'error', text: 'Failed to fetch API key status' });
+        setMessage({ type: 'error', text: t.apiKeyStatusError });
       }
     } catch (error) {
       console.error('❌ Network error fetching API key status:', error);
-      setMessage({ type: 'error', text: 'Server connection error' });
+      setMessage({ type: 'error', text: t.serverError });
     } finally {
       setIsLoadingApiKeys(false);
       setTimeout(() => setMessage(null), 3000);
     }
-  }, [user?.id]);
+  }, [user?.id, t]);
 
   const updateUserAiSettings = useCallback(async (settings: Partial<UserSettings>) => {
     if (!user?.id || isSavingAiSettings) return;
@@ -536,12 +754,12 @@ export default function SettingsContent() {
             });
           } else if (isMounted) {
             console.error('❌ Error fetching author settings:', response.status);
-            setMessage({ type: 'error', text: 'Failed to fetch author settings' });
+            setMessage({ type: 'error', text: t.settingsFetchError });
           }
         } catch (error) {
           if (isMounted) {
             console.error('❌ Network error fetching author settings:', error);
-            setMessage({ type: 'error', text: 'Server connection error' });
+            setMessage({ type: 'error', text: t.serverError });
           }
         } finally {
           if (isMounted) {
@@ -557,7 +775,7 @@ export default function SettingsContent() {
     return () => {
       isMounted = false;
     };
-  }, [user?.id]);
+  }, [user?.id, t]);
 
   useEffect(() => {
     if (user?.id) {
@@ -571,7 +789,7 @@ export default function SettingsContent() {
         try {
           setSubscriptionBasics(prev => prev ? { ...prev, loading: true } : {
             status: 'free',
-            planName: 'Free',
+            planName: t.planFree,
             isActive: false,
             renewsAt: null,
             loading: true
@@ -583,9 +801,9 @@ export default function SettingsContent() {
             const data = await response.json();
 
             const planNames: Record<string, string> = {
-              'free': 'Free',
-              'standard': 'Standard',
-              'premium': 'Premium'
+              'free': t.planFree,
+              'standard': t.planStandard,
+              'premium': t.planPremium
             };
 
             setSubscriptionBasics({
@@ -600,7 +818,7 @@ export default function SettingsContent() {
           console.error('Error loading subscription basics:', error);
           setSubscriptionBasics({
             status: 'free',
-            planName: 'Free',
+            planName: t.planFree,
             isActive: false,
             renewsAt: null,
             loading: false
@@ -610,7 +828,7 @@ export default function SettingsContent() {
 
       loadSubscriptionBasics();
     }
-  }, [user?.id]);
+  }, [user?.id, t]);
 
   useEffect(() => {
     if (!settings.logo) {
@@ -693,15 +911,6 @@ export default function SettingsContent() {
     const keyName = providerKeyMap[settings.imageProvider] || settings.imageProvider;
     return currentImageApiKey?.value ? isValidApiKey(keyName, currentImageApiKey.value) : false;
   }, [currentImageApiKey?.value, settings.imageProvider, isValidApiKey]);
-
-  const getApiKeyPlaceholder = useCallback((provider: string) => {
-    switch (provider) {
-      case 'anthropic': return 'sk-ant-... or sk-ant-api03-...';
-      case 'openai': return 'sk-...';
-      case 'google': return 'AIza... (from Google AI Studio)';
-      default: return 'Paste your API key';
-    }
-  }, []);
 
   const toggleDropdown = useCallback((dropdown: keyof typeof dropdowns) => {
     setDropdowns(prev => ({
@@ -786,7 +995,7 @@ export default function SettingsContent() {
           [keyName]: { ...prev[keyName], value: '', showValue: false, isSaved: true }
         }));
 
-        setMessage({ type: 'success', text: `API key for ${providerName} has been saved.` });
+        setMessage({ type: 'success', text: t.apiKeySaved.replace('{providerName}', providerName) });
 
         const isTextProvider = TEXT_PROVIDERS.some(p => p.id === provider);
         const isImageProvider = IMAGE_PROVIDERS.some(p => p.id === provider);
@@ -818,24 +1027,24 @@ export default function SettingsContent() {
         console.error('❌ Error saving API key:', errorData);
         setMessage({
           type: 'error',
-          text: errorData.error || `Failed to save API key for ${providerName}`
+          text: errorData.error || t.apiKeySaveError.replace('{providerName}', providerName)
         });
       }
     } catch (error) {
       console.error('❌ Network error while saving API key:', error);
-      setMessage({ type: 'error', text: 'Server connection error' });
+      setMessage({ type: 'error', text: t.serverError });
     } finally {
       setSavingApiKey(null);
       setTimeout(() => setMessage(null), 3000);
     }
-  }, [apiKeys, isValidApiKey, savingApiKey, settings.textModel, settings.imageModel, updateUserAiSettings]);
+  }, [apiKeys, isValidApiKey, savingApiKey, settings.textModel, settings.imageModel, updateUserAiSettings, t]);
 
   const removeApiKey = useCallback((provider: string) => {
     const providerName = TEXT_PROVIDERS.find(p=>p.id === provider)?.name || IMAGE_PROVIDERS.find(p=>p.id === provider)?.name || provider;
     setConfirmModal({
       isOpen: true,
-      title: 'Remove API Key',
-      message: `Are you sure you want to remove the API key for ${providerName}?`,
+      title: t.confirmRemoveApiKeyTitle,
+      message: t.confirmRemoveApiKeyMsg.replace('{providerName}', providerName),
       onConfirm: async () => {
         try {
           const providerKeyMap: Record<string, string> = {
@@ -914,25 +1123,25 @@ export default function SettingsContent() {
               await updateUserAiSettings(settingsToUpdate);
             }
 
-            setMessage({ type: 'success', text: `API key for ${providerName} has been removed` });
+            setMessage({ type: 'success', text: t.apiKeyRemoved.replace('{providerName}', providerName) });
           } else {
             const errorData = await response.json();
             console.error('❌ Error removing API key:', errorData);
             setMessage({
               type: 'error',
-              text: errorData.error || `Failed to remove API key for ${providerName}`
+              text: errorData.error || t.apiKeyRemoveError.replace('{providerName}', providerName)
             });
           }
         } catch (error) {
           console.error('❌ Network error while removing API key:', error);
-          setMessage({ type: 'error', text: 'Server connection error' });
+          setMessage({ type: 'error', text: t.serverError });
         } finally {
           setConfirmModal(prev => ({ ...prev, isOpen: false }));
           setTimeout(() => setMessage(null), 3000);
         }
       }
     });
-  }, [settings.textProvider, settings.textModel, settings.imageProvider, settings.imageModel, updateUserAiSettings]);
+  }, [settings.textProvider, settings.textModel, settings.imageProvider, settings.imageModel, updateUserAiSettings, t]);
 
   const handleTextProviderChange = useCallback((providerId: string) => {
     const provider = TEXT_PROVIDERS.find(p => p.id === providerId);
@@ -1038,19 +1247,19 @@ export default function SettingsContent() {
           logo: newAvatarUrl
         }));
 
-        setMessage({ type: 'success', text: 'Avatar has been updated' });
+        setMessage({ type: 'success', text: t.avatarUpdated });
         console.log('✅ Avatar updated:', newAvatarUrl);
       } else {
         const errorData = await response.json();
         console.error('❌ Error uploading avatar:', errorData);
         setMessage({
           type: 'error',
-          text: errorData.error || 'Failed to upload avatar'
+          text: errorData.error || t.avatarUploadError
         });
       }
     } catch (error) {
       console.error('❌ Network error while uploading avatar:', error);
-      setMessage({ type: 'error', text: 'Server connection error' });
+      setMessage({ type: 'error', text: t.serverError });
     } finally {
       setIsUploadingAvatar(false);
       setTimeout(() => setMessage(null), 3000);
@@ -1059,7 +1268,7 @@ export default function SettingsContent() {
         event.target.value = '';
       }
     }
-  }, [isUploadingAvatar, settings.logo, resetImageAspectRatio]);
+  }, [isUploadingAvatar, settings.logo, resetImageAspectRatio, t]);
 
   const removeLogo = useCallback(async () => {
     if (isDeletingAvatar) return;
@@ -1086,24 +1295,24 @@ export default function SettingsContent() {
 
         setSettings(prev => ({ ...prev, logo: defaultAppLogoUrl }));
 
-        setMessage({ type: 'success', text: 'Avatar has been removed' });
+        setMessage({ type: 'success', text: t.avatarRemoved });
         console.log('✅ Avatar removed');
       } else {
         const errorData = await response.json();
         console.error('❌ Error removing avatar:', errorData);
         setMessage({
           type: 'error',
-          text: errorData.error || 'Failed to remove avatar'
+          text: errorData.error || t.avatarRemoveError
         });
       }
     } catch (error) {
       console.error('❌ Network error while removing avatar:', error);
-      setMessage({ type: 'error', text: 'Server connection error' });
+      setMessage({ type: 'error', text: t.serverError });
     } finally {
       setIsDeletingAvatar(false);
       setTimeout(() => setMessage(null), 3000);
     }
-  }, [isDeletingAvatar, settings.logo, resetImageAspectRatio]);
+  }, [isDeletingAvatar, settings.logo, resetImageAspectRatio, t]);
 
   const handleSaveUsername = useCallback(async () => {
     if (isSavingUsername || settings.username.trim() === '' || settings.username === lastSavedUsername) return;
@@ -1127,24 +1336,24 @@ export default function SettingsContent() {
 
         setLastSavedUsername(settings.username);
 
-        setMessage({ type: 'success', text: 'Author name has been updated' });
+        setMessage({ type: 'success', text: t.usernameUpdated });
         console.log('✅ Author name updated:', authorSettings.authorDisplayName);
       } else {
         const errorData = await response.json();
         console.error('❌ Error saving author name:', errorData);
         setMessage({
           type: 'error',
-          text: errorData.error || 'Failed to save author name'
+          text: errorData.error || t.usernameSaveError
         });
       }
     } catch (error) {
       console.error('❌ Network error while saving author name:', error);
-      setMessage({ type: 'error', text: 'Server connection error' });
+      setMessage({ type: 'error', text: t.serverError });
     } finally {
       setIsSavingUsername(false);
       setTimeout(() => setMessage(null), 3000);
     }
-  }, [isSavingUsername, settings.username, lastSavedUsername]);
+  }, [isSavingUsername, settings.username, lastSavedUsername, t]);
 
   const closeConfirmModal = useCallback(() => {
     setConfirmModal(prev => ({ ...prev, isOpen: false }));
@@ -1162,34 +1371,34 @@ export default function SettingsContent() {
       <div className="bg-white rounded-xl border border-gray-200 p-6">
         <div className="flex items-center mb-6">
           <User className="h-5 w-5 text-blue-600 mr-2" />
-          <h2 className="text-xl font-bold text-gray-900">Author Profile</h2>
+          <h2 className="text-xl font-bold text-gray-900">{t.authorProfile}</h2>
           {isLoadingAuthorSettings && (
             <Loader2 className="h-4 w-4 text-gray-400 ml-2 animate-spin" />
           )}
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="space-y-6">
-            <label className="block text-sm font-medium text-gray-700 mb-2">Author Name</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">{t.authorName}</label>
             <div className="relative">
               <input
                 type="text"
                 value={settings.username}
                 onChange={(e) => setSettings(prev => ({ ...prev, username: e.target.value }))}
-                placeholder="Enter your name"
+                placeholder={t.usernamePlaceholder}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-500 pr-28"
               />
               {settings.username !== lastSavedUsername && settings.username.trim() !== '' && (
                 <button
                   onClick={handleSaveUsername}
                   disabled={isSavingUsername}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center px-3 py-1.5 bg-blue-600 text-white text-xs font-bold rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center px-3 py-1.5 bg-blue-600 text-white text-xs font-bold rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all cursor-pointer"
                 >
                   {isSavingUsername ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
                     <>
                       <Save className="h-4 w-4 mr-1.5" />
-                      Save
+                      {t.save}
                     </>
                   )}
                 </button>
@@ -1198,22 +1407,22 @@ export default function SettingsContent() {
 
             {/* Subskrypcja w tej samej kolumnie */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Subskrypcja</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">{t.subscription}</label>
               {subscriptionBasics && !subscriptionBasics.loading ? (
                 <div className="space-y-4">
                   <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border-2 border-gray-200">
                     <div>
-                      <p className="text-sm text-gray-600">Aktualny plan</p>
+                      <p className="text-sm text-gray-600">{t.currentPlan}</p>
                       <p className="text-lg font-semibold text-gray-900">{subscriptionBasics.planName}</p>
                     </div>
                     <div>
                       {subscriptionBasics.isActive ? (
                         <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-medium">
-                          Aktywna
+                          {t.planActive}
                         </span>
                       ) : (
                         <span className="px-3 py-1 bg-gray-200 text-gray-700 rounded-full text-sm font-medium">
-                          Nieaktywna
+                          {t.planInactive}
                         </span>
                       )}
                     </div>
@@ -1222,8 +1431,8 @@ export default function SettingsContent() {
                   {subscriptionBasics.renewsAt && (
                     <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg">
                       <p className="text-sm text-blue-900">
-                        <span className="font-medium">Odnowienie:</span>{' '}
-                        {new Date(subscriptionBasics.renewsAt).toLocaleDateString('pl-PL', {
+                        <span className="font-medium">{t.renewsAt}</span>{' '}
+                        {new Date(subscriptionBasics.renewsAt).toLocaleDateString(currentLang === 'pl' ? 'pl-PL' : 'en-US', {
                           day: 'numeric',
                           month: 'long',
                           year: 'numeric'
@@ -1234,10 +1443,10 @@ export default function SettingsContent() {
 
                   <Link
                     href="/subscription"
-                    className="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors w-full justify-center"
+                    className="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors w-full justify-center cursor-pointer"
                   >
                     <CreditCard className="h-4 w-4 mr-2" />
-                    Zarządzaj subskrypcją
+                    {t.manageSubscription}
                   </Link>
                 </div>
               ) : (
@@ -1249,25 +1458,23 @@ export default function SettingsContent() {
           </div>
 
           {/* Prawa kolumna - Logo */}
-          {/* Prawa kolumna - Logo */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Author Logo / Photo</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">{t.authorLogo}</label>
             <div className="relative group">
               {settings.logo || isUploadingAvatar ? (
                 <div
-                  // ZAKTUALIZUJ TĘ LINIĘ:
                   className={`relative border-2 border-gray-200 rounded-lg overflow-hidden flex items-center justify-center bg-white ${canCustomizeLogo ? 'cursor-pointer hover:border-gray-300' : ''}`}
                   style={{
                     width: '100%',
                     height: '200px',
                     padding: '16px'
                   }}
-                  onClick={triggerFileInput} // <-- DODAJ TĘ LINIĘ
+                  onClick={triggerFileInput}
                 >
                   {isUploadingAvatar ? (
                     <div className="flex flex-col items-center justify-center text-gray-500">
                       <Loader2 className="h-8 w-8 animate-spin mb-2" />
-                      <span className="text-sm font-medium">Processing...</span>
+                      <span className="text-sm font-medium">{t.processing}</span>
                     </div>
                   ) : (
                     <img
@@ -1295,33 +1502,18 @@ export default function SettingsContent() {
                     </div>
                   )}
 
-                  {/* ⛔️ CAŁY TEN BLOK ZOSTAŁ USUNIĘTY ⛔️ */}
-                  {/* {canCustomizeLogo && (
-                    <button
-                      onClick={removeLogo}
-                      disabled={isDeletingAvatar || isUploadingAvatar}
-                      className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {isDeletingAvatar ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <X className="h-4 w-4" />
-                      )}
-                    </button>
-                  )} */}
-
                   {/* Overlay z monitem dla użytkowników bez uprawnień */}
                   {!canCustomizeLogo && (
                     <div className="absolute inset-0 bg-black/60 backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center p-4">
                       <div className="text-center space-y-2">
                         <AlertTriangle className="w-8 h-8 text-amber-400 mx-auto" />
-                        <p className="text-white text-sm font-medium">Własne logo dostępne w planach Creator oraz Unlimited</p>
+                        <p className="text-white text-sm font-medium">{t.logoRestrictedTitle}</p>
                         <Link
                           href="/subscribe"
-                          className="inline-flex items-center px-3 py-1.5 bg-white text-gray-900 text-xs font-medium rounded-lg hover:bg-gray-100 transition-colors"
+                          className="inline-flex items-center px-3 py-1.5 bg-white text-gray-900 text-xs font-medium rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
                         >
                           <CreditCard className="w-3 h-3 mr-1.5" />
-                          Zaktualizuj swój Plan Inflee.app
+                          {t.logoRestrictedBtn}
                         </Link>
                       </div>
                     </div>
@@ -1334,14 +1526,14 @@ export default function SettingsContent() {
                   {isUploadingAvatar ? (
                     <>
                       <Loader2 className="h-8 w-8 text-gray-400 mb-2 animate-spin" />
-                      <span className="text-sm font-medium text-gray-600">Uploading...</span>
-                      <span className="text-xs text-gray-500">Processing avatar</span>
+                      <span className="text-sm font-medium text-gray-600">{t.uploading}</span>
+                      <span className="text-xs text-gray-500">{t.processingAvatar}</span>
                     </>
                   ) : (
                     <>
                       <ImageIcon className="h-8 w-8 text-gray-400 mb-2" />
-                      <span className="text-sm font-medium text-gray-600">Add logo</span>
-                      <span className="text-xs text-gray-500">PNG, JPG up to 5MB</span>
+                      <span className="text-sm font-medium text-gray-600">{t.addLogo}</span>
+                      <span className="text-xs text-gray-500">{t.logoFormats}</span>
                     </>
                   )}
 
@@ -1351,13 +1543,13 @@ export default function SettingsContent() {
                     <div className="absolute inset-0 bg-black/60 backdrop-blur-sm opacity-0 hover:opacity-100 transition-opacity duration-200 flex items-center justify-center p-4 rounded-lg">
                       <div className="text-center space-y-2">
                         <AlertTriangle className="w-8 h-8 text-amber-400 mx-auto" />
-                        <p className="text-white text-sm font-medium">Custom logo available in paid plans</p>
+                        <p className="text-white text-sm font-medium">{t.logoRestrictedTitle}</p>
                         <Link
                           href="/subscription"
-                          className="inline-flex items-center px-3 py-1.5 bg-white text-gray-900 text-xs font-medium rounded-lg hover:bg-gray-100 transition-colors"
+                          className="inline-flex items-center px-3 py-1.5 bg-white text-gray-900 text-xs font-medium rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
                         >
                           <CreditCard className="w-3 h-3 mr-1.5" />
-                          Upgrade
+                          {currentLang === 'pl' ? 'Zaktualizuj' : 'Upgrade'}
                         </Link>
                       </div>
                     </div>
@@ -1377,23 +1569,22 @@ export default function SettingsContent() {
               />
             )}
 
-            {/* DODAJ TEN NOWY PRZYCISK PONIŻEJ */}
             {canCustomizeLogo && settings.logo !== defaultAppLogoUrl && !isUploadingAvatar && (
               <button
-                onClick={removeLogo} // Wywołuje zmodyfikowaną funkcję 'removeLogo'
+                onClick={removeLogo}
                 disabled={isDeletingAvatar}
-                className="mt-2 w-full flex items-center justify-center px-3 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50"
+                className="mt-2 w-full flex items-center justify-center px-3 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 cursor-pointer"
               >
                 {isDeletingAvatar ? (
                   <Loader2 className="h-4 w-4 animate-spin mr-2" />
                 ) : (
                   <ImageIcon className="h-4 w-4 mr-2" />
                 )}
-                Przywróć domyślne logo
+                {t.restoreDefaultLogo}
               </button>
             )}
 
-            <p className="text-xs text-gray-500 mt-1">Visible in the cover header and on landing pages</p>
+            <p className="text-xs text-gray-500 mt-1">{t.logoHint}</p>
           </div>
         </div>
       </div>
@@ -1402,8 +1593,8 @@ export default function SettingsContent() {
       {userRole?.toUpperCase() === 'GOD' && (
         <div className="space-y-8">
           <div className="text-center space-y-2">
-            <h2 className="text-2xl font-semibold text-gray-900">AI Configuration</h2>
-            <p className="text-gray-600">Choose models and configure API keys</p>
+            <h2 className="text-2xl font-semibold text-gray-900">{t.aiConfig}</h2>
+            <p className="text-gray-600">{t.aiConfigDesc}</p>
           </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -1412,8 +1603,8 @@ export default function SettingsContent() {
             <div className="flex items-center space-x-2 mb-6">
               <Type className="w-5 h-5 text-blue-600" />
               <h3 className="text-lg font-semibold text-gray-900">
-                <span className="sm:hidden">AI for Text</span>
-                <span className="hidden sm:inline">Text Generation</span>
+                <span className="sm:hidden">{t.aiForText}</span>
+                <span className="hidden sm:inline">{t.textGeneration}</span>
               </h3>
               {isLoadingApiKeys && (
                 <Loader2 className="h-4 w-4 text-gray-400 ml-2 animate-spin" />
@@ -1423,10 +1614,10 @@ export default function SettingsContent() {
             {currentTextApiKey?.isSaved && (
               <div className="absolute top-4 right-4 flex items-center space-x-2 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-1.5">
                 <CheckCircle className="w-4 h-4 text-emerald-600" />
-                <span className="text-sm font-medium text-emerald-900">API Active</span>
+                <span className="text-sm font-medium text-emerald-900">{t.apiActive}</span>
                 <button
                   onClick={() => removeApiKey(settings.textProvider)}
-                  className="ml-1 text-emerald-600 hover:text-emerald-800 transition-colors"
+                  className="ml-1 text-emerald-600 hover:text-emerald-800 transition-colors cursor-pointer"
                 >
                   <X className="w-3 h-3" />
                 </button>
@@ -1434,7 +1625,7 @@ export default function SettingsContent() {
             )}
 
             <ProviderSelector
-              label="Provider"
+              label={t.provider}
               providers={TEXT_PROVIDERS}
               currentProviderId={settings.textProvider}
               currentModelId={settings.textModel}
@@ -1449,7 +1640,7 @@ export default function SettingsContent() {
             {needsTextApiKey && !currentTextApiKey?.isSaved && (
               <div className="mt-6 pt-6 border-t border-gray-100 space-y-4">
                 <label className="block text-sm font-medium text-gray-700">
-                  {textProvider?.name} API Key
+                  {textProvider?.name} {t.apiKey}
                 </label>
 
                 <div className="relative">
@@ -1457,7 +1648,7 @@ export default function SettingsContent() {
                     type={currentTextApiKey?.showValue ? 'text' : 'password'}
                     value={currentTextApiKey?.value || ''}
                     onChange={(e) => updateApiKey(settings.textProvider, e.target.value)}
-                    placeholder="Paste your API key..."
+                    placeholder={getApiKeyPlaceholder(settings.textProvider)}
                     className="w-full pl-4 pr-32 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all text-gray-900 placeholder-gray-500"
                   />
 
@@ -1465,7 +1656,7 @@ export default function SettingsContent() {
                     <button
                       type="button"
                       onClick={() => toggleApiKeyVisibility(settings.textProvider)}
-                      className="text-gray-400 hover:text-gray-600 transition-colors"
+                      className="text-gray-400 hover:text-gray-600 transition-colors cursor-pointer"
                     >
                       {currentTextApiKey?.showValue ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
@@ -1474,12 +1665,12 @@ export default function SettingsContent() {
                       <button
                         onClick={() => saveApiKey(settings.textProvider)}
                         disabled={savingApiKey === settings.textProvider}
-                        className="flex items-center space-x-1 px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50"
+                        className="flex items-center space-x-1 px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 cursor-pointer"
                       >
                         {savingApiKey === settings.textProvider ? (
                           <Loader2 className="w-3 h-3 animate-spin" />
                         ) : (
-                          <span>Save</span>
+                          <span>{t.save}</span>
                         )}
                       </button>
                     )}
@@ -1489,7 +1680,7 @@ export default function SettingsContent() {
                 {currentTextApiKey?.value && currentTextApiKey.value.length > 0 && currentTextApiKey.value.length <= 10 && (
                   <div className="flex items-center space-x-2 text-xs text-amber-600">
                     <AlertCircle className="w-3 h-3" />
-                    <span>The key seems incomplete</span>
+                    <span>{t.keyIncomplete}</span>
                   </div>
                 )}
 
@@ -1497,7 +1688,7 @@ export default function SettingsContent() {
                   <div className="flex items-center justify-center space-x-2">
                     <Shield className="w-10 h-10 text-emerald-600 flex-shrink-0" />
                     <p className="text-xs text-emerald-800">
-                      <span className="font-medium">Cryptographically secured:</span> Your key will be safe here!
+                      <span className="font-medium">{t.keySecured}</span> {t.keySecuredDesc}
                     </p>
                   </div>
                 </div>
@@ -1510,8 +1701,8 @@ export default function SettingsContent() {
             <div className="flex items-center space-x-2 mb-6">
               <Palette className="w-5 h-5 text-purple-600" />
               <h3 className="text-lg font-semibold text-gray-900">
-                <span className="sm:hidden">AI for Images</span>
-                <span className="hidden sm:inline">Image Generation</span>
+                <span className="sm:hidden">{t.aiForImages}</span>
+                <span className="hidden sm:inline">{t.imageGeneration}</span>
               </h3>
               {isLoadingApiKeys && (
                 <Loader2 className="h-4 w-4 text-gray-400 ml-2 animate-spin" />
@@ -1521,10 +1712,10 @@ export default function SettingsContent() {
             {currentImageApiKey?.isSaved && (
               <div className="absolute top-4 right-4 flex items-center space-x-2 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-1.5">
                 <CheckCircle className="w-4 h-4 text-emerald-600" />
-                <span className="text-sm font-medium text-emerald-900">API Active</span>
+                <span className="text-sm font-medium text-emerald-900">{t.apiActive}</span>
                 <button
                   onClick={() => removeApiKey(settings.imageProvider)}
-                  className="ml-1 text-emerald-600 hover:text-emerald-800 transition-colors"
+                  className="ml-1 text-emerald-600 hover:text-emerald-800 transition-colors cursor-pointer"
                 >
                   <X className="w-3 h-3" />
                 </button>
@@ -1532,7 +1723,7 @@ export default function SettingsContent() {
             )}
 
             <ProviderSelector
-              label="Provider"
+              label={t.provider}
               providers={IMAGE_PROVIDERS}
               currentProviderId={settings.imageProvider}
               currentModelId={settings.imageModel}
@@ -1547,7 +1738,7 @@ export default function SettingsContent() {
             {needsImageApiKey && !currentImageApiKey?.isSaved && (
               <div className="mt-6 pt-6 border-t border-gray-100 space-y-4">
                 <label className="block text-sm font-medium text-gray-700">
-                  {imageProvider?.name} API Key
+                  {imageProvider?.name} {t.apiKey}
                 </label>
 
                 <div className="relative">
@@ -1555,7 +1746,7 @@ export default function SettingsContent() {
                     type={currentImageApiKey?.showValue ? 'text' : 'password'}
                     value={currentImageApiKey?.value || ''}
                     onChange={(e) => updateApiKey(settings.imageProvider, e.target.value)}
-                    placeholder="Paste your API key..."
+                    placeholder={getApiKeyPlaceholder(settings.imageProvider)}
                     className="w-full pl-4 pr-32 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all text-gray-900 placeholder-gray-500"
                   />
 
@@ -1563,7 +1754,7 @@ export default function SettingsContent() {
                     <button
                       type="button"
                       onClick={() => toggleApiKeyVisibility(settings.imageProvider)}
-                      className="text-gray-400 hover:text-gray-600 transition-colors"
+                      className="text-gray-400 hover:text-gray-600 transition-colors cursor-pointer"
                     >
                       {currentImageApiKey?.showValue ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
@@ -1572,12 +1763,12 @@ export default function SettingsContent() {
                       <button
                         onClick={() => saveApiKey(settings.imageProvider)}
                         disabled={savingApiKey === settings.imageProvider}
-                        className="flex items-center space-x-1 px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50"
+                        className="flex items-center space-x-1 px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 cursor-pointer"
                       >
                         {savingApiKey === settings.imageProvider ? (
                           <Loader2 className="w-3 h-3 animate-spin" />
                         ) : (
-                          <span>Save</span>
+                          <span>{t.save}</span>
                         )}
                       </button>
                     )}
@@ -1587,7 +1778,7 @@ export default function SettingsContent() {
                 {currentImageApiKey?.value && currentImageApiKey.value.length > 0 && currentImageApiKey.value.length <= 10 && (
                   <div className="flex items-center space-x-2 text-xs text-amber-600">
                     <AlertCircle className="w-3 h-3" />
-                    <span>The key seems incomplete</span>
+                    <span>{t.keyIncomplete}</span>
                   </div>
                 )}
 
@@ -1595,7 +1786,7 @@ export default function SettingsContent() {
                   <div className="flex items-center justify-center space-x-2">
                     <Shield className="w-10 h-10 text-emerald-600 flex-shrink-0" />
                     <p className="text-xs text-emerald-800">
-                      <span className="font-medium">Cryptographically secured:</span> Your key will be safe here!
+                      <span className="font-medium">{t.keySecured}</span> {t.keySecuredDesc}
                     </p>
                   </div>
                 </div>
@@ -1613,23 +1804,23 @@ export default function SettingsContent() {
           <div className="bg-white rounded-xl border border-gray-200 p-6">
             <div className="flex items-center mb-6">
               <FolderOpen className="h-5 w-5 text-gray-600 mr-2" />
-              <h2 className="text-xl font-bold text-gray-900">System Management</h2>
+              <h2 className="text-xl font-bold text-gray-900">{t.systemManagement}</h2>
             </div>
 
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Disk Explorer
+                  {t.diskExplorer}
                 </label>
                 <p className="text-sm text-gray-500 mb-3">
-                  Browse and manage files stored on the Railway server
+                  {t.diskExplorerDesc}
                 </p>
                 <button
                   onClick={() => setIsDiskExplorerOpen(true)}
-                  className="inline-flex items-center px-4 py-2 bg-gray-600 text-white text-sm font-medium rounded-lg hover:bg-gray-700 transition-colors"
+                  className="inline-flex items-center px-4 py-2 bg-gray-600 text-white text-sm font-medium rounded-lg hover:bg-gray-700 transition-colors cursor-pointer"
                 >
                   <FolderOpen className="h-4 w-4 mr-2" />
-                  Explore Disk
+                  {t.exploreDisk}
                 </button>
               </div>
             </div>
@@ -1648,8 +1839,8 @@ export default function SettingsContent() {
       {/* Confirmation Modal */}
       {confirmModal.isOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/50 backdrop-blur" onClick={closeConfirmModal} />
-          <div className="relative bg-white rounded-xl shadow-2xl p-6 max-w-md w-full mx-4">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur cursor-pointer" onClick={closeConfirmModal} />
+          <div className="relative bg-white rounded-xl shadow-2xl p-6 max-w-md w-full mx-4 cursor-default">
             <div className="text-center">
               <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 mb-4">
                 <AlertTriangle className="h-6 w-6 text-red-600" />
@@ -1659,15 +1850,15 @@ export default function SettingsContent() {
               <div className="flex gap-3 justify-center">
                 <button
                   onClick={closeConfirmModal}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer"
                 >
-                  Cancel
+                  {t.confirmCancel}
                 </button>
                 <button
                   onClick={confirmModal.onConfirm}
-                  className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors"
+                  className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors cursor-pointer"
                 >
-                  Remove Key
+                  {t.confirmRemove}
                 </button>
               </div>
             </div>

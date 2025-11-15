@@ -1,6 +1,6 @@
 // src/components/pages/EbookiContent.tsx
 'use client';
-
+import { useRouter } from 'next/navigation';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { BookOpen, Plus, Edit, Download, Sparkles, Trash2, AlertCircle, RefreshCw, FileText, ImageIcon, X, Search, LayoutGrid } from 'lucide-react';
 import EbookGeneratorModal from '@/components/ebooks/EbookGeneratorModal';
@@ -41,7 +41,143 @@ interface Stats {
     inProgress: number;
 }
 
+const translations = {
+  pl: {
+    // Nagłówki i przyciski
+    myEbooks: 'Moje E-booki',
+    yourEbooks: 'Twoje E-booki',
+    generateNewEbook: 'Generuj nowy E-book',
+    createNewEbook: 'Utwórz nowy E-book',
+    search: 'Szukaj...',
+    all: 'Wszystkie',
+    completedFilter: 'Ukończone',
+    drafts: 'Szkice',
+
+    // Statusy
+    published: 'Opublikowany',
+    completed: 'Ukończony',
+    inProgress: 'W trakcie',
+    draft: 'Szkic',
+    unknownStatus: 'Nieznany status',
+
+    // Akcje
+    edit: 'Edytuj',
+    download: 'Pobierz',
+    createLP: 'Utwórz Stronę',
+    delete: 'Usuń',
+    cancel: 'Anuluj',
+    close: 'Zamknij',
+    clear: 'Wyczyść',
+    previous: 'Poprzednia',
+    next: 'Następna',
+
+    // Detale e-booka
+    created: 'Utworzono:',
+    coverImage: 'Obraz okładki',
+    noCoverImage: 'Brak obrazu okładki',
+
+    // Komunikaty
+    noEbooksFound: 'Nie znaleziono e-booków',
+    noEbooksFoundDesc: 'Spróbuj zmienić kryteria wyszukiwania lub filtry.',
+    noEbooksYet: 'Nie stworzyłeś jeszcze żadnych e-booków',
+    tryChangingSearch: 'Spróbuj zmienić frazę wyszukiwania.',
+    clickToCreateFirst: 'Kliknij przycisk powyżej, aby stworzyć swój pierwszy e-book.',
+    createLandingPage: 'Utwórz Stronę Pobierania',
+    creatingLandingPage: 'Tworzenie Strony Pobierania...',
+    creating: 'Tworzenie...',
+    goToPage: 'Przejdź do Stron Pobierania',
+    goToPageShort: 'Zobacz Strony',
+    loading: 'Ładowanie...',
+    errorOccurred: 'Wystąpił błąd',
+    retry: 'Spróbuj ponownie',
+
+    // Modal usuwania
+    deleteEbook: 'Usuń e-book',
+    deleteConfirmation: 'Czy na pewno chcesz trwale usunąć e-book',
+    deleteWarning: 'Ta czynność jest nieodwracalna.',
+    yesDelete: 'Tak, usuń',
+
+    // Podgląd
+    tableOfContents: 'Spis treści',
+    noTableOfContents: 'Ten e-book nie ma jeszcze spisu treści.',
+    downloadPng: 'Pobierz PNG',
+    converting: 'Konwersja...',
+    editEbook: 'Edytuj e-book',
+
+    // Paginacja
+    pageOf: 'Strona',
+    of: 'z',
+  },
+  en: {
+    // Headers and buttons
+    myEbooks: 'My E-books',
+    yourEbooks: 'Your E-books',
+    generateNewEbook: 'Generate New E-book',
+    createNewEbook: 'Create new e-book',
+    search: 'Search...',
+    all: 'All',
+    completedFilter: 'Completed',
+    drafts: 'Drafts',
+
+    // Statuses
+    published: 'Published',
+    completed: 'Completed',
+    inProgress: 'In progress',
+    draft: 'Draft',
+    unknownStatus: 'Unknown status',
+
+    // Actions
+    edit: 'Edit',
+    download: 'Download',
+    createLP: 'Create Page',
+    delete: 'Delete',
+    cancel: 'Cancel',
+    close: 'Close',
+    clear: 'Clear',
+    previous: 'Previous',
+    next: 'Next',
+
+    // E-book details
+    created: 'Created:',
+    coverImage: 'Cover image',
+    noCoverImage: 'No cover image',
+
+    // Messages
+    noEbooksFound: 'No e-books found',
+    noEbooksFoundDesc: 'Try changing your search criteria or filters.',
+    noEbooksYet: 'You haven\'t created any e-books yet',
+    tryChangingSearch: 'Try changing your search phrase.',
+    clickToCreateFirst: 'Click the button above to create your first e-book.',
+    createLandingPage: 'Create Landing Page',
+    creatingLandingPage: 'Creating Landing Page...',
+    creating: 'Creating...',
+    goToPage: 'Go to Landing Pages',
+    goToPageShort: 'View Pages',
+    loading: 'Loading...',
+    errorOccurred: 'An error occurred',
+    retry: 'Try again',
+
+    // Delete modal
+    deleteEbook: 'Delete e-book',
+    deleteConfirmation: 'Are you sure you want to permanently delete the e-book',
+    deleteWarning: 'This action cannot be undone.',
+    yesDelete: 'Yes, delete',
+
+    // Preview
+    tableOfContents: 'Table of Contents',
+    noTableOfContents: 'This e-book does not have a table of contents yet.',
+    downloadPng: 'Download PNG',
+    converting: 'Converting...',
+    editEbook: 'Edit e-book',
+
+    // Pagination
+    pageOf: 'Page',
+    of: 'of',
+  }
+};
+
 export default function EbookiContent() {
+  const router = useRouter();
   const [isGeneratorModalOpen, setIsGeneratorModalOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -52,7 +188,7 @@ export default function EbookiContent() {
   const [deletingIds, setDeletingIds] = useState<Set<number>>(new Set());
   const [creatingPageId, setCreatingPageId] = useState<number | null>(null);
   const [downloadingIds, setDownloadingIds] = useState<Set<number>>(new Set());
-
+  const [currentLang, setCurrentLang] = useState<'pl' | 'en'>('pl');
   const [allEbooks, setAllEbooks] = useState<Ebook[]>([]);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [ebookToDelete, setEbookToDelete] = useState<Ebook | null>(null);
@@ -70,17 +206,25 @@ export default function EbookiContent() {
   const { error: sseError, reconnect, updateTrigger } = useEbooksSSE();
   const error = sseError || localError;
 
+  useEffect(() => {
+    const savedLang = localStorage.getItem('appLanguage');
+    if (savedLang === 'en' || savedLang === 'pl') {
+      setCurrentLang(savedLang);
+    }
+  }, []);
+
   const isEbookCompleted = (ebook: Ebook) => {
     return ebook.status === 'published' || ebook.status === 'completed';
   };
 
   const getStatusLabel = (status: string | null) => {
+    const t = translations[currentLang];
     switch (status) {
-      case 'published': return 'Published';
-      case 'completed': return 'Completed';
-      case 'in-progress': return 'In progress';
-      case 'draft': return 'Draft';
-      default: return 'Unknown status';
+      case 'published': return t.published;
+      case 'completed': return t.completed;
+      case 'in-progress': return t.inProgress;
+      case 'draft': return t.draft;
+      default: return t.unknownStatus;
     }
   };
 
@@ -113,11 +257,14 @@ export default function EbookiContent() {
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    });
+    return new Date(dateString).toLocaleDateString(
+      currentLang === 'pl' ? 'pl-PL' : 'en-US',
+      {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+      }
+    );
   };
 
   const fetchAllEbooks = useCallback(async () => {
@@ -299,6 +446,9 @@ export default function EbookiContent() {
       });
       setEbookToDelete(null);
     }
+  };
+  const handleGoToLandings = () => {
+    router.push('/landings');
   };
 
   const handleCreatePage = async (ebookId: number) => {
@@ -482,14 +632,14 @@ export default function EbookiContent() {
         <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex flex-col sm:flex-row items-start sm:items-center space-y-3 sm:space-y-0 sm:space-x-3">
           <AlertCircle className="text-red-500 flex-shrink-0" size={20} />
           <div className="flex-1">
-            <p className="text-red-800 font-medium">An error occurred</p>
+            <p className="text-red-800 font-medium">{translations[currentLang].errorOccurred}</p>
             <p className="text-red-600 text-sm">{error}</p>
           </div>
           <button
             onClick={() => { setLocalError(null); reconnect(); fetchAllEbooks(); }}
             className="w-full sm:w-auto px-3 py-1 bg-red-100 text-red-700 rounded text-sm hover:bg-red-200 transition-colors cursor-pointer"
           >
-            Try again
+            {translations[currentLang].retry}
           </button>
         </div>
       )}
@@ -504,7 +654,7 @@ export default function EbookiContent() {
           >
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-blue-600 text-sm font-medium">All e-books</p>
+                <p className="text-blue-600 text-sm font-medium">{translations[currentLang].all}</p>
                 <p className="text-xl sm:text-2xl font-bold text-blue-900">{stats.total}</p>
               </div>
               <BookOpen className="text-blue-600" size={28} />
@@ -518,7 +668,7 @@ export default function EbookiContent() {
           >
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-green-600 text-sm font-medium">Completed</p>
+                <p className="text-green-600 text-sm font-medium">{translations[currentLang].completedFilter}</p>
                 <p className="text-xl sm:text-2xl font-bold text-green-900">{stats.completed}</p>
               </div>
               <Sparkles className="text-green-600" size={28} />
@@ -532,7 +682,7 @@ export default function EbookiContent() {
           >
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-orange-600 text-sm font-medium">Drafts</p>
+                <p className="text-orange-600 text-sm font-medium">{translations[currentLang].drafts}</p>
                 <p className="text-xl sm:text-2xl font-bold text-orange-900">{stats.inProgress}</p>
               </div>
               <Edit className="text-orange-600" size={28} />
@@ -546,7 +696,7 @@ export default function EbookiContent() {
           <div className="relative flex-1">
             <input
               type="text"
-              placeholder="Search e-books..."
+              placeholder={translations[currentLang].search}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:border-gray-400"
@@ -556,49 +706,49 @@ export default function EbookiContent() {
           <button
             type="submit"
             disabled={loading}
-            className="hidden sm:inline-flex px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors disabled:opacity-50 whitespace-nowrap"
+            className="hidden sm:inline-flex px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors disabled:opacity-50 whitespace-nowrap cursor-pointer disabled:cursor-not-allowed"
           >
-            Search
+            {translations[currentLang].search.replace('...', '')}
           </button>
           {searchTerm && (
             <button
               type="button"
               onClick={() => { setSearchTerm(''); setCurrentPage(1); }}
-              className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors whitespace-nowrap"
+              className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors whitespace-nowrap cursor-pointer"
             >
-              Clear
+              {translations[currentLang].clear}
             </button>
           )}
         </form>
         <button
           onClick={handleOpenGenerator}
-          className="w-full sm:w-auto flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+          className="w-full sm:w-auto flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium cursor-pointer"
         >
           <Plus size={16} className="mr-2" />
-          Create new e-book
+          {translations[currentLang].createNewEbook}
         </button>
       </div>
 
       <div className="bg-transparent sm:bg-white rounded-none sm:rounded-xl border-0 sm:border border-gray-200 overflow-hidden -mx-4 sm:mx-0">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50">
-            <h2 className="text-lg font-semibold text-gray-800">Your e-books</h2>
+            <h2 className="text-lg font-semibold text-gray-800">{translations[currentLang].yourEbooks}</h2>
 
             <div className="flex items-center gap-2">
               {pagination && pagination.total > 0 && (
                 <p className="text-sm text-gray-600 hidden sm:block">
-                    Showing {((pagination.page - 1) * pagination.limit) + 1} - {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total}
+                    {((pagination.page - 1) * pagination.limit) + 1} - {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total}
                 </p>
               )}
             </div>
         </div>
 
         {loading ? (
-            <div className="px-6 py-12 text-center"><RefreshCw size={48} className="mx-auto text-gray-300 mb-4 animate-spin" /><p className="text-gray-500">Loading e-books...</p></div>
+            <div className="px-6 py-12 text-center"><RefreshCw size={48} className="mx-auto text-gray-300 mb-4 animate-spin" /><p className="text-gray-500">{translations[currentLang].loading}</p></div>
         ) : displayedEbooks.length === 0 ? (
             <div className="px-6 py-12 text-center">
               <BookOpen size={48} className="mx-auto text-gray-300 mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">{searchTerm || activeFilter !== 'all' ? 'No e-books found' : 'You haven\'t created any e-books yet'}</h3>
-              <p className="text-gray-500 mb-6">{searchTerm ? 'Try changing your search phrase.' : 'Click the button above to create your first e-book.'}</p>
+              <h3 className="text-lg font-medium text-gray-900 mb-2">{searchTerm || activeFilter !== 'all' ? translations[currentLang].noEbooksFound : translations[currentLang].noEbooksYet}</h3>
+              <p className="text-gray-500 mb-6">{searchTerm ? translations[currentLang].tryChangingSearch : translations[currentLang].clickToCreateFirst}</p>
             </div>
         ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-4">
@@ -626,7 +776,7 @@ export default function EbookiContent() {
                                 <div className="w-full h-full flex items-center justify-center bg-gray-100 rounded-md aspect-square"><ImageIcon className="w-8 h-8 text-gray-400" /></div>
                             )}
                             <p className="text-xs text-gray-500 text-center mt-1">
-                              {ebook.cover_image_webp_url ? 'Cover image' : 'No cover image'}
+                              {ebook.cover_image_webp_url ? translations[currentLang].coverImage : translations[currentLang].noCoverImage}
                             </p>
                           </div>
                           <div className="w-2/3 flex flex-col">
@@ -634,13 +784,9 @@ export default function EbookiContent() {
                             <p className="text-xs text-gray-500 mt-1 line-clamp-2">{ebook.subtitle}</p>
                             <div className="mt-2 flex items-center flex-wrap gap-2">
                                 <span className={`text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap ${getStatusColor(ebook.status)}`}>{getStatusLabel(ebook.status)}</span>
-                                {creatingPageId === ebook.id ? (
-                                    <span className="text-xs flex items-center gap-1 bg-gray-100 text-gray-700 px-2 py-0.5 rounded-md">
-                                        <RefreshCw size={12} className="animate-spin" /> Creating...
-                                    </span>
-                                ) : ebook.hasLandingPage && (
+                                {ebook.hasLandingPage && (
                                     <span className="text-xs flex items-center gap-1 bg-blue-100 text-blue-700 px-2 py-0.5 rounded-md">
-                                        <FileText size={12} /> LP Ready
+                                        <FileText size={12} /> Page Ready
                                     </span>
                                 )}
                             </div>
@@ -648,7 +794,7 @@ export default function EbookiContent() {
                             <div className="border-t border-gray-200 my-3"></div>
 
                             <div className="text-xs">
-                                <div className="flex"><dt className="w-1/3 text-gray-500">Created:</dt><dd className="w-2/3 font-medium text-gray-800 truncate">{formatDate(ebook.created_at)}</dd></div>
+                                <div className="flex"><dt className="w-1/3 text-gray-500">{translations[currentLang].created}</dt><dd className="w-2/3 font-medium text-gray-800 truncate">{formatDate(ebook.created_at)}</dd></div>
                                 {ebook.authorDisplayName && (
                                   <>
                                     <div className="border-t border-gray-200 my-2"></div>
@@ -661,46 +807,68 @@ export default function EbookiContent() {
                     </div>
 
                     <div className="px-4 py-3 border-t border-gray-100 bg-gray-50/50 mt-auto space-y-3 sm:space-y-0 sm:flex sm:justify-between sm:items-center">
-                        {/* Przycisk "Create LP" na całą szerokość dla widoku mobilnego siatki */}
-                        {ebook.status !== 'draft' && !ebook.hasLandingPage && creatingPageId !== ebook.id && (
+                        {/* Przycisk "Create LP" LUB "Go to Page" (mobilny) */}
+                        {ebook.status !== 'draft' && (
                             <button
-                                onClick={() => handleCreatePage(ebook.id)}
-                                className="w-full flex sm:hidden items-center justify-center gap-2 bg-yellow-100 text-yellow-800 px-3 py-2 rounded-lg hover:bg-yellow-200 font-medium text-sm"
-                                disabled={isDisabled}
+                                onClick={() => ebook.hasLandingPage ? handleGoToLandings() : handleCreatePage(ebook.id)}
+                                className={`w-full flex sm:hidden items-center justify-center gap-2 px-3 py-2 rounded-lg font-medium text-sm transition-colors ${
+                                    creatingPageId === ebook.id
+                                        ? 'bg-gray-100 text-gray-700 cursor-not-allowed'
+                                        : ebook.hasLandingPage
+                                            ? 'bg-blue-100 text-blue-800 hover:bg-blue-200 cursor-pointer'
+                                            : 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200 cursor-pointer'
+                                }`}
+                                disabled={isDisabled || creatingPageId === ebook.id}
                             >
-                                <Plus size={14} />
-                                Create Landing Page
+                                {creatingPageId === ebook.id ? (
+                                    <><RefreshCw size={14} className="animate-spin" /> {translations[currentLang].creatingLandingPage}</>
+                                ) : ebook.hasLandingPage ? (
+                                    <><FileText size={14} /> {translations[currentLang].goToPage}</>
+                                ) : (
+                                    <><Plus size={14} /> {translations[currentLang].createLandingPage}</>
+                                )}
                             </button>
                         )}
 
                         {/* Kontener na pozostałe przyciski */}
                         <div className="flex items-center justify-between w-full">
                             <div className="flex items-center gap-2">
-                                <button onClick={() => handleEditEbook(ebook.id)} className="text-sm text-sky-600 hover:text-sky-700 font-medium bg-sky-50 hover:bg-sky-100 px-3 py-1.5 rounded-md transition-colors inline-flex items-center" disabled={isDisabled}>
+                                <button onClick={() => handleEditEbook(ebook.id)} className="text-sm text-sky-600 hover:text-sky-700 font-medium bg-sky-50 hover:bg-sky-100 px-3 py-1.5 rounded-md transition-colors inline-flex items-center cursor-pointer disabled:cursor-not-allowed" disabled={isDisabled}>
                                     <Edit size={14} className="inline mr-1.5" />
-                                    Edit
+                                    {translations[currentLang].edit}
                                 </button>
                                 {isEbookCompleted(ebook) && (
-                                    <button onClick={() => downloadPDF(ebook.id, ebook.title)} className="text-sm text-green-600 hover:text-green-700 font-medium bg-green-50 hover:bg-green-100 px-3 py-1.5 rounded-md transition-colors inline-flex items-center" disabled={isDisabled}>
+                                    <button onClick={() => downloadPDF(ebook.id, ebook.title)} className="text-sm text-green-600 hover:text-green-700 font-medium bg-green-50 hover:bg-green-100 px-3 py-1.5 rounded-md transition-colors inline-flex items-center cursor-pointer disabled:cursor-not-allowed" disabled={isDisabled}>
                                         {isDownloading ? <RefreshCw size={14} className="animate-spin" /> : <Download size={14} className="inline mr-1.5" />}
-                                        {isDownloading ? '' : 'Download'}
+                                        {isDownloading ? '' : translations[currentLang].download}
                                     </button>
                                 )}
-                                {/* Przycisk "Create LP" dla widoku desktopowego siatki */}
-                                {ebook.status !== 'draft' && !ebook.hasLandingPage && creatingPageId !== ebook.id && (
+                                {/* Przycisk "Create LP" LUB "Go to Page" (desktop) */}
+                                {ebook.status !== 'draft' && (
                                     <button
-                                        onClick={() => handleCreatePage(ebook.id)}
-                                        className="text-sm text-yellow-700 hover:text-yellow-800 font-medium bg-yellow-100 hover:bg-yellow-200 px-3 py-1.5 rounded-md transition-colors hidden sm:inline-flex items-center"
-                                        disabled={isDisabled}
+                                        onClick={() => ebook.hasLandingPage ? handleGoToLandings() : handleCreatePage(ebook.id)}
+                                        className={`text-sm font-medium px-3 py-1.5 rounded-md transition-colors hidden sm:inline-flex items-center ${
+                                            creatingPageId === ebook.id
+                                                ? 'text-gray-700 bg-gray-100 cursor-not-allowed'
+                                                : ebook.hasLandingPage
+                                                    ? 'text-blue-700 hover:text-blue-800 bg-blue-100 hover:bg-blue-200 cursor-pointer'
+                                                    : 'text-yellow-700 hover:text-yellow-800 bg-yellow-100 hover:bg-yellow-200 cursor-pointer'
+                                        }`}
+                                        disabled={isDisabled || creatingPageId === ebook.id}
                                     >
-                                        <Plus size={14} className="inline mr-1.5" />
-                                        Create LP
+                                        {creatingPageId === ebook.id ? (
+                                            <><RefreshCw size={14} className="inline mr-1.5 animate-spin" /> {translations[currentLang].creating}</>
+                                        ) : ebook.hasLandingPage ? (
+                                            <><FileText size={14} className="inline mr-1.5" /> {translations[currentLang].goToPageShort}</>
+                                        ) : (
+                                            <><Plus size={14} className="inline mr-1.5" /> {translations[currentLang].createLP}</>
+                                        )}
                                     </button>
                                 )}
                             </div>
-                            <button onClick={() => handleDeleteEbook(ebook)} className="text-sm text-red-600 hover:text-red-700 font-medium bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-md transition-colors inline-flex items-center" disabled={isDisabled}>
+                            <button onClick={() => handleDeleteEbook(ebook)} className="text-sm text-red-600 hover:text-red-700 font-medium bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-md transition-colors inline-flex items-center cursor-pointer disabled:cursor-not-allowed" disabled={isDisabled}>
                                 {isDeleting ? <RefreshCw size={14} className="animate-spin" /> : <Trash2 size={14} className="inline mr-1.5" />}
-                                 {isDeleting ? '' : 'Delete'}
+                                 {isDeleting ? '' : translations[currentLang].delete}
                             </button>
                         </div>
                     </div>
@@ -714,9 +882,9 @@ export default function EbookiContent() {
         {pagination && pagination.totalPages > 1 && (
           <div className="px-4 sm:px-6 py-4 border-t border-gray-200 bg-gray-50">
             <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-              <button onClick={() => handlePaginationClick(currentPage - 1)} disabled={!pagination.hasPrev || loading} className={`w-full sm:w-auto inline-flex items-center justify-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 ${!pagination.hasPrev || loading ? 'cursor-not-allowed' : ''}`}>← Previous</button>
-              <span className="text-sm text-gray-600">Page {pagination.page} of {pagination.totalPages}</span>
-              <button onClick={() => handlePaginationClick(currentPage + 1)} disabled={!pagination.hasNext || loading} className={`w-full sm:w-auto inline-flex items-center justify-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 ${!pagination.hasNext || loading ? 'cursor-not-allowed' : ''}`}>Next →</button>
+              <button onClick={() => handlePaginationClick(currentPage - 1)} disabled={!pagination.hasPrev || loading} className={`w-full sm:w-auto inline-flex items-center justify-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 ${!pagination.hasPrev || loading ? 'cursor-not-allowed' : 'cursor-pointer'}`}>← {translations[currentLang].previous}</button>
+              <span className="text-sm text-gray-600">{translations[currentLang].pageOf} {pagination.page} {translations[currentLang].of} {pagination.totalPages}</span>
+              <button onClick={() => handlePaginationClick(currentPage + 1)} disabled={!pagination.hasNext || loading} className={`w-full sm:w-auto inline-flex items-center justify-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 ${!pagination.hasNext || loading ? 'cursor-not-allowed' : 'cursor-pointer'}`}>{translations[currentLang].next} →</button>
             </div>
           </div>
         )}
@@ -731,14 +899,14 @@ export default function EbookiContent() {
               <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <Trash2 className="h-8 w-8 text-red-600" />
               </div>
-              <h3 className="text-xl font-bold text-gray-800 mb-2">Delete e-book</h3>
+              <h3 className="text-xl font-bold text-gray-800 mb-2">{translations[currentLang].deleteEbook}</h3>
               <p className="text-gray-600">
-                Are you sure you want to permanently delete the e-book "{ebookToDelete.title}"? This action cannot be undone.
+                {translations[currentLang].deleteConfirmation} "{ebookToDelete.title}"? {translations[currentLang].deleteWarning}
               </p>
             </div>
             <div className="flex justify-center gap-3 mt-6">
-              <button onClick={cancelDelete} className="px-6 py-2.5 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50 transition-all duration-200 cursor-pointer">Cancel</button>
-              <button onClick={confirmDelete} className="px-6 py-2.5 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 transition-all duration-200 cursor-pointer">Yes, delete</button>
+              <button onClick={cancelDelete} className="px-6 py-2.5 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50 transition-all duration-200 cursor-pointer">{translations[currentLang].cancel}</button>
+              <button onClick={confirmDelete} className="px-6 py-2.5 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 transition-all duration-200 cursor-pointer">{translations[currentLang].yesDelete}</button>
             </div>
           </div>
         </div>
@@ -753,7 +921,7 @@ export default function EbookiContent() {
                 <ImageIcon className="h-5 w-5 text-white flex-shrink-0" />
                 <h3 className="text-white font-medium truncate">{previewImageTitle}</h3>
               </div>
-              <button onClick={handleClosePreview} className="text-gray-400 hover:text-white transition-colors flex-shrink-0 ml-4">
+              <button onClick={handleClosePreview} className="text-gray-400 hover:text-white transition-colors flex-shrink-0 ml-4 cursor-pointer">
                 <X size={24} />
               </button>
             </div>
@@ -779,7 +947,7 @@ export default function EbookiContent() {
                 <div className="p-3 flex-shrink-0 bg-black/20">
                   <h4 className="font-semibold text-white flex items-center">
                     <FileText size={18} className="mr-2 text-gray-300"/>
-                    Table of Contents
+                    {translations[currentLang].tableOfContents}
                   </h4>
                 </div>
                 <div className="flex-1 overflow-y-auto custom-scrollbar">
@@ -798,7 +966,7 @@ export default function EbookiContent() {
                     </ul>
                   ) : (
                     <div className="flex items-center justify-center h-full text-center text-gray-400 px-4">
-                        <p>This e-book does not have a table of contents yet.</p>
+                        <p>{translations[currentLang].noTableOfContents}</p>
                     </div>
                   )}
                 </div>
@@ -813,14 +981,14 @@ export default function EbookiContent() {
                 className={`w-full md:w-auto flex items-center justify-center space-x-2 px-6 py-2 rounded-lg font-medium transition-colors ${
                   isConverting
                     ? "bg-gray-500 text-white cursor-not-allowed"
-                    : "bg-green-600 text-white hover:bg-green-700"
+                    : "bg-green-600 text-white hover:bg-green-700 cursor-pointer"
                 }`}
                 title="Download as PNG"
               >
                 {isConverting ? (
-                  <><RefreshCw size={16} className="animate-spin" /><span>Converting...</span></>
+                  <><RefreshCw size={16} className="animate-spin" /><span>{translations[currentLang].converting}</span></>
                 ) : (
-                  <><Download size={16} /><span>Download PNG</span></>
+                  <><Download size={16} /><span>{translations[currentLang].downloadPng}</span></>
                 )}
               </button>
               <button
@@ -830,13 +998,13 @@ export default function EbookiContent() {
                     handleEditEbook(previewEbook.id);
                   }
                 }}
-                className="w-full md:w-auto flex items-center justify-center space-x-2 px-6 py-2 rounded-lg font-medium transition-colors bg-blue-600 text-white hover:bg-blue-700"
+                className="w-full md:w-auto flex items-center justify-center space-x-2 px-6 py-2 rounded-lg font-medium transition-colors bg-blue-600 text-white hover:bg-blue-700 cursor-pointer"
               >
                 <Edit size={16} />
-                <span>Edit e-book</span>
+                <span>{translations[currentLang].editEbook}</span>
               </button>
-              <button onClick={handleClosePreview} className="w-full md:w-auto px-6 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition-colors font-medium md:mr-auto">
-                Close
+              <button onClick={handleClosePreview} className="w-full md:w-auto px-6 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition-colors font-medium md:mr-auto cursor-pointer">
+                {translations[currentLang].close}
               </button>
             </div>
           </div>
