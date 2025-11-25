@@ -69,6 +69,13 @@ interface SubscriptionData {
   stripeSubscriptionId?: string | null;
 }
 
+
+interface ConfirmModal {
+  isOpen: boolean;
+  title: string;
+  message: string;
+  onConfirm: () => void;
+}
 // --- Tłumaczenia ---
 const translations = {
   pl: {
@@ -518,7 +525,7 @@ function SubscriptionCard({
       onConfirm: () => {
         console.log("TODO: Wywołanie API do anulowania subskrypcji Stripe");
         // Po potwierdzeniu, zamknij modal
-        setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        setConfirmModal({ isOpen: false, title: '', message: '', onConfirm: () => {} });
         // TODO: Można dodać toast o sukcesie/błędzie i odświeżyć dane
       }
     });
@@ -1091,7 +1098,7 @@ export default function SettingsContent() {
     imageModel: false
   });
 
-  const [confirmModal, setConfirmModal] = useState({
+  const [confirmModal, setConfirmModal] = useState<ConfirmModal>({
     isOpen: false,
     title: '',
     message: '',
@@ -1827,7 +1834,7 @@ export default function SettingsContent() {
           console.error('❌ Network error while removing API key:', error);
           setMessage({ type: 'error', text: t.serverError });
         } finally {
-          setConfirmModal(prev => ({ ...prev, isOpen: false }));
+          setConfirmModal({ isOpen: false, title: '', message: '', onConfirm: () => {} });
           setTimeout(() => setMessage(null), 3000);
         }
       }
@@ -2047,7 +2054,7 @@ export default function SettingsContent() {
   }, [isSavingUsername, settings.username, lastSavedUsername, t]);
 
   const closeConfirmModal = useCallback(() => {
-    setConfirmModal(prev => ({ ...prev, isOpen: false }));
+    setConfirmModal({ isOpen: false, title: '', message: '', onConfirm: () => {} });
   }, []);
 
   const triggerFileInput = useCallback(() => {

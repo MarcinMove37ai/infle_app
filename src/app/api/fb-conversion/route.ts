@@ -1,7 +1,6 @@
 // src/app/api/fb-conversion/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
-// 👇 SPRAWDŹ CZY TA ŚCIEŻKA JEST POPRAWNA w Twojej strukturze folderów
 import { FB_PIXEL_ID } from '@/lib/fbPixel';
 
 const hashData = (data: string | undefined | null) => {
@@ -21,7 +20,8 @@ export async function POST(request: NextRequest) {
       ln: userData.lastName ? [hashData(userData.lastName.toLowerCase().trim())] : undefined,
       ct: userData.city ? [hashData(userData.city.toLowerCase().trim())] : undefined,
       country: userData.country ? [hashData(userData.country.toLowerCase().trim())] : undefined,
-      client_ip_address: request.ip || request.headers.get('x-forwarded-for'),
+      // 🟢 POPRAWKA TUTAJ: Dodano (request as any).ip aby naprawić błąd TypeScript
+      client_ip_address: (request as any).ip || request.headers.get('x-forwarded-for'),
       client_user_agent: request.headers.get('user-agent'),
       fbp: userData.fbp,
       fbc: userData.fbc,
@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
         user_data: hashedUserData,
         custom_data: customData,
       }],
-      // Token pobieramy bezpiecznie z .env (tak jak ustawiliśmy w landingu)
+      // Token pobieramy bezpiecznie z .env
       access_token: process.env.FB_ACCESS_TOKEN,
     };
 
