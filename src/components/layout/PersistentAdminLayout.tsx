@@ -691,14 +691,14 @@ const getMenuItems = (lang: 'pl' | 'en'): MenuItem[] => [
     IconComponent: FileSignature,
     label: translations[lang].landingPages,
     path: '/landings',
-    roles: ['ADMIN', 'USER', 'GOD', 'free', 'rookie', 'creator'],
+    roles: ['ADMIN', 'USER', 'GOD', 'free', 'rookie', 'creator', 'unlimited'],
     requiredStatus: ['active']
   },
   {
     IconComponent: UserCheck,
     label: translations[lang].leads,
     path: '/leads',
-    roles: ['ADMIN', 'USER', 'GOD', 'free', 'rookie', 'creator'],
+    roles: ['ADMIN', 'USER', 'GOD', 'free', 'rookie', 'creator', 'unlimited'],
     requiredStatus: ['active']
   },
   {
@@ -712,7 +712,7 @@ const getMenuItems = (lang: 'pl' | 'en'): MenuItem[] => [
     IconComponent: Settings,
     label: translations[lang].settings,
     path: '/settings',
-    roles: ['ADMIN', 'USER', 'GOD','free', 'rookie', 'creator'],
+    roles: ['ADMIN', 'USER', 'GOD','free', 'rookie', 'creator', 'unlimited'],
     requiredStatus: ['active']
   }
 ];

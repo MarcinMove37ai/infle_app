@@ -53,6 +53,22 @@ interface AuthorSettings {
   imageAiModel: string | null;
 }
 
+interface SubscriptionData {
+  role: string;
+  plan: string;
+  planDescription: string;
+  features?: string[];
+  limitation?: string;
+  upgradeRequired?: boolean;
+  isTrialing?: boolean;
+  subscriptionStatus?: string | null;
+  nextBillingDate?: string | null;
+  nextBillingAmount?: string;
+  paymentVerifiedAt?: string | null;
+  stripeCustomerId?: string | null;
+  stripeSubscriptionId?: string | null;
+}
+
 // --- Tłumaczenia ---
 const translations = {
   pl: {
@@ -100,13 +116,71 @@ const translations = {
     saving: 'Zapisywanie...',
     subscription: 'Subskrypcja',
     currentPlan: 'Aktualny plan',
+    features: 'Funkcje',
     planFree: 'Darmowy',
+    planDescriptionFree: 'Darmowy plan startowy',
+    planRookie: 'Rookie',
+    planRookieTrial: 'Rookie (Okres próbny)',
+    planDescriptionRookie: 'Plan dla początkujących autorów',
+    planDescriptionRookieTrial: 'Korzystasz z 21-dniowego okresu próbnego planu Rookie',
+    planCreator: 'Creator',
+    planDescriptionCreator: 'Zaawansowane narzędzia dla twórców',
+    planUnlimited: 'Unlimited',
+    planDescriptionUnlimited: 'Pełna swoboda i wszystkie funkcje',
+
+    // Funkcje Free
+    featureFree1: 'Możliwość utworzenia 1 e-booka',
+    featureFree2: 'Możliwość utworzenia 1 strony zapisu',
+    featureFree3: 'Podstawowa analityka',
+    // Funkcje Rookie
+    featureRookie1: 'Do 5 e-booków',
+    featureRookie2: 'Do 5 stron zapisu',
+    featureRookie3: 'Własne logo i branding',
+    // Funkcje Creator
+    featureCreator1: 'Do 20 e-booków',
+    featureCreator2: 'Zaawansowane integracje',
+    featureCreator3: 'Automatyzacje e-mail',
+    // Funkcje Unlimited
+    featureUnlimited1: 'Nielimitowane e-booki i strony',
+    featureUnlimited2: 'Priorytetowe wsparcie',
+    featureUnlimited3: 'Dostęp do API',
+
+    // Ograniczenia
+    limitationPublish: 'Aby opublikować stronę zapisu, należy zweryfikować formę płatności.',
+
+    trialEnds: 'Okres próbny kończy się',
+    nextBilling: 'Następna płatność',
+    upgradePlan: 'Zaktualizuj Plan',
+    // planFree: 'Darmowy', // Już zdefiniowane
     planStandard: 'Standard',
     planPremium: 'Premium',
     planActive: 'Aktywna',
     planInactive: 'Nieaktywna',
     renewsAt: 'Odnowienie:',
     manageSubscription: 'Zarządzaj subskrypcją',
+    managePlan: 'Zarządzaj planem',
+    verifyPayment: 'Weryfikacja tożsamości',
+    billingAmount: 'Kwota:',
+    nextPaymentAmount: 'Następna płatność:',
+
+    // Tłumaczenia Modala Upgrade
+    upgradeModalTitle: 'Zmień swój plan',
+    upgradeModalSubtitle: 'Wybierz plan, który najlepiej pasuje do Twoich potrzeb. Możesz go zmienić w dowolnym momencie.',
+    currentPlanBadge: 'Aktualny plan',
+    upgradeTo: 'Przejdź na {planName}', // np. Przejdź na Creator
+    managePlanStripe: 'Zarządzaj w Stripe', // Dla planu Unlimited
+
+    // Zarządzanie płatnościami (Karta)
+    managePaymentMethods: 'Zarządzanie Płatnościami',
+    currentPaymentMethod: 'Aktualna forma płatności',
+    paymentMethodPlaceholder: 'Nie znaleziono formy płatności. Dodaj ją w Stripe.',
+    billingHistory: 'Historia Płatności (Faktury)',
+    cancelSubscription: 'Anuluj Subskrypcję',
+
+    // Modal anulowania subskrypcji
+    confirmCancelSubTitle: 'Anuluj Subskrypcję',
+    confirmCancelSubMsg: 'Czy na pewno chcesz anulować subskrypcję? Dostęp pozostanie aktywny do końca bieżącego okresu rozliczeniowego.',
+
     authorLogo: 'Logo Autora / Zdjęcie',
     processing: 'Przetwarzanie...',
     logoRestrictedTitle: 'Własne logo dostępne w płatnych planach',
@@ -196,14 +270,72 @@ const translations = {
     save: 'Save',
     saving: 'Saving...',
     subscription: 'Subscription',
-    currentPlan: 'Current Plan',
+    currentPlan: 'Current plan',
+    features: 'Features',
     planFree: 'Free',
+    planDescriptionFree: 'Free starter plan',
+    planRookie: 'Rookie',
+    planRookieTrial: 'Rookie (Trial)',
+    planDescriptionRookie: 'Plan for beginner authors',
+    planDescriptionRookieTrial: 'You are using a 21-day trial of the Rookie plan',
+    planCreator: 'Creator',
+    planDescriptionCreator: 'Advanced tools for creators',
+    planUnlimited: 'Unlimited',
+    planDescriptionUnlimited: 'Full freedom and all features',
+
+    // Free Features
+    featureFree1: 'Ability to create 1 e-book',
+    featureFree2: 'Ability to create 1 landing page',
+    featureFree3: 'Basic analytics',
+    // Rookie Features
+    featureRookie1: 'Up to 5 e-books',
+    featureRookie2: 'Up to 5 landing pages',
+    featureRookie3: 'Custom logo and branding',
+    // Creator Features
+    featureCreator1: 'Up to 20 e-books',
+    featureCreator2: 'Advanced integrations',
+    featureCreator3: 'Email automations',
+    // Unlimited Features
+    featureUnlimited1: 'Unlimited e-books and pages',
+    featureUnlimited2: 'Priority support',
+    featureUnlimited3: 'API Access',
+
+    // Limitations
+    limitationPublish: 'To publish landing page, you need to verify payment method.',
+
+    trialEnds: 'Trial ends',
+    nextBilling: 'Next billing',
+    upgradePlan: 'Upgrade Plan',
+    // planFree: 'Free', // Już zdefiniowane
     planStandard: 'Standard',
     planPremium: 'Premium',
     planActive: 'Active',
     planInactive: 'Inactive',
     renewsAt: 'Renews at:',
     manageSubscription: 'Manage Subscription',
+    managePlan: 'Manage Plan',
+    verifyPayment: 'Verify Payment Method',
+    billingAmount: 'Amount:',
+    nextPaymentAmount: 'Next payment:',
+
+    // Upgrade Modal Translations
+    upgradeModalTitle: 'Change Your Plan',
+    upgradeModalSubtitle: 'Choose the plan that best suits your needs. You can change it at any time.',
+    currentPlanBadge: 'Current Plan',
+    upgradeTo: 'Upgrade to {planName}', // e.g. Upgrade to Creator
+    managePlanStripe: 'Manage in Stripe', // For Unlimited plan
+
+    // Payment Management (Card)
+    managePaymentMethods: 'Payment Management',
+    currentPaymentMethod: 'Current Payment Method',
+    paymentMethodPlaceholder: 'No payment method found. Add one in Stripe.',
+    billingHistory: 'Billing History (Invoices)',
+    cancelSubscription: 'Cancel Subscription',
+
+    // Cancel subscription modal
+    confirmCancelSubTitle: 'Cancel Subscription',
+    confirmCancelSubMsg: 'Are you sure you want to cancel? Your access will remain active until the end of your billing period.',
+
     authorLogo: 'Author Logo / Photo',
     processing: 'Processing...',
     logoRestrictedTitle: 'Custom logo available in paid plans',
@@ -345,9 +477,542 @@ const IMAGE_PROVIDERS: Provider[] = [
   }
 ];
 
+// Komponent Subscription Card
+interface SubscriptionCardProps {
+  lang: 'pl' | 'en';
+  t: typeof translations['pl'];
+  compact?: boolean;
+  subscriptionData: SubscriptionData | null;
+  loading: boolean;
+  setConfirmModal: (modalData: { // <-- Nowy prop
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+  }) => void;
+}
+
+function SubscriptionCard({
+  lang,
+  t,
+  compact = false,
+  subscriptionData,
+  loading,
+  setConfirmModal // <-- Nowy prop
+}: SubscriptionCardProps) {
+
+  // ... (usunięto wewnętrzny stan i useEffect) ...
+
+
+
+  // Helper function to translate plan names and descriptions
+  const translatePlan = (key: string) => {
+    return (t as any)[key] || key;
+  };
+
+  const handleCancelClick = () => {
+    setConfirmModal({
+      isOpen: true,
+      title: t.confirmCancelSubTitle,
+      message: t.confirmCancelSubMsg,
+      onConfirm: () => {
+        console.log("TODO: Wywołanie API do anulowania subskrypcji Stripe");
+        // Po potwierdzeniu, zamknij modal
+        setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        // TODO: Można dodać toast o sukcesie/błędzie i odświeżyć dane
+      }
+    });
+  };
+
+  if (loading) {
+    return (
+      <div className={compact ? "" : "bg-white rounded-xl border border-gray-200 p-6"}>
+        <div className="flex items-center justify-center h-40">
+          <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+        </div>
+      </div>
+    );
+  }
+
+  const formatDate = (dateString: string | null | undefined) => {
+    if (!dateString) return 'N/A';
+    return new Date(dateString).toLocaleDateString(lang === 'pl' ? 'pl-PL' : 'en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+  };
+
+  if (compact) {
+    return (
+      <div className="space-y-4">
+        <label className="block text-sm font-medium text-gray-700 mb-2">{t.subscription}</label>
+
+        <div className="lg:grid lg:grid-cols-1 lg:gap-4"> {/* Zmieniono na 1 kolumnę (dla prawej strony) */}
+          {/* Left Column - Plan Card */}
+          <div className="space-y-4 lg:min-h-full lg:flex lg:flex-col">
+            <div className="p-4 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg border border-blue-200 lg:flex-1">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <p className="text-xs text-gray-600 uppercase tracking-wide">{t.currentPlan}</p>
+                  <p className="text-xl font-bold text-gray-900">{translatePlan(subscriptionData?.plan || 'planFree')}</p>
+                </div>
+                <CreditCard className="h-6 w-6 text-blue-600" />
+              </div>
+              {subscriptionData?.planDescription && (
+                <p className="text-sm text-gray-600">{translatePlan(subscriptionData.planDescription)}</p>
+              )}
+            </div>
+
+          </div>
+
+          {/* Right Column - Features & Limitation */}
+          <div className="space-y-4 mt-4 lg:mt-0">
+            {/* Trial/Billing Info (Przeniesione) */}
+            {subscriptionData?.isTrialing && subscriptionData?.nextBillingDate && (
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <div className="flex items-start space-x-2">
+                  <AlertCircle className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
+                  <div className="text-xs">
+                    <p className="font-medium text-blue-900">
+                      {t.trialEnds}: {formatDate(subscriptionData.nextBillingDate)}
+                    </p>
+                    <p className="text-blue-700 mt-0.5">
+                      {t.nextPaymentAmount} {subscriptionData.nextBillingAmount}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Next Billing Info (Przeniesione i Zmienione) */}
+            {!subscriptionData?.isTrialing && subscriptionData?.nextBillingDate && (
+              <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                <p className="text-xs font-medium text-gray-700 mb-1">{t.nextBilling}</p>
+                <div className="flex items-baseline justify-between">
+                   <p className="text-sm text-gray-900">{formatDate(subscriptionData.nextBillingDate)}</p>
+                   {subscriptionData?.nextBillingAmount && (
+                     <p className="text-sm text-gray-600">{t.billingAmount} {subscriptionData.nextBillingAmount}</p>
+                   )}
+                </div>
+              </div>
+            )}
+
+            {/* Features (USUNIĘTE) */}
+            {/* {subscriptionData?.features && subscriptionData.features.length > 0 && (...)} */}
+
+            {/* Payment Management (Tasks 3, 4, 5) */}
+            {subscriptionData?.role !== 'free' && (
+              <div>
+                <p className="text-xs font-medium text-gray-700 mb-2">{t.managePaymentMethods}</p>
+                <div className="space-y-3">
+                  {/* Task 5: Payment Method (Zmienione) */}
+                  <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                    <p className="text-xs font-medium text-gray-700 mb-1">{t.currentPaymentMethod}</p>
+                    {/* TODO: Ta dana (np. "Visa **** 4242") musi przyjść z API */}
+                    <p className="text-sm text-gray-500 truncate">{t.paymentMethodPlaceholder}</p>
+                  </div>
+                  {/* Task 4: Billing History */}
+                  <button
+                    onClick={() => console.log('Redirect to Stripe Billing History')}
+                    className="w-full text-left inline-flex items-center px-3 py-2 bg-gray-100 text-gray-700 text-xs font-medium rounded-lg hover:bg-gray-200 transition-colors cursor-pointer"
+                  >
+                    {t.billingHistory}
+                  </button>
+                  {/* Task 3: Cancel Subscription */}
+                  <button
+                    onClick={handleCancelClick}
+                    className="w-full text-left inline-flex items-center px-3 py-2 bg-red-50 text-red-700 text-xs font-medium rounded-lg hover:bg-red-100 transition-colors cursor-pointer"
+                  >
+                    {t.cancelSubscription}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Limitation Warning */}
+            {subscriptionData?.limitation && (
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                <div className="flex items-start space-x-2">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                  <p className="text-xs text-amber-900">{t.limitationPublish}</p>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Action Button */}
+        <div className="pt-2">
+          {subscriptionData?.role === 'free' ? (
+            <Link
+              href="/pricing" // Link do weryfikacji/cen
+              className="w-full inline-flex justify-center items-center px-4 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              {t.verifyPayment}
+            </Link>
+          ) : (
+            // Dla free_ver, rookie, creator, unlimited
+            <button
+              onClick={() => {
+                // Zawsze otwieraj modal zarządzania planem
+                (window as any).openUpgradeModal();
+              }}
+              className="w-full inline-flex justify-center items-center px-4 py-2.5 bg-gray-600 text-white text-sm font-medium rounded-lg hover:bg-gray-700 transition-colors cursor-pointer"
+            >
+              <CreditCard className="w-4 h-4 mr-2" />
+              {t.managePlan}
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Tryb pełny (standalone card)
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-6">
+      <div className="flex items-center mb-6">
+        <CreditCard className="h-5 w-5 text-blue-600 mr-2" />
+        <h2 className="text-xl font-bold text-gray-900">{t.subscription}</h2>
+      </div>
+
+      <div className="space-y-4">
+        {/* Plan Name */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            {t.currentPlan}
+          </label>
+          <p className="text-lg font-semibold text-gray-900">
+            {subscriptionData?.plan || 'Free'}
+          </p>
+          {subscriptionData?.planDescription && (
+            <p className="text-sm text-gray-500 mt-1">
+              {subscriptionData.planDescription}
+            </p>
+          )}
+        </div>
+
+        {/* Trial Information */}
+        {subscriptionData?.isTrialing && subscriptionData?.nextBillingDate && (
+          <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <div className="flex items-start space-x-2">
+              <AlertCircle className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-medium text-blue-900">
+                  {t.trialEnds}: {formatDate(subscriptionData.nextBillingDate)}
+                </p>
+                <p className="text-xs text-blue-700 mt-1">
+                  {t.nextPaymentAmount} {subscriptionData.nextBillingAmount}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Active Subscription Information */}
+        {!subscriptionData?.isTrialing && subscriptionData?.nextBillingDate && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              {t.nextBilling}
+            </label>
+            <p className="text-sm text-gray-900">
+              {formatDate(subscriptionData.nextBillingDate)}
+            </p>
+            {subscriptionData?.nextBillingAmount && (
+              <p className="text-xs text-gray-500">
+                {t.billingAmount} {subscriptionData.nextBillingAmount}
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* Features List (USUNIĘTE) */}
+        {/* {subscriptionData?.features && subscriptionData.features.length > 0 && (...)} */}
+
+        {/* Payment Management (Tasks 3, 4, 5) */}
+        {subscriptionData?.role !== 'free' && (
+          <div className="pt-4 border-t border-gray-100">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              {t.managePaymentMethods}
+            </label>
+            <div className="space-y-3">
+              {/* Task 5: Payment Method */}
+              <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                <p className="text-xs font-medium text-gray-700">{t.currentPaymentMethod}</p>
+                {/* TODO: Ta dana (np. "Visa **** 4242") musi przyjść z API */}
+                <p className="text-sm text-gray-500 mt-1">{t.paymentMethodPlaceholder}</p>
+              </div>
+              {/* Task 4: Billing History */}
+              <button
+                onClick={() => console.log('Redirect to Stripe Billing History')}
+                className="w-full text-left inline-flex items-center px-4 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200 transition-colors cursor-pointer"
+              >
+                {t.billingHistory}
+              </button>
+              {/* Task 3: Cancel Subscription */}
+              <button
+                onClick={handleCancelClick} // Ta sama funkcja
+                className="w-full text-left inline-flex items-center px-4 py-2 bg-red-50 text-red-700 text-sm font-medium rounded-lg hover:bg-red-100 transition-colors cursor-pointer"
+              >
+                {t.cancelSubscription}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Limitation Warning */}
+        {subscriptionData?.limitation && (
+          <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+            <div className="flex items-start space-x-2">
+              <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-amber-900">
+                {t.limitationPublish}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Action Buttons */}
+        <div className="pt-4 border-t border-gray-200">
+          {subscriptionData?.role === 'free' ? (
+            <Link
+              href="/pricing" // Link do weryfikacji/cen
+              className="w-full inline-flex justify-center items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              {t.verifyPayment}
+            </Link>
+          ) : (
+            // Dla free_ver, rookie, creator, unlimited
+            <button
+              onClick={() => {
+                // Zawsze otwieraj modal zarządzania planem
+                (window as any).openUpgradeModal();
+              }}
+              className="w-full inline-flex justify-center items-center px-4 py-2 bg-gray-600 text-white text-sm font-medium rounded-lg hover:bg-gray-700 transition-colors cursor-pointer"
+            >
+              <CreditCard className="w-4 h-4 mr-2" />
+              {t.managePlan}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  ); // <-- ZAMKNIĘCIE `return ()`
+} // <-- ZAMKNIĘCIE `function SubscriptionCard()`
+
+  // --- Komponent Upgrade Modal ---
+interface UpgradeModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  t: typeof translations['pl'];
+  currentLang: 'pl' | 'en';
+  currentPlanRole: string; // np. 'rookie', 'creator'
+}
+
+function UpgradeModal({ isOpen, onClose, t, currentLang, currentPlanRole }: UpgradeModalProps) {
+  // Definicja planów dla modala (inspirowane landing page)
+  const modalPlans = [
+    {
+      roleName: 'rookie',
+      planKey: 'planRookie',
+      descriptionKey: 'planDescriptionRookie',
+      price: '29 zł', // Cena miesięczna (jak 'card' na landingu)
+      currencyKey: 'pricing.currencyPerMonth', // Klucz z landing page, musimy go dodać
+      featuresKeys: ['featureRookie1', 'featureRookie2', 'featureRookie3'],
+      planPath: '/free' // Ścieżka rejestracji z landing page
+    },
+    {
+      roleName: 'creator',
+      planKey: 'planCreator',
+      descriptionKey: 'planDescriptionCreator',
+      price: '87 zł', // Cena miesięczna
+      currencyKey: 'pricing.currencyPerMonth',
+      featuresKeys: ['featureCreator1', 'featureCreator2', 'featureCreator3'],
+      planPath: '/crea', // Ścieżka rejestracji
+      highlighted: true
+    },
+    {
+      roleName: 'unlimited',
+      planKey: 'planUnlimited',
+      descriptionKey: 'planDescriptionUnlimited',
+      price: '299 zł', // Cena miesięczna
+      currencyKey: 'pricing.currencyPerMonth',
+      featuresKeys: ['featureUnlimited1', 'featureUnlimited2', 'featureUnlimited3'],
+      planPath: '/inf' // Ścieżka rejestracji
+    }
+  ];
+
+  // Tłumaczenie zastępcze, gdyby klucza brakowało
+  const translate = (key: string, fallback: string = '') => (t as any)[key] || fallback || key;
+
+  // Dodajemy brakujące tłumaczenie waluty (z landing page)
+  if (!(t as any)['pricing.currencyPerMonth']) {
+    (t as any)['pricing.currencyPerMonth'] = currentLang === 'pl' ? '/ mies.' : '/ mo.';
+  }
+
+  const getButton = (plan: typeof modalPlans[0], isCurrent: boolean) => {
+    const planName = translate(plan.planKey);
+    const targetUrl = `https://app.inflee.app/register${plan.planPath}?lang=${currentLang}`;
+
+    // --- ZUNIFIKOWANA LOGIKA (ZADANIE 1 i 3) ---
+    // 1. Jeśli to jest aktualny plan, ZAWSZE pokaż zablokowany przycisk
+    if (isCurrent) {
+      // Wspólna klasa dla wszystkich zablokowanych przycisków
+      // Definiujemy styl na podstawie tego, czy był podświetlony, czy nie
+      const disabledClass = `w-full py-3 px-4 rounded-lg font-semibold text-sm transition-all opacity-50 cursor-not-allowed text-center ${
+        plan.highlighted
+          ? 'bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white'
+          // Sprawdzamy specjalny styl dla zablokowanego Unlimited
+          : (plan.roleName === 'unlimited' ? 'bg-gray-600 text-white' : 'bg-white/10 border border-white/10 text-white')
+      }`;
+
+      return (
+        <button disabled className={disabledClass}>
+          {t.currentPlanBadge}
+        </button>
+      );
+    }
+
+    // --- ZUNIFIKOWANA LOGIKA (ZADANIE 2) ---
+    // 2. Jeśli to NIE jest aktualny plan, pokaż klikalny link <a> stylizowany na przycisk
+
+    let buttonClass = '';
+
+    if (plan.roleName === 'unlimited') {
+      // Przycisk "Unlimited" (Z wyśrodkowaniem `inline-flex justify-center`)
+      buttonClass = `w-full inline-flex justify-center items-center py-3 px-4 rounded-lg font-semibold text-sm transition-all shadow-md bg-gray-600 text-white hover:bg-gray-700 cursor-pointer`;
+    } else {
+      // Przycisk "Rookie" lub "Creator"
+      buttonClass = `w-full inline-flex justify-center items-center py-3 px-4 rounded-lg font-semibold text-sm transition-all shadow-md cursor-pointer ${
+        plan.highlighted
+          ? 'bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white shadow-[0_10px_20px_rgba(139,92,246,0.20)] hover:shadow-[0_15px_25px_rgba(139,92,246,0.30)] hover:-translate-y-0.5'
+          : 'bg-white/10 border border-white/10 hover:bg-white/20 text-white'
+      }`;
+    }
+
+    return (
+      <a
+        href={targetUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={buttonClass}
+      >
+        {t.upgradeTo.replace('{planName}', planName)}
+      </a>
+    );
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 overflow-y-auto p-4 flex justify-center items-start">
+      {/* Tło */}
+      <div
+        className="absolute inset-0 bg-black/50 backdrop-blur-sm cursor-pointer"
+        onClick={onClose}
+      />
+
+      {/* Kontener Modala (ZMIANA Task 5) */}
+      <div className="relative bg-gray-900 bg-opacity-80 backdrop-blur-md border border-gray-700 rounded-xl shadow-2xl p-6 sm:p-8 max-w-6xl w-full my-8 text-white">
+
+        {/* Przycisk zamknięcia */}
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 text-gray-400 hover:text-white transition-colors"
+        >
+          <X className="w-6 h-6" />
+        </button>
+
+        {/* Nagłówek (ZMIANA Task 5) */}
+        <div className="text-center max-w-2xl mx-auto mb-6 sm:mb-10">
+          <h2 className="text-3xl md:text-4xl font-bold text-white">
+            {t.upgradeModalTitle}
+          </h2>
+          <p className="mt-3 text-lg text-gray-400">
+            {t.upgradeModalSubtitle}
+          </p>
+        </div>
+
+        {/* Karty Planów */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {modalPlans.map((plan) => {
+            const isCurrent = plan.roleName === currentPlanRole || (plan.roleName === 'rookie' && currentPlanRole === 'free_ver');
+            return (
+              <div
+                key={plan.roleName}
+                className={`relative rounded-2xl p-0.5 ${
+                  plan.highlighted ? 'bg-gradient-to-b from-purple-500 to-indigo-500' : ''
+                }`}
+              >
+                <div className={`relative bg-gray-950 backdrop-blur-sm rounded-[15px] h-full flex flex-col p-6 ${
+                  !plan.highlighted ? 'border-2 border-purple-500/20' : ''
+                }`}>
+
+                  {isCurrent && (
+                    <div className="absolute -top-4 left-1/2 -translate-x-1/2">
+                      <span className="bg-gradient-to-r from-blue-600 to-cyan-500 text-white text-xs font-bold px-4 py-1 rounded-full shadow-lg">
+                        {t.currentPlanBadge}
+                      </span>
+                    </div>
+                  )}
+
+                  <div className="flex flex-col h-full">
+                    <h3 className="text-2xl font-bold text-white mb-2">{translate(plan.planKey)}</h3>
+                    {/* ZMIANA (Task 5): Poprawka wysokości opisu */}
+                    <p className="text-sm text-gray-400 mb-6 min-h-[40px]">{translate(plan.descriptionKey)}</p>
+
+                    <div className="mb-6 flex flex-col items-center justify-center">
+                      <div className="border border-purple-500/30 rounded-xl px-6 py-3">
+                        <div className="text-4xl font-bold text-white flex items-baseline">
+                          <span>{plan.price}</span>
+                          <span className="text-xl font-medium text-gray-400 ml-2">{translate(plan.currencyKey)}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mb-8 mt-auto">
+                      {getButton(plan, isCurrent)}
+                    </div>
+
+                    <div className="flex-grow">
+                      <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">{t.features}:</div>
+                      {plan.featuresKeys.map((featureKey, index) => (
+                        <div key={index} className="flex items-start mb-3">
+                          <Check className="w-5 h-5 text-indigo-400 mr-3 flex-shrink-0 mt-0.5" />
+                          <span className="text-sm text-gray-300 leading-relaxed">{translate(featureKey)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+      </div>
+    </div>
+  );
+}
+
+// ==================================================================
+// KOMPONENT GŁÓWNY
+// ==================================================================
 export default function SettingsContent() {
   const { user, userRole } = useAuth();
   console.log("DEBUG: ROLA UŻYTKOWNIKA:", userRole, "CAŁY UŻYTKOWNIK:", user);
+
+  // Globalna funkcja do otwierania modala (Krok 37)
+  useEffect(() => {
+    const openModal = () => setIsUpgradeModalOpen(true);
+    (window as any).openUpgradeModal = openModal;
+
+    // Cleanup
+    return () => {
+      delete (window as any).openUpgradeModal;
+    }
+  }, []); // Uruchom tylko raz
 
   // 🆕 Język
   const [currentLang, setCurrentLang] = useState<'pl' | 'en'>('pl');
@@ -358,6 +1023,10 @@ export default function SettingsContent() {
     }
   }, []);
   const t = translations[currentLang];
+
+  // Stan dla pełnych danych subskrypcji (przeniesiony z SubscriptionCard)
+  const [subscriptionData, setSubscriptionData] = useState<SubscriptionData | null>(null);
+  const [isSubscriptionLoading, setIsSubscriptionLoading] = useState(true);
 
   // 1) PRZENIESIONE TU — zanim użyjesz w useMemo
   const [subscriptionBasics, setSubscriptionBasics] = useState<{
@@ -370,20 +1039,20 @@ export default function SettingsContent() {
 
   // 2) POPRAWIONE — uprawnienia do logo na podstawie ROLI
   const canCustomizeLogo = useMemo(() => {
-      // Pobierz rolę użytkownika
-      const roleRaw = userRole ?? ''; // <-- POPRAWKA
+      // Użyj nowej, aktualnej roli z pobranych danych
+      const roleRaw = subscriptionData?.role ?? '';
       const role = String(roleRaw).toLowerCase();
 
       // Zestaw ról, które NIE MOGĄ edytować
       const restricted = new Set(['free', 'free_ver', 'rookie']);
 
-      // Jeśli rola nie jest określona, blokuj
+      // Jeśli rola nie jest określona (np. ładowanie), blokuj
       if (!role) return false;
 
       // Zwróć 'true' (może edytować), jeśli rola NIE ZNAJDUJE SIĘ na liście zablokowanych
       return !restricted.has(role);
 
-  }, [userRole]); // <-- POPRAWKA
+  }, [subscriptionData]); // Zależność od aktualnych danych subskrypcji
 
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
   const defaultAppLogoUrl = `${baseUrl}/api/assets/uploads/logo_inflee.webp`;
@@ -430,7 +1099,8 @@ export default function SettingsContent() {
   });
 
   const [message, setMessage] = useState<{type: 'success' | 'error', text: string} | null>(null);
-  const [isDiskExplorerOpen, setIsDiskExplorerOpen] = useState(false);
+  const [isDiskExplorerOpen, setIsDiskExplorerOpen] = useState(false); // <--- Przeniesione z dołu
+  const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
 
   // --- Przeniesione komponenty i funkcje pomocnicze (aby miały dostęp do `t`) ---
 
@@ -707,7 +1377,7 @@ export default function SettingsContent() {
         setLastSavedUsername(fullName);
       }
     }
-  }, [user]);
+  }, [user, initialUsername]);
 
   useEffect(() => {
     let isMounted = true;
@@ -775,7 +1445,28 @@ export default function SettingsContent() {
     return () => {
       isMounted = false;
     };
-  }, [user?.id, t]);
+  }, [user?.id, t, defaultAppLogoUrl]);
+
+  // useEffect do ładowania danych subskrypcji (przeniesiony z SubscriptionCard)
+  useEffect(() => {
+    if (user?.id) {
+      async function fetchSubscriptionStatus() {
+        try {
+          const response = await fetch('/api/subscription/status');
+          if (response.ok) {
+            const data = await response.json();
+            setSubscriptionData(data);
+          }
+        } catch (error) {
+          console.error('Failed to fetch subscription:', error);
+        } finally {
+          setIsSubscriptionLoading(false);
+        }
+      }
+
+      fetchSubscriptionStatus();
+    }
+  }, [user?.id]); // Uruchom, gdy user.id jest dostępne
 
   useEffect(() => {
     if (user?.id) {
@@ -826,7 +1517,7 @@ export default function SettingsContent() {
         }
       };
 
-      loadSubscriptionBasics();
+      // loadSubscriptionBasics(); // Ta logika jest teraz w SubscriptionCard
     }
   }, [user?.id, t]);
 
@@ -1291,7 +1982,7 @@ export default function SettingsContent() {
 
       if (response.ok) {
         const data = await response.json();
-        const authorSettings: AuthorSettings = data.authorSettings;
+        // const authorSettings: AuthorSettings = data.authorSettings; // Dane są już w defaultAppLogoUrl
 
         setSettings(prev => ({ ...prev, logo: defaultAppLogoUrl }));
 
@@ -1312,7 +2003,7 @@ export default function SettingsContent() {
       setIsDeletingAvatar(false);
       setTimeout(() => setMessage(null), 3000);
     }
-  }, [isDeletingAvatar, settings.logo, resetImageAspectRatio, t]);
+  }, [isDeletingAvatar, settings.logo, resetImageAspectRatio, t, defaultAppLogoUrl]);
 
   const handleSaveUsername = useCallback(async () => {
     if (isSavingUsername || settings.username.trim() === '' || settings.username === lastSavedUsername) return;
@@ -1376,215 +2067,179 @@ export default function SettingsContent() {
             <Loader2 className="h-4 w-4 text-gray-400 ml-2 animate-spin" />
           )}
         </div>
+
+        {/* === ZMIANA (Task 1): Nowy układ pulpitu === */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+          {/* --- LEWA KOLUMNA (Nazwa + Logo) --- */}
           <div className="space-y-6">
-            <label className="block text-sm font-medium text-gray-700 mb-2">{t.authorName}</label>
-            <div className="relative">
-              <input
-                type="text"
-                value={settings.username}
-                onChange={(e) => setSettings(prev => ({ ...prev, username: e.target.value }))}
-                placeholder={t.usernamePlaceholder}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-500 pr-28"
-              />
-              {settings.username !== lastSavedUsername && settings.username.trim() !== '' && (
-                <button
-                  onClick={handleSaveUsername}
-                  disabled={isSavingUsername}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center px-3 py-1.5 bg-blue-600 text-white text-xs font-bold rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all cursor-pointer"
-                >
-                  {isSavingUsername ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <>
-                      <Save className="h-4 w-4 mr-1.5" />
-                      {t.save}
-                    </>
-                  )}
-                </button>
-              )}
+            {/* Nazwa Autora */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">{t.authorName}</label>
+              <div className="relative">
+                <input
+                  type="text"
+                  value={settings.username}
+                  onChange={(e) => setSettings(prev => ({ ...prev, username: e.target.value }))}
+                  placeholder={t.usernamePlaceholder}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-500 pr-28"
+                />
+                {settings.username !== lastSavedUsername && settings.username.trim() !== '' && (
+                  <button
+                    onClick={handleSaveUsername}
+                    disabled={isSavingUsername}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center px-3 py-1.5 bg-blue-600 text-white text-xs font-bold rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all cursor-pointer"
+                  >
+                    {isSavingUsername ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <>
+                        <Save className="h-4 w-4 mr-1.5" />
+                        {t.save}
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
             </div>
 
-            {/* Subskrypcja w tej samej kolumnie */}
+            {/* Logo Autora (Przeniesione) */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">{t.subscription}</label>
-              {subscriptionBasics && !subscriptionBasics.loading ? (
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border-2 border-gray-200">
-                    <div>
-                      <p className="text-sm text-gray-600">{t.currentPlan}</p>
-                      <p className="text-lg font-semibold text-gray-900">{subscriptionBasics.planName}</p>
-                    </div>
-                    <div>
-                      {subscriptionBasics.isActive ? (
-                        <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-medium">
-                          {t.planActive}
-                        </span>
-                      ) : (
-                        <span className="px-3 py-1 bg-gray-200 text-gray-700 rounded-full text-sm font-medium">
-                          {t.planInactive}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {subscriptionBasics.renewsAt && (
-                    <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg">
-                      <p className="text-sm text-blue-900">
-                        <span className="font-medium">{t.renewsAt}</span>{' '}
-                        {new Date(subscriptionBasics.renewsAt).toLocaleDateString(currentLang === 'pl' ? 'pl-PL' : 'en-US', {
-                          day: 'numeric',
-                          month: 'long',
-                          year: 'numeric'
-                        })}
-                      </p>
-                    </div>
-                  )}
-
-                  <Link
-                    href="/subscription"
-                    className="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors w-full justify-center cursor-pointer"
+              <label className="block text-sm font-medium text-gray-700 mb-2">{t.authorLogo}</label>
+              <div className="relative group">
+                {settings.logo || isUploadingAvatar ? (
+                  <div
+                    // === ZMIANA (Task 4): Poprawka kursora ===
+                    className={`relative border-2 border-gray-200 rounded-lg overflow-hidden flex items-center justify-center bg-white ${canCustomizeLogo ? 'cursor-pointer hover:border-gray-300' : 'cursor-not-allowed'}`}
+                    style={{
+                      width: '100%',
+                      height: '200px',
+                      padding: '16px'
+                    }}
+                    onClick={triggerFileInput}
                   >
-                    <CreditCard className="h-4 w-4 mr-2" />
-                    {t.manageSubscription}
-                  </Link>
-                </div>
-              ) : (
-                <div className="flex items-center justify-center py-8 border-2 border-gray-200 rounded-lg">
-                  <Loader2 className="h-6 w-6 text-gray-400 animate-spin" />
-                </div>
+                    {isUploadingAvatar ? (
+                      <div className="flex flex-col items-center justify-center text-gray-500">
+                        <Loader2 className="h-8 w-8 animate-spin mb-2" />
+                        <span className="text-sm font-medium">{t.processing}</span>
+                      </div>
+                    ) : (
+                      <img
+                        src={settings.logo!}
+                        alt="Logo"
+                        className="max-w-full max-h-full"
+                        style={{
+                          objectFit: 'contain',
+                          width: 'auto',
+                          height: 'auto',
+                          maxWidth: '100%',
+                          maxHeight: '100%'
+                        }}
+                        key={settings.logo}
+                        onLoad={handleImageLoad}
+                        onError={(e) => {
+                          console.error('❌ Error loading image:', settings.logo);
+                          resetImageAspectRatio();
+                        }}
+                      />
+                    )}
+                    {isDeletingAvatar && (
+                      <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+                        <Loader2 className="h-6 w-6 text-white animate-spin" />
+                      </div>
+                    )}
+                    {!canCustomizeLogo && (
+                      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center p-4">
+                        <div className="text-center space-y-2">
+                          <AlertTriangle className="w-8 h-8 text-amber-400 mx-auto" />
+                          <p className="text-white text-sm font-medium">{t.logoRestrictedTitle}</p>
+                          <button
+                            onClick={() => (window as any).openUpgradeModal()}
+                            className="inline-flex items-center px-3 py-1.5 bg-white text-gray-900 text-xs font-medium rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
+                          >
+                            <CreditCard className="w-3 h-3 mr-1.5" />
+                            {t.logoRestrictedBtn}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <label
+                    onClick={triggerFileInput}
+                    className={`w-full h-32 bg-gray-50 border-2 border-dashed border-gray-300 rounded-lg ${canCustomizeLogo ? 'cursor-pointer hover:border-gray-400 hover:bg-gray-100' : 'cursor-not-allowed'} transition-colors flex flex-col items-center justify-center relative`}>
+                    {isUploadingAvatar ? (
+                      <>
+                        <Loader2 className="h-8 w-8 text-gray-400 mb-2 animate-spin" />
+                        <span className="text-sm font-medium text-gray-600">{t.uploading}</span>
+                        <span className="text-xs text-gray-500">{t.processingAvatar}</span>
+                      </>
+                    ) : (
+                      <>
+                        <ImageIcon className="h-8 w-8 text-gray-400 mb-2" />
+                        <span className="text-sm font-medium text-gray-600">{t.addLogo}</span>
+                        <span className="text-xs text-gray-500">{t.logoFormats}</span>
+                      </>
+                    )}
+                    {!canCustomizeLogo && (
+                      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm opacity-0 hover:opacity-100 transition-opacity duration-200 flex items-center justify-center p-4 rounded-lg">
+                        <div className="text-center space-y-2">
+                          <AlertTriangle className="w-8 h-8 text-amber-400 mx-auto" />
+                          <p className="text-white text-sm font-medium">{t.logoRestrictedTitle}</p>
+                          <button
+                            onClick={() => (window as any).openUpgradeModal()}
+                            className="inline-flex items-center px-3 py-1.5 bg-white text-gray-900 text-xs font-medium rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
+                          >
+                            <CreditCard className="w-3 h-3 mr-1.5" />
+                            {t.logoRestrictedBtn}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </label>
+                )}
+              </div>
+              {canCustomizeLogo && (
+                <input
+                  type="file"
+                  className="hidden"
+                  accept="image/*"
+                  onChange={handleLogoUpload}
+                  disabled={isUploadingAvatar || isDeletingAvatar}
+                  ref={fileInputRef}
+                />
               )}
+              {canCustomizeLogo && settings.logo !== defaultAppLogoUrl && !isUploadingAvatar && (
+                <button
+                  onClick={removeLogo}
+                  disabled={isDeletingAvatar}
+                  className="mt-2 w-full flex items-center justify-center px-3 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 cursor-pointer"
+                >
+                  {isDeletingAvatar ? (
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  ) : (
+                    <ImageIcon className="h-4 w-4 mr-2" />
+                  )}
+                  {t.restoreDefaultLogo}
+                </button>
+              )}
+              <p className="text-xs text-gray-500 mt-1">{t.logoHint}</p>
             </div>
           </div>
 
-          {/* Prawa kolumna - Logo */}
+          {/* --- PRAWA KOLUMNA (Subskrypcja) --- */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">{t.authorLogo}</label>
-            <div className="relative group">
-              {settings.logo || isUploadingAvatar ? (
-                <div
-                  className={`relative border-2 border-gray-200 rounded-lg overflow-hidden flex items-center justify-center bg-white ${canCustomizeLogo ? 'cursor-pointer hover:border-gray-300' : ''}`}
-                  style={{
-                    width: '100%',
-                    height: '200px',
-                    padding: '16px'
-                  }}
-                  onClick={triggerFileInput}
-                >
-                  {isUploadingAvatar ? (
-                    <div className="flex flex-col items-center justify-center text-gray-500">
-                      <Loader2 className="h-8 w-8 animate-spin mb-2" />
-                      <span className="text-sm font-medium">{t.processing}</span>
-                    </div>
-                  ) : (
-                    <img
-                      src={settings.logo!}
-                      alt="Logo"
-                      className="max-w-full max-h-full"
-                      style={{
-                        objectFit: 'contain',
-                        width: 'auto',
-                        height: 'auto',
-                        maxWidth: '100%',
-                        maxHeight: '100%'
-                      }}
-                      key={settings.logo}
-                      onLoad={handleImageLoad}
-                      onError={(e) => {
-                        console.error('❌ Error loading image:', settings.logo);
-                        resetImageAspectRatio();
-                      }}
-                    />
-                  )}
-                  {isDeletingAvatar && (
-                    <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-                      <Loader2 className="h-6 w-6 text-white animate-spin" />
-                    </div>
-                  )}
-
-                  {/* Overlay z monitem dla użytkowników bez uprawnień */}
-                  {!canCustomizeLogo && (
-                    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center p-4">
-                      <div className="text-center space-y-2">
-                        <AlertTriangle className="w-8 h-8 text-amber-400 mx-auto" />
-                        <p className="text-white text-sm font-medium">{t.logoRestrictedTitle}</p>
-                        <Link
-                          href="/subscribe"
-                          className="inline-flex items-center px-3 py-1.5 bg-white text-gray-900 text-xs font-medium rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
-                        >
-                          <CreditCard className="w-3 h-3 mr-1.5" />
-                          {t.logoRestrictedBtn}
-                        </Link>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <label
-                  onClick={triggerFileInput}
-                  className={`w-full h-32 bg-gray-50 border-2 border-dashed border-gray-300 rounded-lg ${canCustomizeLogo ? 'cursor-pointer hover:border-gray-400 hover:bg-gray-100' : 'cursor-not-allowed'} transition-colors flex flex-col items-center justify-center relative`}>
-                  {isUploadingAvatar ? (
-                    <>
-                      <Loader2 className="h-8 w-8 text-gray-400 mb-2 animate-spin" />
-                      <span className="text-sm font-medium text-gray-600">{t.uploading}</span>
-                      <span className="text-xs text-gray-500">{t.processingAvatar}</span>
-                    </>
-                  ) : (
-                    <>
-                      <ImageIcon className="h-8 w-8 text-gray-400 mb-2" />
-                      <span className="text-sm font-medium text-gray-600">{t.addLogo}</span>
-                      <span className="text-xs text-gray-500">{t.logoFormats}</span>
-                    </>
-                  )}
-
-
-                  {/* Overlay dla użytkowników bez uprawnień */}
-                  {!canCustomizeLogo && (
-                    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm opacity-0 hover:opacity-100 transition-opacity duration-200 flex items-center justify-center p-4 rounded-lg">
-                      <div className="text-center space-y-2">
-                        <AlertTriangle className="w-8 h-8 text-amber-400 mx-auto" />
-                        <p className="text-white text-sm font-medium">{t.logoRestrictedTitle}</p>
-                        <Link
-                          href="/subscription"
-                          className="inline-flex items-center px-3 py-1.5 bg-white text-gray-900 text-xs font-medium rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
-                        >
-                          <CreditCard className="w-3 h-3 mr-1.5" />
-                          {currentLang === 'pl' ? 'Zaktualizuj' : 'Upgrade'}
-                        </Link>
-                      </div>
-                    </div>
-                  )}
-                </label>
-              )}
-            </div>
-
-            {canCustomizeLogo && (
-              <input
-                type="file"
-                className="hidden"
-                accept="image/*"
-                onChange={handleLogoUpload}
-                disabled={isUploadingAvatar || isDeletingAvatar}
-                ref={fileInputRef}
+            {/* Subskrypcja - zintegrowana z SubscriptionCard (Przeniesione) */}
+            <div>
+              <SubscriptionCard
+                lang={currentLang}
+                t={t}
+                compact={true}
+                subscriptionData={subscriptionData}
+                loading={isSubscriptionLoading}
+                setConfirmModal={setConfirmModal}
               />
-            )}
-
-            {canCustomizeLogo && settings.logo !== defaultAppLogoUrl && !isUploadingAvatar && (
-              <button
-                onClick={removeLogo}
-                disabled={isDeletingAvatar}
-                className="mt-2 w-full flex items-center justify-center px-3 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 cursor-pointer"
-              >
-                {isDeletingAvatar ? (
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                ) : (
-                  <ImageIcon className="h-4 w-4 mr-2" />
-                )}
-                {t.restoreDefaultLogo}
-              </button>
-            )}
-
-            <p className="text-xs text-gray-500 mt-1">{t.logoHint}</p>
+            </div>
           </div>
         </div>
       </div>
@@ -1799,7 +2454,9 @@ export default function SettingsContent() {
 
       {/* Grid for Subscription and System Management */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* System Management - teraz widoczny tylko dla GOD */}
+        {/* Subscription Section is now integrated in Author Profile */}
+
+        {/* System Management - widoczny tylko dla GOD */}
         {userRole?.toUpperCase() === 'GOD' && (
           <div className="bg-white rounded-xl border border-gray-200 p-6">
             <div className="flex items-center mb-6">
@@ -1865,6 +2522,15 @@ export default function SettingsContent() {
           </div>
         </div>
       )}
+
+      {/* Modal Zmiany Planu */}
+      <UpgradeModal
+        isOpen={isUpgradeModalOpen}
+        onClose={() => setIsUpgradeModalOpen(false)}
+        t={t}
+        currentLang={currentLang}
+        currentPlanRole={subscriptionData?.role || ''}
+      />
 
       {/* Toast Messages */}
       {message && (

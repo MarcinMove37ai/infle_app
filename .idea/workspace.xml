@@ -5,7 +5,23 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="46749596-836e-4f8d-af4b-57221a03aed3" name="Changes" comment="">
+      <change afterPath="$PROJECT_DIR$/src/app/api/subscription/status/route.ts" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/prisma/schema.prisma" beforeDir="false" afterPath="$PROJECT_DIR$/prisma/schema.prisma" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/app/api/stripe/create-checkout/route.ts" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/app/api/stripe/create-setup-intent/route.ts" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/app/api/subscription/cancel/route.ts" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/app/api/subscription/details/route.ts" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/app/api/user/subscription-status/route.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/app/api/user/subscription-status/route.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/app/api/webhooks/stripe/route.ts" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/app/subscribe/page.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/app/subscribe/success/SuccessContent.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/app/subscribe/success/page.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/app/subscription/page.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/app/verify-payment/VerifyPaymentForm.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/app/verify-payment/page.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/components/pages/UstawieniaContent.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/components/pages/UstawieniaContent.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/lib/subscription-plans.ts" beforeDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />

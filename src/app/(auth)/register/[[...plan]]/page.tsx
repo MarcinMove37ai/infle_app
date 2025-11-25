@@ -1,12 +1,13 @@
 // src/app/(auth)/register/[[...plan]]/page.tsx
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import { Check, Sparkles } from 'lucide-react';
 import { LazyMotion, domAnimation, m as motion } from "framer-motion";
+import { trackHybridEvent } from '@/lib/fbPixel';
 
 interface InstagramProfileResponse {
   profilepic_url: string | null;
@@ -44,18 +45,36 @@ export default function RegisterPage({
   // Stan dla asynchronicznego params
   const [planSlug, setPlanSlug] = useState<string | null>(null);
 
-  // Odczytanie params asynchronicznie
+  // Zmienne URL (źródło ruchu)
+  const lang = searchParams.get('lang') || 'pl';
+  const source = searchParams.get('source') || 'direct';
+  const refParam = searchParams.get('ref') || null;
+
+  // 🔥 TRACKING: PageView przy wejściu (Raz na montowanie)
+  const isTracked = useRef(false);
+
+  // Odczytanie params asynchronicznie + Tracking
   useEffect(() => {
     params.then(resolvedParams => {
       const slug = resolvedParams.plan ? resolvedParams.plan[0] : null;
       setPlanSlug(slug);
-      console.log('Wybrany plan (ze ścieżki):', slug); // 'free', 'crea', 'inf', 'final' lub null
-    });
-  }, [params]);
 
-  // Bezpieczne wyciąganie wartości 'lang' z hooka 'useSearchParams'
-  const lang = searchParams.get('lang') || null;
-  console.log('Wybrany język (z ?lang=):', lang); // 'pl', 'en' lub null
+      if (!isTracked.current) {
+        // Wysyłamy PageView hybrydowo
+        trackHybridEvent('PageView', {
+            content_name: 'Register Page',
+            content_ids: slug ? [slug] : [],
+            content_type: 'product',
+            // Parametry marketingowe:
+            source: source,
+            language: lang,
+            ref: refParam,
+            plan_selected: slug
+        });
+        isTracked.current = true;
+      }
+    });
+  }, [params, lang, source, refParam]);
 
   // ✅ POPRAWKA: Tworzymy dynamiczny link do logowania, który zachowuje parametr 'lang'
   const loginHref = lang ? `/login?lang=${lang}` : '/login';
@@ -304,6 +323,18 @@ const heroItemVariants = {
 
       const data = await response.json();
       if (response.ok) {
+        // 🔥 TRACKING: Sukces Rejestracji (CompleteRegistration)
+        trackHybridEvent('CompleteRegistration', {
+            content_name: `New User Registration (${planSlug || 'unknown'})`,
+            status: 'success',
+            currency: 'PLN',
+            value: 0.00,
+            // Metadane dla Advanced Matching i analizy
+            plan_selected: planSlug,
+            source: source,
+            language: lang
+        });
+
         setRegistrationSuccess(true);
         window.location.hash = 'sukces';
       } else {

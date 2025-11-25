@@ -34,14 +34,11 @@ model User {
   textAiModel           String?                      @default("claude-3-haiku")
   textAiProvider        String?                      @default("anthropic")
   role                  Role                         @default(free)
-  paymentMethod         String?                      @map("payment_method")
-  paymentVerifiedAt     DateTime?                    @map("payment_verified_at") @db.Timestamptz(6)
-  stripeCustomerId      String?                      @map("stripe_customer_id")
-  stripePaymentMethodId String?                      @map("stripe_payment_method_id")
-  stripeSubscriptionId  String?                      @map("stripe_subscription_id")
-  subscriptionEndsAt    DateTime?                    @map("subscription_ends_at") @db.Timestamptz(6)
-  subscriptionStatus    String                       @default("trial") @map("subscription_status")
-  trialEndsAt           DateTime?                    @default(dbgenerated("(((\"createdAt\")::date + '21 days'::interval) + ('23:59:59'::time without time zone)::interval)")) @map("trial_ends_at") @db.Timestamptz(6)
+  stripeCustomerId      String?                      @unique
+  stripeSubscriptionId  String?                      @unique
+  subscriptionStatus    String?
+  paymentVerifiedAt     DateTime?
+  nextBillingDate       DateTime?
   ebookSources          EbookSource[]
   ebooks                ebooks[]
   instagramAIAnalyses   InstagramCreatorAIAnalysis[]
@@ -55,10 +52,6 @@ model User {
   instagramProfile      InstagramProfileCheck?       @relation(fields: [instagramProfileId], references: [id])
   linkedinProfile       LinkedInProfileCheck?        @relation(fields: [linkedinProfileId], references: [id])
 
-  @@index([stripeCustomerId])
-  @@index([stripeSubscriptionId])
-  @@index([subscriptionStatus])
-  @@index([subscriptionEndsAt])
   @@map("users")
 }
 
