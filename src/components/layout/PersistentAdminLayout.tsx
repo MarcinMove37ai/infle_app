@@ -684,21 +684,21 @@ const getMenuItems = (lang: 'pl' | 'en'): MenuItem[] => [
     IconComponent: BookOpen,
     label: translations[lang].ebooks,
     path: '/ebooks',
-    roles: ['ADMIN', 'USER', 'GOD', 'free', 'rookie', 'creator', 'unlimited'],
+    roles: ['ADMIN', 'USER', 'GOD', 'free', 'rookie', 'creator', 'unlimited', 'free_ver'],
     requiredStatus: ['active']
   },
   {
     IconComponent: FileSignature,
     label: translations[lang].landingPages,
     path: '/landings',
-    roles: ['ADMIN', 'USER', 'GOD', 'free', 'rookie', 'creator', 'unlimited'],
+    roles: ['ADMIN', 'USER', 'GOD', 'free', 'rookie', 'creator', 'unlimited', 'free_ver', 'demo'],
     requiredStatus: ['active']
   },
   {
     IconComponent: UserCheck,
     label: translations[lang].leads,
     path: '/leads',
-    roles: ['ADMIN', 'USER', 'GOD', 'free', 'rookie', 'creator', 'unlimited'],
+    roles: ['ADMIN', 'USER', 'GOD', 'free', 'rookie', 'creator', 'unlimited', 'free_ver', 'demo'],
     requiredStatus: ['active']
   },
   {
@@ -712,7 +712,7 @@ const getMenuItems = (lang: 'pl' | 'en'): MenuItem[] => [
     IconComponent: Settings,
     label: translations[lang].settings,
     path: '/settings',
-    roles: ['ADMIN', 'USER', 'GOD','free', 'rookie', 'creator', 'unlimited'],
+    roles: ['ADMIN', 'USER', 'GOD','free', 'rookie', 'creator', 'unlimited', 'free_ver', 'demo'],
     requiredStatus: ['active']
   }
 ];

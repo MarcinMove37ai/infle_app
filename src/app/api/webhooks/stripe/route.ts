@@ -132,6 +132,12 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   // Określ role na podstawie statusu subskrypcji
   const role = subscription.status === 'trialing' ? 'free_ver' : 'rookie';
 
+  // NAPRAWA: Oblicz bezpieczną datę (jeśli current_period_end jest puste, użyj trial_end lub +30 dni)
+  const timestamp = subscription.current_period_end || subscription.trial_end;
+  const safeNextBillingDate = timestamp
+    ? new Date(timestamp * 1000)
+    : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+
   // Aktualizuj użytkownika w bazie
   await prisma.user.update({
     where: { id: userId },
@@ -141,7 +147,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
       subscriptionStatus: subscription.status,
       role: role,
       paymentVerifiedAt: new Date(),
-      nextBillingDate: new Date(subscription.current_period_end * 1000),
+      nextBillingDate: safeNextBillingDate,
 
       // Zaktualizowane pola
       billingName: billingName,
