@@ -322,17 +322,25 @@ const heroItemVariants = {
       });
 
       const data = await response.json();
+      // Wewnątrz handleSubmit w pliku src/app/(auth)/register/[[...plan]]/page.tsx
+
       if (response.ok) {
-        // 🔥 TRACKING: Sukces Rejestracji (CompleteRegistration)
+        // 🔥 TRACKING: Sukces Rejestracji (CompleteRegistration) + DANE UŻYTKOWNIKA
         trackHybridEvent('CompleteRegistration', {
             content_name: `New User Registration (${planSlug || 'unknown'})`,
             status: 'success',
             currency: 'PLN',
             value: 0.00,
-            // Metadane dla Advanced Matching i analizy
+            // Parametry analityczne
             plan_selected: planSlug,
             source: source,
             language: lang
+        }, {
+            // ✅ NOWOŚĆ: Przekazujemy dane formularza do haszowania
+            email: formData.email,
+            phone: formData.phone || undefined,
+            firstName: formData.firstName,
+            lastName: formData.lastName
         });
 
         setRegistrationSuccess(true);

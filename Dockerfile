@@ -1,22 +1,24 @@
 # Etap 1: Budowanie aplikacji (builder)
 FROM node:18-slim AS builder
 
+# 👇 DODANA SEKCJA: Instalacja OpenSSL dla buildera (naprawia błąd Prisma)
+RUN apt-get update -y && apt-get install -y openssl
+
 WORKDIR /app
 
 # --- Argumenty build-time z Railway ---
-# Musimy je zadeklarować, aby Docker mógł je przyjąć podczas budowania
 ARG DATABASE_URL
 ARG RESEND_API_KEY
 ARG NEXTAUTH_SECRET
 ARG NEXTAUTH_URL
 ARG ENCRYPTION_KEY
 ARG NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
-# 👇 DODANO NOWY ARGUMENT DLA PIXELA
 ARG NEXT_PUBLIC_FB_PIXEL_ID
 
-# Kopiowanie package files i schema PRZED npm ci (dla lepszego cache'owania)
+# Reszta bez zmian...
 COPY package.json package-lock.json ./
 COPY prisma ./prisma/
+# ...
 
 # Instalacja zależności
 RUN npm ci
