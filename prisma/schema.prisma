@@ -39,6 +39,14 @@ model User {
   subscriptionStatus    String?
   paymentVerifiedAt     DateTime?
   nextBillingDate       DateTime?
+  billingName           String?
+  billingAddress        Json?
+  cardLast4             String?
+  cardBrand             String?
+  companyName           String?
+  taxId                 String?
+  taxIdType             String?
+  billingPreference     String?
   ebookSources          EbookSource[]
   ebooks                ebooks[]
   instagramAIAnalyses   InstagramCreatorAIAnalysis[]

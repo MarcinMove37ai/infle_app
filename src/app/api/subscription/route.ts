@@ -1,11 +1,10 @@
-// app/api/subscription/status/route.ts
+// app/api/subscription/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth/next';
+import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import Stripe from 'stripe';
 
-// 1. Inicjalizacja Stripe
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: '2025-09-30.clover' as any,
 });
@@ -14,47 +13,44 @@ export async function GET(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
 
-    if (!session?.user?.id) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
+    if (!session?.user?.email) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // 2. Rozszerzone zapytanie o dane użytkownika (dodano pola bilingowe)
+    // 1. Pobierz użytkownika wraz z danymi bilingowymi
     const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
+      where: { email: session.user.email },
       select: {
         role: true,
+        subscriptionStatus: true,
+        nextBillingDate: true,
+        paymentVerifiedAt: true,
         stripeCustomerId: true,
         stripeSubscriptionId: true,
-        subscriptionStatus: true,
-        paymentVerifiedAt: true,
-        nextBillingDate: true,
-        // Nowe pola bilingowe potrzebne do ustawień
+        // Dane autora
+        authorDisplayName: true,
+        authorLogoUrl: true,
+        firstName: true,
+        lastName: true,
+        // Dane billing
         billingName: true,
         billingAddress: true,
+        cardLast4: true,
+        cardBrand: true,
         companyName: true,
         taxId: true,
         taxIdType: true,
-        cardLast4: true,
-        cardBrand: true,
-        billingPreference: true,
       },
     });
 
     if (!user) {
-      return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    // 3. Logika dynamicznego pobierania ceny ze Stripe
+    // 2. Ustal cenę dynamicznie ze Stripe
     let currentPrice = '0 zł';
     let currency = 'PLN';
 
-    // Jeśli jest subskrypcja w Stripe, pobierz jej aktualną cenę
     if (user.stripeSubscriptionId) {
       try {
         const subscription = await stripe.subscriptions.retrieve(user.stripeSubscriptionId);
@@ -71,26 +67,26 @@ export async function GET(req: NextRequest) {
         }
       } catch (error) {
         console.error('Error fetching Stripe subscription:', error);
-        // Fallback cenowy (tylko w razie awarii połączenia ze Stripe)
+        // Fallback cenowy (jeśli Stripe zawiedzie)
         if (user.role === 'rookie' || user.role === 'free_ver') currentPrice = '29 zł';
-        if (user.role === 'creator') currentPrice = '99 zł';
+        if (user.role === 'creator') currentPrice = '87 zł';
         if (user.role === 'unlimited') currentPrice = '299 zł';
       }
     } else {
-       // Ceny domyślne (fallback) jeśli brak aktywnej subskrypcji w Stripe
+       // Ceny domyślne jeśli brak aktywnej subskrypcji w Stripe, ale rola jest ustawiona
         if (user.role === 'rookie' || user.role === 'free_ver') currentPrice = '29 zł';
-        if (user.role === 'creator') currentPrice = '99 zł';
+        if (user.role === 'creator') currentPrice = '87 zł';
         if (user.role === 'unlimited') currentPrice = '299 zł';
     }
 
-    // 4. Mapowanie nazw planów i opisów
+    // 3. Mapowanie nazw i opisów planów (bez cen - one są teraz dynamiczne)
     const planMapping: Record<string, { name: string; description: string }> = {
       free: {
         name: 'planFree',
         description: 'planDescriptionFree',
       },
       free_ver: {
-        name: 'planRookie', // W trialu wyświetlamy nazwę docelowego planu
+        name: 'planRookie',
         description: 'planDescriptionRookieTrial',
       },
       rookie: {
@@ -109,44 +105,37 @@ export async function GET(req: NextRequest) {
 
     const planInfo = planMapping[user.role] || planMapping.free;
 
-    // 5. Konstrukcja odpowiedzi JSON (zgodna z SettingsContent.tsx)
+    // 4. Zwróć dane
     return NextResponse.json({
       role: user.role,
       plan: planInfo.name,
       planDescription: planInfo.description,
-
-      // Statusy
       subscriptionStatus: user.subscriptionStatus,
-      isTrialing: user.role === 'free_ver', // Uproszczone sprawdzanie triala
-      upgradeRequired: user.role === 'free',
-
-      // Daty i Płatności
       nextBillingDate: user.nextBillingDate,
-      nextBillingAmount: currentPrice, // <-- Cena ze Stripe
+      nextBillingAmount: currentPrice, // <-- Dynamiczna cena
       paymentVerifiedAt: user.paymentVerifiedAt,
-
-      // Identyfikatory Stripe
-      stripeCustomerId: user.stripeCustomerId,
-      stripeSubscriptionId: user.stripeSubscriptionId,
-
-      // Ograniczenia
+      isTrialing: user.subscriptionStatus === 'trialing',
       limitation: (user.role === 'free_ver' && !user.paymentVerifiedAt) ? 'limitationPublish' : null,
 
-      // Dane bilingowe (Dla sekcji "Oznaczenie właściciela" i "Karta")
+      // Dane autora
+      authorDisplayName: user.authorDisplayName,
+      authorLogoUrl: user.authorLogoUrl,
+      firstName: user.firstName,
+      lastName: user.lastName,
+
+      // Dane billing
       billingName: user.billingName,
       billingAddress: user.billingAddress,
+      cardLast4: user.cardLast4,
+      cardBrand: user.cardBrand,
       companyName: user.companyName,
       taxId: user.taxId,
       taxIdType: user.taxIdType,
-      cardLast4: user.cardLast4,
-      cardBrand: user.cardBrand,
-      billingPreference: user.billingPreference,
     });
-
   } catch (error) {
-    console.error('Subscription status error:', error);
+    console.error('Error fetching subscription data:', error);
     return NextResponse.json(
-      { error: 'Failed to fetch subscription status' },
+      { error: 'Failed to fetch subscription data' },
       { status: 500 }
     );
   }

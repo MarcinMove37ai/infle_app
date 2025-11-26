@@ -6,7 +6,7 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import {
   User, Key, Eye, EyeOff, Save, Trash2, CheckCircle, AlertCircle, Loader2,
   Palette, Type, ChevronDown, Check, Image as ImageIcon, X, AlertTriangle, FolderOpen,
-  Shield, CreditCard
+  Shield, CreditCard, ShieldCheck
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import Link from 'next/link';
@@ -67,6 +67,15 @@ interface SubscriptionData {
   paymentVerifiedAt?: string | null;
   stripeCustomerId?: string | null;
   stripeSubscriptionId?: string | null;
+  // Nowe pola bilingowe
+  billingName?: string | null;
+  billingAddress?: any;
+  companyName?: string | null;
+  taxId?: string | null;
+  taxIdType?: string | null;
+  cardLast4?: string | null;
+  cardBrand?: string | null;
+  billingPreference?: 'company' | 'personal' | null; // <--- DODANO (status blokady)
 }
 
 
@@ -76,6 +85,140 @@ interface ConfirmModal {
   message: string;
   onConfirm: () => void;
 }
+
+// --- Komponent BillingChoiceModal (Wymuszenie wyboru właściciela) ---
+interface BillingChoiceModalProps {
+  isOpen: boolean;
+  subscriptionData: SubscriptionData | null;
+  onSave: (preference: 'company' | 'personal') => Promise<void>;
+  t: typeof translations['pl'];
+}
+
+function BillingChoiceModal({ isOpen, subscriptionData, onSave, t }: BillingChoiceModalProps) {
+  const [selectedProfile, setSelectedProfile] = useState<'company' | 'personal'>('company');
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Helper do formatowania adresu
+  const formatAddress = (addr: any) => {
+    if (!addr) return '';
+    if (typeof addr === 'string') return addr;
+    const { line1, line2, city, postal_code, country } = addr;
+    return [line1, line2, postal_code, city, country].filter(Boolean).join(', ');
+  };
+
+  const handleConfirm = async () => {
+    setIsSaving(true);
+    await onSave(selectedProfile);
+    setIsSaving(false);
+  };
+
+  if (!isOpen || !subscriptionData) return null;
+
+  return (
+    <div className="fixed inset-0 z-[100] overflow-y-auto flex items-center justify-center p-4 bg-gray-900/90 backdrop-blur-sm">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full p-8 relative overflow-hidden">
+
+        {/* Dekoracyjny nagłówek */}
+        <div className="text-center mb-8">
+          <div className="mx-auto bg-blue-100 w-16 h-16 rounded-full flex items-center justify-center mb-4">
+            <ShieldCheck className="w-8 h-8 text-blue-600" />
+          </div>
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">{t.confirmOwnerSaveTitle}</h2>
+          <p className="text-gray-600 text-sm max-w-lg mx-auto">
+            {t.confirmOwnerSaveMsg}
+          </p>
+        </div>
+
+        {/* Opcje wyboru */}
+        <div className="space-y-4 mb-8">
+          {/* Opcja 1: Firma */}
+          <label
+            className={`relative flex items-start p-5 border-2 rounded-xl cursor-pointer transition-all ${
+              selectedProfile === 'company'
+                ? 'border-blue-600 bg-blue-50 ring-1 ring-blue-600'
+                : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+            }`}
+            onClick={() => setSelectedProfile('company')}
+          >
+            <div className="flex items-center h-5 mt-1">
+              <input
+                type="radio"
+                name="modalBilling"
+                checked={selectedProfile === 'company'}
+                onChange={() => setSelectedProfile('company')}
+                className="h-5 w-5 text-blue-600 border-gray-300 focus:ring-blue-500"
+              />
+            </div>
+            <div className="ml-4">
+              <span className={`block text-lg font-bold ${selectedProfile === 'company' ? 'text-blue-900' : 'text-gray-900'}`}>
+                {subscriptionData.companyName} <span className="text-gray-400 font-normal mx-2">|</span> {subscriptionData.taxId}
+              </span>
+              {/* Usunięto oddzielną linię z NIP-em, teraz jest powyżej */}
+              <span className="block text-sm text-gray-500 mt-1">
+                {formatAddress(subscriptionData.billingAddress)}
+              </span>
+            </div>
+            {selectedProfile === 'company' && (
+              <div className="absolute top-4 right-4">
+                <span className="bg-blue-100 text-blue-700 text-xs font-bold px-2 py-1 rounded uppercase">Firma</span>
+              </div>
+            )}
+          </label>
+
+          {/* Opcja 2: Osoba Prywatna */}
+          <label
+            className={`relative flex items-start p-5 border-2 rounded-xl cursor-pointer transition-all ${
+              selectedProfile === 'personal'
+                ? 'border-blue-600 bg-blue-50 ring-1 ring-blue-600'
+                : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+            }`}
+            onClick={() => setSelectedProfile('personal')}
+          >
+            <div className="flex items-center h-5 mt-1">
+              <input
+                type="radio"
+                name="modalBilling"
+                checked={selectedProfile === 'personal'}
+                onChange={() => setSelectedProfile('personal')}
+                className="h-5 w-5 text-blue-600 border-gray-300 focus:ring-blue-500"
+              />
+            </div>
+            <div className="ml-4">
+              <span className={`block text-lg font-bold ${selectedProfile === 'personal' ? 'text-blue-900' : 'text-gray-900'}`}>
+                {subscriptionData.billingName || 'Osoba Prywatna'}
+              </span>
+              <span className="block text-sm text-gray-500 mt-1">
+                {formatAddress(subscriptionData.billingAddress)}
+              </span>
+            </div>
+             {selectedProfile === 'personal' && (
+              <div className="absolute top-4 right-4">
+                <span className="bg-blue-100 text-blue-700 text-xs font-bold px-2 py-1 rounded uppercase">Osoba</span>
+              </div>
+            )}
+          </label>
+        </div>
+
+        {/* Przycisk akcji */}
+        <button
+          onClick={handleConfirm}
+          disabled={isSaving}
+          className="w-full py-4 bg-blue-600 text-white text-lg font-bold rounded-xl hover:bg-blue-700 transition-colors shadow-lg disabled:opacity-70 disabled:cursor-not-allowed flex justify-center items-center"
+        >
+          {isSaving ? (
+            <>
+              <Loader2 className="w-5 h-5 animate-spin mr-2" />
+              {t.processing || 'Przetwarzanie...'}
+            </>
+          ) : (
+            t.confirmSave
+          )}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // --- Tłumaczenia ---
 const translations = {
   pl: {
@@ -166,9 +309,12 @@ const translations = {
     renewsAt: 'Odnowienie:',
     manageSubscription: 'Zarządzaj subskrypcją',
     managePlan: 'Zarządzaj planem',
-    verifyPayment: 'Weryfikacja tożsamości',
+    verifyPayment: 'Zweryfikuj tożsamości ze Stripe',
     billingAmount: 'Kwota:',
     nextPaymentAmount: 'Następna płatność:',
+
+    // Info weryfikacji
+    verifyIdentityInfo: 'Aby opublikować własną stronę musimy zweryfikować Twoją tożsamość. Dane zostaną użyte w Polityce prywatności dotyczącej pozyskanych Leadów oraz do oznaczenia strony zapisu, która jest Twoją własnością w czasie trwania subskrypcji. Aby potwierdzić tożsamość rozpocznij 21-dniowy okres próbny planu Rookie, możesz zrezygnować w dowolnym momencie. Przy płatności BLIK, okres próbny nie obowiązuje i aby publikować należy opłacić Plan na jeden miesiąc.',
 
     // Tłumaczenia Modala Upgrade
     upgradeModalTitle: 'Zmień swój plan',
@@ -184,9 +330,19 @@ const translations = {
     billingHistory: 'Historia Płatności (Faktury)',
     cancelSubscription: 'Anuluj Subskrypcję',
 
+    // Sekcja Właściciela
+    billingOwner: 'Oznaczenie właściciela strony zapisu',
+    billingTaxId: 'NIP',
+    billingAddress: 'Adres',
+
     // Modal anulowania subskrypcji
     confirmCancelSubTitle: 'Anuluj Subskrypcję',
     confirmCancelSubMsg: 'Czy na pewno chcesz anulować subskrypcję? Dostęp pozostanie aktywny do końca bieżącego okresu rozliczeniowego.',
+
+    // Modal zapisu właściciela (Task Lock)
+    confirmOwnerSaveTitle: 'Potwierdź właściciela strony zapisu',
+    confirmOwnerSaveMsg: 'UWAGA: Ta operacja jest nieodwracalna dla tego konta. Wybrane dane (Firma lub Osoba) zostaną na stałe przypisane do Twoich stron zapisu i Polityki Prywatności. Czy na pewno chcesz zapisać?',
+    confirmSave: 'Zapisz na stałe',
 
     authorLogo: 'Logo Autora / Zdjęcie',
     processing: 'Przetwarzanie...',
@@ -321,9 +477,12 @@ const translations = {
     renewsAt: 'Renews at:',
     manageSubscription: 'Manage Subscription',
     managePlan: 'Manage Plan',
-    verifyPayment: 'Verify Payment Method',
+    verifyPayment: 'Verify Identity with Stripe',
     billingAmount: 'Amount:',
     nextPaymentAmount: 'Next payment:',
+
+    // Verification Info
+    verifyIdentityInfo: 'To publish your own page, we must verify your identity. The data will be used in the Privacy Policy regarding acquired Leads and to designate the landing page as your property during the subscription period. To confirm your identity, start a 21-day trial of the Rookie plan; you can cancel at any time.',
 
     // Upgrade Modal Translations
     upgradeModalTitle: 'Change Your Plan',
@@ -339,9 +498,20 @@ const translations = {
     billingHistory: 'Billing History (Invoices)',
     cancelSubscription: 'Cancel Subscription',
 
+    // Owner Section (NEW)
+    billingOwner: 'Landing Page Owner',
+    billingTaxId: 'Tax ID',
+    billingAddress: 'Address',
+
     // Cancel subscription modal
     confirmCancelSubTitle: 'Cancel Subscription',
     confirmCancelSubMsg: 'Are you sure you want to cancel? Your access will remain active until the end of your billing period.',
+
+    // NEW: Landing Page Owner Lock
+    confirmOwnerSaveTitle: 'Confirm Landing Page Owner',
+    confirmOwnerSaveMsg: 'WARNING: This action is irreversible for this account. The selected data (Company or Individual) will be permanently assigned to your landing pages and Privacy Policy. Are you sure you want to save?',
+    confirmSave: 'Save permanently',
+    saved: 'Saved',
 
     authorLogo: 'Author Logo / Photo',
     processing: 'Processing...',
@@ -505,16 +675,22 @@ function SubscriptionCard({
   compact = false,
   subscriptionData,
   loading,
-  setConfirmModal // <-- Nowy prop
+  setConfirmModal
 }: SubscriptionCardProps) {
-
-  // ... (usunięto wewnętrzny stan i useEffect) ...
-
-
 
   // Helper function to translate plan names and descriptions
   const translatePlan = (key: string) => {
     return (t as any)[key] || key;
+  };
+
+  // Helper do formatowania adresu
+  const formatAddress = (addr: any) => {
+    if (!addr) return '';
+    if (typeof addr === 'string') return addr;
+
+    const { line1, line2, city, postal_code, state, country } = addr;
+    const parts = [line1, line2, postal_code, city, country];
+    return parts.filter(Boolean).join(', ');
   };
 
   const handleCancelClick = () => {
@@ -522,11 +698,24 @@ function SubscriptionCard({
       isOpen: true,
       title: t.confirmCancelSubTitle,
       message: t.confirmCancelSubMsg,
-      onConfirm: () => {
-        console.log("TODO: Wywołanie API do anulowania subskrypcji Stripe");
-        // Po potwierdzeniu, zamknij modal
-        setConfirmModal({ isOpen: false, title: '', message: '', onConfirm: () => {} });
-        // TODO: Można dodać toast o sukcesie/błędzie i odświeżyć dane
+      onConfirm: async () => {
+        try {
+          const response = await fetch('/api/subscription/cancel', {
+            method: 'POST',
+          });
+
+          if (response.ok) {
+            window.location.reload();
+          } else {
+            const data = await response.json();
+            alert(data.error || 'Wystąpił błąd podczas anulowania.');
+          }
+        } catch (error) {
+          console.error('Error canceling subscription:', error);
+          alert('Błąd połączenia z serwerem.');
+        } finally {
+          setConfirmModal({ isOpen: false, title: '', message: '', onConfirm: () => {} });
+        }
       }
     });
   };
@@ -555,7 +744,7 @@ function SubscriptionCard({
       <div className="space-y-4">
         <label className="block text-sm font-medium text-gray-700 mb-2">{t.subscription}</label>
 
-        <div className="lg:grid lg:grid-cols-1 lg:gap-4"> {/* Zmieniono na 1 kolumnę (dla prawej strony) */}
+        <div className="lg:grid lg:grid-cols-1 lg:gap-4">
           {/* Left Column - Plan Card */}
           <div className="space-y-4 lg:min-h-full lg:flex lg:flex-col">
             <div className="p-4 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg border border-blue-200 lg:flex-1">
@@ -570,12 +759,11 @@ function SubscriptionCard({
                 <p className="text-sm text-gray-600">{translatePlan(subscriptionData.planDescription)}</p>
               )}
             </div>
-
           </div>
 
           {/* Right Column - Features & Limitation */}
           <div className="space-y-4 mt-4 lg:mt-0">
-            {/* Trial/Billing Info (Przeniesione) */}
+            {/* Trial/Billing Info */}
             {subscriptionData?.isTrialing && subscriptionData?.nextBillingDate && (
               <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
                 <div className="flex items-start space-x-2">
@@ -592,7 +780,7 @@ function SubscriptionCard({
               </div>
             )}
 
-            {/* Next Billing Info (Przeniesione i Zmienione) */}
+            {/* Next Billing Info */}
             {!subscriptionData?.isTrialing && subscriptionData?.nextBillingDate && (
               <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
                 <p className="text-xs font-medium text-gray-700 mb-1">{t.nextBilling}</p>
@@ -605,34 +793,74 @@ function SubscriptionCard({
               </div>
             )}
 
-            {/* Features (USUNIĘTE) */}
-            {/* {subscriptionData?.features && subscriptionData.features.length > 0 && (...)} */}
-
-            {/* Payment Management (Tasks 3, 4, 5) */}
-            {subscriptionData?.role !== 'free' && (
-              <div>
-                <p className="text-xs font-medium text-gray-700 mb-2">{t.managePaymentMethods}</p>
-                <div className="space-y-3">
-                  {/* Task 5: Payment Method (Zmienione) */}
+            {/* Payment Management & Owner Info - UKRYTE DLA FREE I DEMO */}
+            {subscriptionData?.role !== 'free' && subscriptionData?.role !== 'demo' && (
+              <div className="space-y-5">
+                {/* Oznaczenie właściciela strony zapisu (Widok po wyborze w modalu) */}
+                <div>
+                  <p className="text-xs font-medium text-gray-700 mb-2">{t.billingOwner}</p>
                   <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
-                    <p className="text-xs font-medium text-gray-700 mb-1">{t.currentPaymentMethod}</p>
-                    {/* TODO: Ta dana (np. "Visa **** 4242") musi przyjść z API */}
-                    <p className="text-sm text-gray-500 truncate">{t.paymentMethodPlaceholder}</p>
+                     {/*
+                        LOGIKA WYŚWIETLANIA:
+                        1. Jeśli wybrano 'company' -> Pokaż firmę
+                        2. Jeśli nie ma jeszcze wyboru (billingPreference), ale jest firma (companyName) -> Pokaż firmę (domyślnie)
+                        3. W przeciwnym razie -> Pokaż osobę prywatną
+                     */}
+                     {(subscriptionData?.billingPreference === 'company' || (!subscriptionData?.billingPreference && subscriptionData?.companyName)) ? (
+                       // Widok Firmy
+                       <div className="text-sm text-gray-900">
+                         <p className="font-semibold">
+                            {subscriptionData?.companyName} <span className="text-gray-400 font-normal mx-1">|</span> {subscriptionData?.taxId}
+                         </p>
+                         {/* Usunięto oddzielną linię z NIP-em */}
+                         <p className="text-xs text-gray-500 mt-1 whitespace-pre-wrap leading-relaxed">
+                           {formatAddress(subscriptionData?.billingAddress)}
+                         </p>
+                       </div>
+                     ) : (
+                       // Widok Osoby (Prywatna)
+                       <div className="text-sm text-gray-900">
+                         <p className="font-semibold">{subscriptionData?.billingName || '---'}</p>
+                         <p className="text-xs text-gray-500 mt-2 whitespace-pre-wrap leading-relaxed">
+                           {formatAddress(subscriptionData?.billingAddress)}
+                         </p>
+                       </div>
+                     )}
                   </div>
-                  {/* Task 4: Billing History */}
-                  <button
-                    onClick={() => console.log('Redirect to Stripe Billing History')}
-                    className="w-full text-left inline-flex items-center px-3 py-2 bg-gray-100 text-gray-700 text-xs font-medium rounded-lg hover:bg-gray-200 transition-colors cursor-pointer"
-                  >
-                    {t.billingHistory}
-                  </button>
-                  {/* Task 3: Cancel Subscription */}
-                  <button
-                    onClick={handleCancelClick}
-                    className="w-full text-left inline-flex items-center px-3 py-2 bg-red-50 text-red-700 text-xs font-medium rounded-lg hover:bg-red-100 transition-colors cursor-pointer"
-                  >
-                    {t.cancelSubscription}
-                  </button>
+                </div>
+
+                {/* Zarządzanie Płatnościami */}
+                <div>
+                  <p className="text-xs font-medium text-gray-700 mb-2">{t.managePaymentMethods}</p>
+                  <div className="space-y-3">
+                    <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                      <p className="text-xs font-medium text-gray-700 mb-1">{t.currentPaymentMethod}</p>
+                      {subscriptionData?.cardLast4 ? (
+                        <div className="flex items-center space-x-2 mt-1">
+                          <CreditCard className="w-4 h-4 text-gray-600" />
+                          <span className="text-sm text-gray-900 capitalize font-medium">
+                            {subscriptionData.cardBrand} •••• {subscriptionData.cardLast4}
+                          </span>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-gray-500 truncate">{t.paymentMethodPlaceholder}</p>
+                      )}
+                    </div>
+
+                    <button
+                      onClick={() => console.log('Redirect to Stripe Billing History')}
+                      className="w-full text-left inline-flex items-center px-3 py-2 bg-gray-100 text-gray-700 text-xs font-medium rounded-lg hover:bg-gray-200 transition-colors cursor-pointer"
+                    >
+                      {t.billingHistory}
+                    </button>
+
+                    <button
+                      onClick={handleCancelClick}
+                      className="w-full text-left inline-flex items-center px-3 py-2 bg-red-50 text-red-700 text-xs font-medium rounded-lg hover:bg-red-100 transition-colors cursor-pointer"
+                    >
+                      {t.cancelSubscription}
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
@@ -652,17 +880,42 @@ function SubscriptionCard({
         {/* Action Button */}
         <div className="pt-2">
           {subscriptionData?.role === 'free' ? (
-            <Link
-              href="/pricing" // Link do weryfikacji/cen
-              className="w-full inline-flex justify-center items-center px-4 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              {t.verifyPayment}
-            </Link>
+            <>
+              <button
+                onClick={async () => {
+                  try {
+                    const response = await fetch('/api/stripe/create-trial-checkout-session', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ locale: lang }),
+                    });
+                    const data = await response.json();
+                    if (!response.ok) {
+                      console.error('Error:', data.error);
+                      alert('Błąd: ' + (data.error || 'Nie udało się utworzyć sesji'));
+                      return;
+                    }
+                    window.location.href = data.url;
+                  } catch (error) {
+                    console.error('Error:', error);
+                    alert('Wystąpił błąd podczas tworzenia sesji płatności');
+                  }
+                }}
+                className="w-full inline-flex justify-center items-center px-4 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors cursor-pointer"
+              >
+                {t.verifyPayment}
+              </button>
+
+              <div className="mt-4 p-4 bg-emerald-50 border border-emerald-200 rounded-lg flex items-start gap-3">
+                <ShieldCheck className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
+                <p className="text-xs text-emerald-800 leading-relaxed text-justify">
+                  {t.verifyIdentityInfo}
+                </p>
+              </div>
+            </>
           ) : (
-            // Dla free_ver, rookie, creator, unlimited
             <button
               onClick={() => {
-                // Zawsze otwieraj modal zarządzania planem
                 (window as any).openUpgradeModal();
               }}
               className="w-full inline-flex justify-center items-center px-4 py-2.5 bg-gray-600 text-white text-sm font-medium rounded-lg hover:bg-gray-700 transition-colors cursor-pointer"
@@ -676,7 +929,7 @@ function SubscriptionCard({
     );
   }
 
-  // Tryb pełny (standalone card)
+  // Tryb pełny (standalone card) - jeśli używany
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-6">
       <div className="flex items-center mb-6">
@@ -685,7 +938,6 @@ function SubscriptionCard({
       </div>
 
       <div className="space-y-4">
-        {/* Plan Name */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
             {t.currentPlan}
@@ -700,113 +952,20 @@ function SubscriptionCard({
           )}
         </div>
 
-        {/* Trial Information */}
-        {subscriptionData?.isTrialing && subscriptionData?.nextBillingDate && (
-          <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-            <div className="flex items-start space-x-2">
-              <AlertCircle className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-              <div>
-                <p className="text-sm font-medium text-blue-900">
-                  {t.trialEnds}: {formatDate(subscriptionData.nextBillingDate)}
-                </p>
-                <p className="text-xs text-blue-700 mt-1">
-                  {t.nextPaymentAmount} {subscriptionData.nextBillingAmount}
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Active Subscription Information */}
-        {!subscriptionData?.isTrialing && subscriptionData?.nextBillingDate && (
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              {t.nextBilling}
-            </label>
-            <p className="text-sm text-gray-900">
-              {formatDate(subscriptionData.nextBillingDate)}
-            </p>
-            {subscriptionData?.nextBillingAmount && (
-              <p className="text-xs text-gray-500">
-                {t.billingAmount} {subscriptionData.nextBillingAmount}
-              </p>
-            )}
-          </div>
-        )}
-
-        {/* Features List (USUNIĘTE) */}
-        {/* {subscriptionData?.features && subscriptionData.features.length > 0 && (...)} */}
-
-        {/* Payment Management (Tasks 3, 4, 5) */}
-        {subscriptionData?.role !== 'free' && (
-          <div className="pt-4 border-t border-gray-100">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              {t.managePaymentMethods}
-            </label>
-            <div className="space-y-3">
-              {/* Task 5: Payment Method */}
-              <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
-                <p className="text-xs font-medium text-gray-700">{t.currentPaymentMethod}</p>
-                {/* TODO: Ta dana (np. "Visa **** 4242") musi przyjść z API */}
-                <p className="text-sm text-gray-500 mt-1">{t.paymentMethodPlaceholder}</p>
-              </div>
-              {/* Task 4: Billing History */}
-              <button
-                onClick={() => console.log('Redirect to Stripe Billing History')}
-                className="w-full text-left inline-flex items-center px-4 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200 transition-colors cursor-pointer"
-              >
-                {t.billingHistory}
-              </button>
-              {/* Task 3: Cancel Subscription */}
-              <button
-                onClick={handleCancelClick} // Ta sama funkcja
-                className="w-full text-left inline-flex items-center px-4 py-2 bg-red-50 text-red-700 text-sm font-medium rounded-lg hover:bg-red-100 transition-colors cursor-pointer"
-              >
-                {t.cancelSubscription}
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Limitation Warning */}
-        {subscriptionData?.limitation && (
-          <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
-            <div className="flex items-start space-x-2">
-              <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
-              <p className="text-sm text-amber-900">
-                {t.limitationPublish}
-              </p>
-            </div>
-          </div>
-        )}
-
         {/* Action Buttons */}
         <div className="pt-4 border-t border-gray-200">
-          {subscriptionData?.role === 'free' ? (
-            <Link
-              href="/pricing" // Link do weryfikacji/cen
-              className="w-full inline-flex justify-center items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              {t.verifyPayment}
-            </Link>
-          ) : (
-            // Dla free_ver, rookie, creator, unlimited
-            <button
-              onClick={() => {
-                // Zawsze otwieraj modal zarządzania planem
-                (window as any).openUpgradeModal();
-              }}
-              className="w-full inline-flex justify-center items-center px-4 py-2 bg-gray-600 text-white text-sm font-medium rounded-lg hover:bg-gray-700 transition-colors cursor-pointer"
-            >
-              <CreditCard className="w-4 h-4 mr-2" />
-              {t.managePlan}
-            </button>
-          )}
+          <button
+            onClick={() => { (window as any).openUpgradeModal(); }}
+            className="w-full inline-flex justify-center items-center px-4 py-2 bg-gray-600 text-white text-sm font-medium rounded-lg hover:bg-gray-700 transition-colors cursor-pointer"
+          >
+            <CreditCard className="w-4 h-4 mr-2" />
+            {t.managePlan}
+          </button>
         </div>
       </div>
     </div>
-  ); // <-- ZAMKNIĘCIE `return ()`
-} // <-- ZAMKNIĘCIE `function SubscriptionCard()`
+  );
+}
 
   // --- Komponent Upgrade Modal ---
 interface UpgradeModalProps {
@@ -1106,8 +1265,56 @@ export default function SettingsContent() {
   });
 
   const [message, setMessage] = useState<{type: 'success' | 'error', text: string} | null>(null);
-  const [isDiskExplorerOpen, setIsDiskExplorerOpen] = useState(false); // <--- Przeniesione z dołu
+  const [isDiskExplorerOpen, setIsDiskExplorerOpen] = useState(false);
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
+
+  // --- Fix 1: Obsługa powrotu ze Stripe ---
+  useEffect(() => {
+    // Sprawdź czy w URL jest parametr success=true
+    if (window.location.search.includes('success=true')) {
+      // Wyczyść URL, żeby nie odświeżało się w kółko
+      const newUrl = window.location.pathname;
+      window.history.replaceState({}, '', newUrl);
+
+      // Wymuś pełne przeładowanie strony, aby pobrać świeże dane z backendu (w tym billingPreference)
+      window.location.reload();
+    }
+  }, []);
+
+  // --- Logika Blocking Modal (Wymuszenie wyboru) ---
+  const showBillingChoiceModal = useMemo(() => {
+    if (!subscriptionData) return false;
+
+    // 1. Rola płatna (nie free, nie demo)
+    const isPaidRole = subscriptionData.role !== 'free' && subscriptionData.role !== 'demo';
+    // 2. Mamy dane firmy (jest wybór)
+    const hasCompanyData = !!subscriptionData.companyName;
+    // 3. Nie dokonano jeszcze wyboru (brak wpisu w bazie)
+    const isNotLocked = !subscriptionData.billingPreference;
+
+    return isPaidRole && hasCompanyData && isNotLocked;
+  }, [subscriptionData]);
+
+  // Funkcja zapisu z Modala
+  const handleBillingChoiceSave = async (preference: 'company' | 'personal') => {
+    try {
+      const response = await fetch('/api/user/billing-preference', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ billingPreference: preference }),
+      });
+
+      if (response.ok) {
+        // Odśwież stronę, aby pobrać zablokowane dane
+        window.location.reload();
+      } else {
+        alert(t.serverError);
+      }
+    } catch (error) {
+      console.error("Error saving billing preference:", error);
+      alert(t.serverError);
+    }
+  };
 
   // --- Przeniesione komponenty i funkcje pomocnicze (aby miały dostęp do `t`) ---
 
@@ -2537,6 +2744,14 @@ export default function SettingsContent() {
         t={t}
         currentLang={currentLang}
         currentPlanRole={subscriptionData?.role || ''}
+      />
+
+      {/* Modal Wymuszenia Wyboru Właściciela (Blocking) */}
+      <BillingChoiceModal
+        isOpen={showBillingChoiceModal}
+        subscriptionData={subscriptionData}
+        onSave={handleBillingChoiceSave}
+        t={t}
       />
 
       {/* Toast Messages */}
