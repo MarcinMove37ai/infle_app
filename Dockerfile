@@ -49,6 +49,9 @@ ENV ENCRYPTION_KEY=$ENCRYPTION_KEY
 
 # Wyłączenie telemetrii i budowanie aplikacji
 ENV NEXT_TELEMETRY_DISABLED=1
+#ENV DATABASE_URL=$DATABASE_URL
+#ENV STRIPE_SECRET_KEY=$STRIPE_SECRET_KEY
+#ENV NEXTAUTH_URL="http://localhost:3000"
 RUN npm run build
 
 # Etap 2: Uruchomienie produkcyjne (runner)

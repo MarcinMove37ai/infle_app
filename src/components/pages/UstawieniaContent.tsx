@@ -1220,8 +1220,8 @@ export default function SettingsContent() {
 
   }, [subscriptionData]); // Zależność od aktualnych danych subskrypcji
 
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
-  const defaultAppLogoUrl = `${baseUrl}/api/assets/uploads/logo_inflee.webp`;
+  // ✅ DOBRZE: Ścieżka względna. Przeglądarka sama użyje poprawnej domeny (https://app.inflee.app)
+  const defaultAppLogoUrl = '/api/assets/uploads/logo_inflee.webp';
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   const [settings, setSettings] = useState<UserSettings>({
