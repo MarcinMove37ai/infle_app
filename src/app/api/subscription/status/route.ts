@@ -109,7 +109,7 @@ export async function GET(req: NextRequest) {
       rookie: { name: 'planRookie', description: 'planDescriptionRookie' },
       creator: { name: 'planCreator', description: 'planDescriptionCreator' },
       unlimited: { name: 'planUnlimited', description: 'planDescriptionUnlimited' },
-      demo: { name: 'planRookie', description: 'planDescriptionRookie' }
+      demo: { name: 'planFree', description: 'planDescriptionFree' } // POPRAWIONE: Używa nazw planu Free
     };
 
     const planInfo = planMapping[user.role] || planMapping.free;
