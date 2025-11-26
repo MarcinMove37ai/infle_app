@@ -6,7 +6,7 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import {
   User, Key, Eye, EyeOff, Save, Trash2, CheckCircle, AlertCircle, Loader2,
   Palette, Type, ChevronDown, Check, Image as ImageIcon, X, AlertTriangle, FolderOpen,
-  Shield, CreditCard, ShieldCheck
+  Shield, CreditCard, ShieldCheck, Smartphone
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import Link from 'next/link';
@@ -67,6 +67,7 @@ interface SubscriptionData {
   paymentVerifiedAt?: string | null;
   stripeCustomerId?: string | null;
   stripeSubscriptionId?: string | null;
+  oneTimePrice?: string;
   // Nowe pola bilingowe
   billingName?: string | null;
   billingAddress?: any;
@@ -344,6 +345,18 @@ const translations = {
     confirmOwnerSaveMsg: 'UWAGA: Ta operacja jest nieodwracalna dla tego konta. Wybrane dane (Firma lub Osoba) zostaną na stałe przypisane do Twoich stron zapisu i Polityki Prywatności. Czy na pewno chcesz zapisać?',
     confirmSave: 'Zapisz na stałe',
 
+    // Modal Wyboru Weryfikacji (PL ONLY)
+    verifyModalTitle: 'Wybierz metodę weryfikacji',
+    verifyModalSubtitle: 'Aby opublikować stronę, musimy zweryfikować Twoją tożsamość. Wybierz metodę, która Ci odpowiada.',
+    verifyOptionCardTitle: 'Karta Płatnicza',
+    verifyOptionCardBadge: 'Okres Próbny 21 Dni',
+    verifyOptionCardDesc: 'Rozpocznij darmowy okres próbny. Żadne środki nie zostaną pobrane dzisiaj. Możesz anulować w dowolnym momencie.',
+    verifyOptionCardBtn: 'Rozpocznij Subskrypcję',
+    verifyOptionBlikTitle: 'Szybki Przelew / BLIK',
+    verifyOptionBlikBadge: 'Płatność Jednorazowa',
+    verifyOptionBlikDesc: 'Opłać dostęp na 1 miesiąc z góry. Bez podawania karty, bez automatycznego odnawiania. Brak okresu próbnego.',
+    verifyOptionBlikBtn: 'Zapłać BLIKiem (29 zł)',
+
     authorLogo: 'Logo Autora / Zdjęcie',
     processing: 'Przetwarzanie...',
     logoRestrictedTitle: 'Własne logo dostępne w płatnych planach',
@@ -511,6 +524,16 @@ const translations = {
     confirmOwnerSaveTitle: 'Confirm Landing Page Owner',
     confirmOwnerSaveMsg: 'WARNING: This action is irreversible for this account. The selected data (Company or Individual) will be permanently assigned to your landing pages and Privacy Policy. Are you sure you want to save?',
     confirmSave: 'Save permanently',
+    verifyModalTitle: 'Choose verification method',
+    verifyModalSubtitle: 'To publish the page, we must verify your identity. Choose the method that suits you.',
+    verifyOptionCardTitle: 'Payment Card',
+    verifyOptionCardBadge: '21 Day Trial',
+    verifyOptionCardDesc: 'Start a free trial. No funds will be charged today. You can cancel at any time.',
+    verifyOptionCardBtn: 'Start Subscription',
+    verifyOptionBlikTitle: 'Quick Transfer / BLIK',
+    verifyOptionBlikBadge: 'One-time Payment',
+    verifyOptionBlikDesc: 'Pay for 1 month access in advance. No card required, no automatic renewal. No trial period.',
+    verifyOptionBlikBtn: 'Pay with BLIK (29 PLN)',
     saved: 'Saved',
 
     authorLogo: 'Author Logo / Photo',
@@ -654,6 +677,112 @@ const IMAGE_PROVIDERS: Provider[] = [
   }
 ];
 
+// --- Komponent VerificationChoiceModal (Z POPRAWKĄ CENY) ---
+interface VerificationChoiceModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSelectCard: () => void;
+  onSelectBlik: () => void;
+  t: typeof translations['pl'];
+  processingType: 'card' | 'blik' | null;
+  priceBlik?: string; // <--- 1. DODANO NOWY PROP
+}
+
+function VerificationChoiceModal({
+  isOpen,
+  onClose,
+  onSelectCard,
+  onSelectBlik,
+  t,
+  processingType,
+  priceBlik // <--- 2. ODBIERAMY PROP
+}: VerificationChoiceModalProps) {
+
+  if (!isOpen) return null;
+  const isAnyProcessing = processingType !== null;
+
+  // Helper do tekstu przycisku
+  const getBlikButtonText = () => {
+    // Jeśli mamy cenę z backendu, używamy jej. Jeśli nie, fallback do tłumaczenia.
+    if (priceBlik) {
+      return `Zapłać BLIKiem (${priceBlik})`;
+    }
+    return t.verifyOptionBlikBtn; // Domyślne "Zapłać BLIKiem (29 zł)"
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 overflow-y-auto p-4 flex justify-center items-center">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm cursor-pointer" onClick={!isAnyProcessing ? onClose : undefined} />
+      <div className="relative bg-gray-900 border border-gray-700 rounded-2xl shadow-2xl p-6 sm:p-8 max-w-4xl w-full text-white overflow-hidden">
+
+        <button
+          onClick={onClose}
+          disabled={isAnyProcessing}
+          className="absolute top-4 right-4 text-gray-400 hover:text-white transition-colors disabled:opacity-50"
+        >
+          <X className="w-6 h-6" />
+        </button>
+
+        <div className="text-center mb-10">
+          <h2 className="text-3xl font-bold text-white mb-3">{t.verifyModalTitle}</h2>
+          <p className="text-gray-400 max-w-lg mx-auto">{t.verifyModalSubtitle}</p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+          {/* OPCJA 1: KARTA */}
+          <div className="relative group">
+            <div className="absolute inset-0 bg-gradient-to-b from-blue-600/20 to-purple-600/20 rounded-2xl blur-sm group-hover:blur-md transition-all duration-300 opacity-50 group-hover:opacity-100" />
+            <div className="relative h-full bg-gray-950 border border-gray-700 group-hover:border-blue-500/50 rounded-2xl p-6 flex flex-col transition-all duration-300">
+              <div className="flex justify-between items-start mb-4">
+                <div className="p-3 bg-blue-500/10 rounded-xl"><CreditCard className="w-8 h-8 text-blue-400" /></div>
+                <span className="bg-blue-500/10 text-blue-300 text-xs font-bold px-3 py-1 rounded-full border border-blue-500/20">{t.verifyOptionCardBadge}</span>
+              </div>
+              <h3 className="text-xl font-bold text-white mb-2">{t.verifyOptionCardTitle}</h3>
+              <p className="text-gray-400 text-sm mb-6 leading-relaxed flex-grow">{t.verifyOptionCardDesc}</p>
+
+              <button
+                onClick={onSelectCard}
+                disabled={isAnyProcessing}
+                className="w-full py-3 px-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-semibold rounded-xl shadow-lg shadow-blue-900/20 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                {processingType === 'card' ? <Loader2 className="animate-spin w-5 h-5"/> : t.verifyOptionCardBtn}
+              </button>
+            </div>
+          </div>
+
+          {/* OPCJA 2: BLIK */}
+          <div className="relative group">
+            <div className="absolute inset-0 bg-gradient-to-b from-orange-600/20 to-red-600/20 rounded-2xl blur-sm group-hover:blur-md transition-all duration-300 opacity-50 group-hover:opacity-100" />
+            <div className="relative h-full bg-gray-950 border border-gray-700 group-hover:border-orange-500/50 rounded-2xl p-6 flex flex-col transition-all duration-300">
+              <div className="flex justify-between items-start mb-4">
+                <div className="p-3 bg-orange-500/10 rounded-xl"><Smartphone className="w-8 h-8 text-orange-400" /></div>
+                <span className="bg-orange-500/10 text-orange-300 text-xs font-bold px-3 py-1 rounded-full border border-orange-500/20">{t.verifyOptionBlikBadge}</span>
+              </div>
+              <h3 className="text-xl font-bold text-white mb-2">{t.verifyOptionBlikTitle}</h3>
+              <p className="text-gray-400 text-sm mb-6 leading-relaxed flex-grow">{t.verifyOptionBlikDesc}</p>
+
+              <button
+                onClick={onSelectBlik}
+                disabled={isAnyProcessing}
+                className="w-full py-3 px-4 bg-gray-800 hover:bg-gray-700 border border-gray-600 text-white font-semibold rounded-xl transition-all flex items-center justify-center gap-2 group-hover:border-orange-500/50 cursor-pointer disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                {processingType === 'blik' ? (
+                  <Loader2 className="animate-spin w-5 h-5"/>
+                ) : (
+                  // 3. UŻYCIE NOWEGO TEKSTU Z CENĄ
+                  getBlikButtonText()
+                )}
+              </button>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Komponent Subscription Card
 interface SubscriptionCardProps {
   lang: 'pl' | 'en';
@@ -661,12 +790,13 @@ interface SubscriptionCardProps {
   compact?: boolean;
   subscriptionData: SubscriptionData | null;
   loading: boolean;
-  setConfirmModal: (modalData: { // <-- Nowy prop
+  setConfirmModal: (modalData: {
     isOpen: boolean;
     title: string;
     message: string;
     onConfirm: () => void;
   }) => void;
+  onOpenVerificationModal: () => void; // <--- DODANO
 }
 
 function SubscriptionCard({
@@ -675,7 +805,8 @@ function SubscriptionCard({
   compact = false,
   subscriptionData,
   loading,
-  setConfirmModal
+  setConfirmModal,
+  onOpenVerificationModal // <--- ODBIERAMY
 }: SubscriptionCardProps) {
 
   // Helper function to translate plan names and descriptions
@@ -883,6 +1014,13 @@ function SubscriptionCard({
             <>
               <button
                 onClick={async () => {
+                  // LOGIKA: Jeśli polski -> otwórz modal wyboru. Jeśli inny (en) -> idź prosto do trial.
+                  if (lang === 'pl') {
+                    onOpenVerificationModal();
+                    return;
+                  }
+
+                  // STARA LOGIKA (Dla EN)
                   try {
                     const response = await fetch('/api/stripe/create-trial-checkout-session', {
                       method: 'POST',
@@ -1268,18 +1406,44 @@ export default function SettingsContent() {
   const [isDiskExplorerOpen, setIsDiskExplorerOpen] = useState(false);
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
 
-  // --- Fix 1: Obsługa powrotu ze Stripe ---
+  // Stan dla modala weryfikacji (PL)
+  const [isVerificationModalOpen, setIsVerificationModalOpen] = useState(false);
+  // Zmiana: null oznacza brak akcji, 'card' lub 'blik' oznacza przetwarzanie konkretnej opcji
+  const [processingType, setProcessingType] = useState<'card' | 'blik' | null>(null);
+    // 1. Definiujemy funkcję pobierania danych jako useCallback
+  const fetchSubscriptionStatus = useCallback(async () => {
+    if (!user?.id) return;
+
+    try {
+      const response = await fetch('/api/subscription/status');
+      if (response.ok) {
+        const data = await response.json();
+        setSubscriptionData(data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch subscription:', error);
+    } finally {
+      setIsSubscriptionLoading(false);
+    }
+  }, [user?.id]);
+
+  // --- Fix 1: Płynna obsługa powrotu ze Stripe (bez reload) ---
   useEffect(() => {
-    // Sprawdź czy w URL jest parametr success=true
     if (window.location.search.includes('success=true')) {
-      // Wyczyść URL, żeby nie odświeżało się w kółko
+      // 1. Wyczyść URL bez przeładowania strony
       const newUrl = window.location.pathname;
       window.history.replaceState({}, '', newUrl);
 
-      // Wymuś pełne przeładowanie strony, aby pobrać świeże dane z backendu (w tym billingPreference)
-      window.location.reload();
+      // 2. Pokaż loader (ukrywa formularz, eliminuje mignięcie starego stanu)
+      setIsSubscriptionLoading(true);
+
+      // 3. Pobierz świeże dane "po cichu"
+      fetchSubscriptionStatus().then(() => {
+         // Opcjonalnie: Pokaż sukces (jeśli masz system powiadomień)
+         console.log('Dane odświeżone po płatności');
+      });
     }
-  }, []);
+  }, [fetchSubscriptionStatus]);
 
   // --- Logika Blocking Modal (Wymuszenie wyboru) ---
   const showBillingChoiceModal = useMemo(() => {
@@ -1313,6 +1477,62 @@ export default function SettingsContent() {
     } catch (error) {
       console.error("Error saving billing preference:", error);
       alert(t.serverError);
+    }
+  };
+
+  // --- Obsługa Płatności z Modala Weryfikacji (PL) ---
+  const handleCardVerification = async () => {
+    setProcessingType('card'); // Ustawiamy, że to Karta się kręci
+    try {
+      const response = await fetch('/api/stripe/create-trial-checkout-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ locale: currentLang }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        alert('Błąd: ' + (data.error || 'Nie udało się utworzyć sesji'));
+        setProcessingType(null); // Reset w razie błędu
+        return;
+      }
+      window.location.href = data.url;
+    } catch (error) {
+      console.error('Error:', error);
+      alert('Wystąpił błąd');
+      setProcessingType(null); // Reset w razie błędu
+    }
+  };
+
+  const handleBlikVerification = async () => {
+    setProcessingType('blik'); // Ustawiamy spinner na przycisku BLIK
+    try {
+      // Wywołujemy nowy endpoint do płatności jednorazowej
+      const response = await fetch('/api/stripe/create-one-time-checkout-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          locale: currentLang,
+          paymentMethod: 'blik' // Opcjonalnie, dla pewności
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Nie udało się utworzyć sesji płatności');
+      }
+
+      // Przekierowanie do Stripe Checkout
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        throw new Error('Brak adresu URL przekierowania');
+      }
+
+    } catch (error) {
+      console.error('Błąd płatności BLIK:', error);
+      alert('Wystąpił błąd podczas inicjowania płatności. Spróbuj ponownie.');
+      setProcessingType(null); // Resetujemy spinner tylko w przypadku błędu (sukces przeładowuje stronę)
     }
   };
 
@@ -1661,26 +1881,10 @@ export default function SettingsContent() {
     };
   }, [user?.id, t, defaultAppLogoUrl]);
 
-  // useEffect do ładowania danych subskrypcji (przeniesiony z SubscriptionCard)
+  // 2. Wywołujemy ją przy starcie
   useEffect(() => {
-    if (user?.id) {
-      async function fetchSubscriptionStatus() {
-        try {
-          const response = await fetch('/api/subscription/status');
-          if (response.ok) {
-            const data = await response.json();
-            setSubscriptionData(data);
-          }
-        } catch (error) {
-          console.error('Failed to fetch subscription:', error);
-        } finally {
-          setIsSubscriptionLoading(false);
-        }
-      }
-
-      fetchSubscriptionStatus();
-    }
-  }, [user?.id]); // Uruchom, gdy user.id jest dostępne
+    fetchSubscriptionStatus();
+  }, [fetchSubscriptionStatus]);
 
   useEffect(() => {
     if (user?.id) {
@@ -2270,6 +2474,17 @@ export default function SettingsContent() {
     }
   }, [canCustomizeLogo]);
 
+  // Blokada renderowania: Dopóki ładujemy dane subskrypcji (start lub powrót ze Stripe),
+  // pokazujemy tylko spinner. Dzięki temu Modal Właściciela pojawi się na czystym tle.
+  if (isSubscriptionLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-4">
+        <Loader2 className="w-12 h-12 animate-spin text-blue-600" />
+        <p className="text-gray-500 font-medium">{t.processing || 'Ładowanie...'}</p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8">
       {/* Author Profile */}
@@ -2452,6 +2667,7 @@ export default function SettingsContent() {
                 subscriptionData={subscriptionData}
                 loading={isSubscriptionLoading}
                 setConfirmModal={setConfirmModal}
+                onOpenVerificationModal={() => setIsVerificationModalOpen(true)}
               />
             </div>
           </div>
@@ -2752,6 +2968,17 @@ export default function SettingsContent() {
         subscriptionData={subscriptionData}
         onSave={handleBillingChoiceSave}
         t={t}
+      />
+
+      {/* NOWY Modal Wyboru Weryfikacji (tylko PL) */}
+      <VerificationChoiceModal
+        isOpen={isVerificationModalOpen}
+        onClose={() => setIsVerificationModalOpen(false)}
+        onSelectCard={handleCardVerification}
+        onSelectBlik={handleBlikVerification}
+        t={t}
+        processingType={processingType}
+        priceBlik={subscriptionData?.oneTimePrice}
       />
 
       {/* Toast Messages */}
