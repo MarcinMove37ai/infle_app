@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import Link from 'next/link';
+import UpgradeModal from '@/components/ui/UpgradeModal';
 
 interface Model {
   id: string;
@@ -960,39 +961,6 @@ function SubscriptionCard({
                   </div>
                 </div>
 
-                {/* Zarządzanie Płatnościami */}
-                <div>
-                  <p className="text-xs font-medium text-gray-700 mb-2">{t.managePaymentMethods}</p>
-                  <div className="space-y-3">
-                    <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
-                      <p className="text-xs font-medium text-gray-700 mb-1">{t.currentPaymentMethod}</p>
-                      {subscriptionData?.cardLast4 ? (
-                        <div className="flex items-center space-x-2 mt-1">
-                          <CreditCard className="w-4 h-4 text-gray-600" />
-                          <span className="text-sm text-gray-900 capitalize font-medium">
-                            {subscriptionData.cardBrand} •••• {subscriptionData.cardLast4}
-                          </span>
-                        </div>
-                      ) : (
-                        <p className="text-sm text-gray-500 truncate">{t.paymentMethodPlaceholder}</p>
-                      )}
-                    </div>
-
-                    <button
-                      onClick={() => console.log('Redirect to Stripe Billing History')}
-                      className="w-full text-left inline-flex items-center px-3 py-2 bg-gray-100 text-gray-700 text-xs font-medium rounded-lg hover:bg-gray-200 transition-colors cursor-pointer"
-                    >
-                      {t.billingHistory}
-                    </button>
-
-                    <button
-                      onClick={handleCancelClick}
-                      className="w-full text-left inline-flex items-center px-3 py-2 bg-red-50 text-red-700 text-xs font-medium rounded-lg hover:bg-red-100 transition-colors cursor-pointer"
-                    >
-                      {t.cancelSubscription}
-                    </button>
-                  </div>
-                </div>
               </div>
             )}
 
@@ -1100,201 +1068,6 @@ function SubscriptionCard({
             {t.managePlan}
           </button>
         </div>
-      </div>
-    </div>
-  );
-}
-
-  // --- Komponent Upgrade Modal ---
-interface UpgradeModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  t: typeof translations['pl'];
-  currentLang: 'pl' | 'en';
-  currentPlanRole: string; // np. 'rookie', 'creator'
-}
-
-function UpgradeModal({ isOpen, onClose, t, currentLang, currentPlanRole }: UpgradeModalProps) {
-  // Definicja planów dla modala (inspirowane landing page)
-  const modalPlans = [
-    {
-      roleName: 'rookie',
-      planKey: 'planRookie',
-      descriptionKey: 'planDescriptionRookie',
-      price: '29 zł', // Cena miesięczna (jak 'card' na landingu)
-      currencyKey: 'pricing.currencyPerMonth', // Klucz z landing page, musimy go dodać
-      featuresKeys: ['featureRookie1', 'featureRookie2', 'featureRookie3'],
-      planPath: '/free' // Ścieżka rejestracji z landing page
-    },
-    {
-      roleName: 'creator',
-      planKey: 'planCreator',
-      descriptionKey: 'planDescriptionCreator',
-      price: '87 zł', // Cena miesięczna
-      currencyKey: 'pricing.currencyPerMonth',
-      featuresKeys: ['featureCreator1', 'featureCreator2', 'featureCreator3'],
-      planPath: '/crea', // Ścieżka rejestracji
-      highlighted: true
-    },
-    {
-      roleName: 'unlimited',
-      planKey: 'planUnlimited',
-      descriptionKey: 'planDescriptionUnlimited',
-      price: '299 zł', // Cena miesięczna
-      currencyKey: 'pricing.currencyPerMonth',
-      featuresKeys: ['featureUnlimited1', 'featureUnlimited2', 'featureUnlimited3'],
-      planPath: '/inf' // Ścieżka rejestracji
-    }
-  ];
-
-  // Tłumaczenie zastępcze, gdyby klucza brakowało
-  const translate = (key: string, fallback: string = '') => (t as any)[key] || fallback || key;
-
-  // Dodajemy brakujące tłumaczenie waluty (z landing page)
-  if (!(t as any)['pricing.currencyPerMonth']) {
-    (t as any)['pricing.currencyPerMonth'] = currentLang === 'pl' ? '/ mies.' : '/ mo.';
-  }
-
-  const getButton = (plan: typeof modalPlans[0], isCurrent: boolean) => {
-    const planName = translate(plan.planKey);
-    const targetUrl = `https://app.inflee.app/register${plan.planPath}?lang=${currentLang}`;
-
-    // --- ZUNIFIKOWANA LOGIKA (ZADANIE 1 i 3) ---
-    // 1. Jeśli to jest aktualny plan, ZAWSZE pokaż zablokowany przycisk
-    if (isCurrent) {
-      // Wspólna klasa dla wszystkich zablokowanych przycisków
-      // Definiujemy styl na podstawie tego, czy był podświetlony, czy nie
-      const disabledClass = `w-full py-3 px-4 rounded-lg font-semibold text-sm transition-all opacity-50 cursor-not-allowed text-center ${
-        plan.highlighted
-          ? 'bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white'
-          // Sprawdzamy specjalny styl dla zablokowanego Unlimited
-          : (plan.roleName === 'unlimited' ? 'bg-gray-600 text-white' : 'bg-white/10 border border-white/10 text-white')
-      }`;
-
-      return (
-        <button disabled className={disabledClass}>
-          {t.currentPlanBadge}
-        </button>
-      );
-    }
-
-    // --- ZUNIFIKOWANA LOGIKA (ZADANIE 2) ---
-    // 2. Jeśli to NIE jest aktualny plan, pokaż klikalny link <a> stylizowany na przycisk
-
-    let buttonClass = '';
-
-    if (plan.roleName === 'unlimited') {
-      // Przycisk "Unlimited" (Z wyśrodkowaniem `inline-flex justify-center`)
-      buttonClass = `w-full inline-flex justify-center items-center py-3 px-4 rounded-lg font-semibold text-sm transition-all shadow-md bg-gray-600 text-white hover:bg-gray-700 cursor-pointer`;
-    } else {
-      // Przycisk "Rookie" lub "Creator"
-      buttonClass = `w-full inline-flex justify-center items-center py-3 px-4 rounded-lg font-semibold text-sm transition-all shadow-md cursor-pointer ${
-        plan.highlighted
-          ? 'bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white shadow-[0_10px_20px_rgba(139,92,246,0.20)] hover:shadow-[0_15px_25px_rgba(139,92,246,0.30)] hover:-translate-y-0.5'
-          : 'bg-white/10 border border-white/10 hover:bg-white/20 text-white'
-      }`;
-    }
-
-    return (
-      <a
-        href={targetUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        className={buttonClass}
-      >
-        {t.upgradeTo.replace('{planName}', planName)}
-      </a>
-    );
-  };
-
-  if (!isOpen) return null;
-
-  return (
-    <div className="fixed inset-0 z-50 overflow-y-auto p-4 flex justify-center items-start">
-      {/* Tło */}
-      <div
-        className="absolute inset-0 bg-black/50 backdrop-blur-sm cursor-pointer"
-        onClick={onClose}
-      />
-
-      {/* Kontener Modala (ZMIANA Task 5) */}
-      <div className="relative bg-gray-900 bg-opacity-80 backdrop-blur-md border border-gray-700 rounded-xl shadow-2xl p-6 sm:p-8 max-w-6xl w-full my-8 text-white">
-
-        {/* Przycisk zamknięcia */}
-        <button
-          onClick={onClose}
-          className="absolute top-4 right-4 text-gray-400 hover:text-white transition-colors"
-        >
-          <X className="w-6 h-6" />
-        </button>
-
-        {/* Nagłówek (ZMIANA Task 5) */}
-        <div className="text-center max-w-2xl mx-auto mb-6 sm:mb-10">
-          <h2 className="text-3xl md:text-4xl font-bold text-white">
-            {t.upgradeModalTitle}
-          </h2>
-          <p className="mt-3 text-lg text-gray-400">
-            {t.upgradeModalSubtitle}
-          </p>
-        </div>
-
-        {/* Karty Planów */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {modalPlans.map((plan) => {
-            const isCurrent = plan.roleName === currentPlanRole || (plan.roleName === 'rookie' && currentPlanRole === 'free_ver');
-            return (
-              <div
-                key={plan.roleName}
-                className={`relative rounded-2xl p-0.5 ${
-                  plan.highlighted ? 'bg-gradient-to-b from-purple-500 to-indigo-500' : ''
-                }`}
-              >
-                <div className={`relative bg-gray-950 backdrop-blur-sm rounded-[15px] h-full flex flex-col p-6 ${
-                  !plan.highlighted ? 'border-2 border-purple-500/20' : ''
-                }`}>
-
-                  {isCurrent && (
-                    <div className="absolute -top-4 left-1/2 -translate-x-1/2">
-                      <span className="bg-gradient-to-r from-blue-600 to-cyan-500 text-white text-xs font-bold px-4 py-1 rounded-full shadow-lg">
-                        {t.currentPlanBadge}
-                      </span>
-                    </div>
-                  )}
-
-                  <div className="flex flex-col h-full">
-                    <h3 className="text-2xl font-bold text-white mb-2">{translate(plan.planKey)}</h3>
-                    {/* ZMIANA (Task 5): Poprawka wysokości opisu */}
-                    <p className="text-sm text-gray-400 mb-6 min-h-[40px]">{translate(plan.descriptionKey)}</p>
-
-                    <div className="mb-6 flex flex-col items-center justify-center">
-                      <div className="border border-purple-500/30 rounded-xl px-6 py-3">
-                        <div className="text-4xl font-bold text-white flex items-baseline">
-                          <span>{plan.price}</span>
-                          <span className="text-xl font-medium text-gray-400 ml-2">{translate(plan.currencyKey)}</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="mb-8 mt-auto">
-                      {getButton(plan, isCurrent)}
-                    </div>
-
-                    <div className="flex-grow">
-                      <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">{t.features}:</div>
-                      {plan.featuresKeys.map((featureKey, index) => (
-                        <div key={index} className="flex items-start mb-3">
-                          <Check className="w-5 h-5 text-indigo-400 mr-3 flex-shrink-0 mt-0.5" />
-                          <span className="text-sm text-gray-300 leading-relaxed">{translate(featureKey)}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
       </div>
     </div>
   );
@@ -2468,6 +2241,8 @@ export default function SettingsContent() {
     setConfirmModal({ isOpen: false, title: '', message: '', onConfirm: () => {} });
   }, []);
 
+
+
   const triggerFileInput = useCallback(() => {
     if (canCustomizeLogo) {
       fileInputRef.current?.click();
@@ -2960,6 +2735,8 @@ export default function SettingsContent() {
         t={t}
         currentLang={currentLang}
         currentPlanRole={subscriptionData?.role || ''}
+        subscriptionData={subscriptionData}
+        onManageBilling={() => console.log('Redirect to Stripe Billing History')}
       />
 
       {/* Modal Wymuszenia Wyboru Właściciela (Blocking) */}
