@@ -63,6 +63,9 @@ export async function POST(req: NextRequest) {
 
 async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   const userId = session.metadata?.userId;
+  // Pobieramy nazwę planu z metadanych (np. 'rookie', 'creator', 'unlimited')
+  const planName = session.metadata?.planName;
+
   if (!userId) {
     console.error('No userId in session metadata');
     return;
@@ -81,7 +84,14 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   // --- LOGIKA TRYBU ---
   let stripeSubscriptionId: string | null = null;
   let subscriptionStatus = 'active';
+
+  // Domyślna rola to 'rookie', chyba że w metadanych jest inna poprawna rola
   let role = 'rookie';
+  const validRoles = ['rookie', 'creator', 'unlimited'];
+  if (planName && validRoles.includes(planName)) {
+      role = planName;
+  }
+
   let nextBillingDate: Date;
   let paymentMethodId: string | null = null;
 
@@ -89,16 +99,27 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     const subscription = await stripe.subscriptions.retrieve(session.subscription as string) as any;
     stripeSubscriptionId = subscription.id;
     subscriptionStatus = subscription.status;
-    role = subscription.status === 'trialing' ? 'free_ver' : 'rookie';
+
+    // Jeśli status to 'trialing', nadpisujemy rolę na 'free_ver' (Trial),
+    // CHYBA ŻE to plan wyższy niż Rookie (Creator/Unlimited nie mają triala w naszej logice, ale na wszelki wypadek)
+    // W Twoim przypadku Creator/Unlimited idą bez triala, więc status będzie 'active'.
+    if (subscription.status === 'trialing') {
+        role = 'free_ver';
+    }
+
     paymentMethodId = subscription.default_payment_method as string;
     const timestamp = subscription.current_period_end || subscription.trial_end;
     nextBillingDate = timestamp ? new Date(timestamp * 1000) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+
   } else if (session.mode === 'payment') {
+    // Płatność jednorazowa (One-Time)
     stripeSubscriptionId = null;
     subscriptionStatus = 'one_time_paid';
-    role = 'rookie';
+
+    // Rola zostaje taka, jak ustaliliśmy na podstawie planName (np. 'creator')
+
     const now = new Date();
-    nextBillingDate = new Date(now.setMonth(now.getMonth() + 1));
+    nextBillingDate = new Date(now.setMonth(now.getMonth() + 1)); // Dostęp na 1 miesiąc
     paymentMethodId = null;
 
     // Dla płatności jednorazowych musimy pobrać PaymentIntent, aby dostać ID metody płatności
@@ -114,11 +135,9 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     return;
   }
 
-  // --- LOGIKA DANYCH BILLINGOWYCH (POPRAWIONA) ---
+  // --- LOGIKA DANYCH BILLINGOWYCH (ZACHOWANA) ---
 
   // 1. Pobieramy dane bezpośrednio z obiektu PaymentMethod
-  // To kluczowe, bo tutaj znajduje się imię właściciela karty ("Marcin Kowalski"),
-  // które NIE jest nadpisywane przez Stripe nazwą firmy.
   let cardholderName: string | null = null;
   let cardLast4 = null;
   let cardBrand = null;
@@ -135,7 +154,6 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   }
 
   // 2. Ustalamy Billing Name (Imie i Nazwisko)
-  // Priorytet: Imię z karty > Imię z sesji (może być nazwą firmy, jeśli brak karty) > Placeholder
   const billingName = cardholderName || session.customer_details?.name || 'N/A';
 
   // 3. Dane Firmy (NIP i Nazwa)
@@ -143,14 +161,12 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   let taxIdType: string | null = null;
   let companyName: string | null = null;
 
-  // Sprawdzamy czy NIP został podany w sesji (najnowsze dane z formularza)
   const sessionTaxIds = session.customer_details?.tax_ids;
 
   if (sessionTaxIds && sessionTaxIds.length > 0) {
       taxId = sessionTaxIds[0].value || null;
       taxIdType = sessionTaxIds[0].type || null;
   } else {
-      // Fallback: sprawdź stare tax IDs w obiekcie Customer
       try {
         const taxIdsList = await stripe.customers.listTaxIds(session.customer as string);
         if (taxIdsList.data.length > 0) {
@@ -162,13 +178,10 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
       }
   }
 
-  // KLUCZOWY WARUNEK: Uzupełniamy nazwę firmy TYLKO jeśli istnieje NIP.
-  // Jeśli jest NIP, Stripe przechowuje prawną nazwę w session.customer_details.name
   if (taxId) {
       companyName = session.customer_details?.name || null;
   }
 
-  // Adres bierzemy z sesji (to co wpisał klient)
   const billingAddress = session.customer_details?.address;
 
   await prisma.user.update({
@@ -177,13 +190,12 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
       stripeCustomerId: session.customer as string,
       stripeSubscriptionId: stripeSubscriptionId,
       subscriptionStatus: subscriptionStatus,
-      role: role as Role,
+      role: role as Role, // <-- TUTAJ WPADA 'creator', 'unlimited' LUB 'rookie'
       paymentVerifiedAt: new Date(),
       nextBillingDate: nextBillingDate,
 
-      // Czysty zapis - zmienne są teraz ściśle rozdzielone
       billingName: billingName,
-      companyName: companyName, // Będzie null, jeśli nie ma NIP
+      companyName: companyName,
       billingAddress: billingAddress as any,
       taxId: taxId,
       taxIdType: taxIdType,
@@ -192,10 +204,14 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     },
   });
 
-  console.log(`✅ [${session.mode}] User updated. Billing: "${billingName}", Company: "${companyName}", TaxID: ${taxId ? 'YES' : 'NO'}`);
+  console.log(`✅ [${session.mode}] User updated to role: ${role}. Billing: "${billingName}", Company: "${companyName}"`);
 }
 
 async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
+  // UWAGA: Przy update subskrypcji (np. zmiana planu w Stripe Portal)
+  // warto byłoby też zaktualizować rolę, ale to wymagałoby mapowania Product ID -> Role.
+  // Na razie aktualizujemy tylko status i datę.
+
   await prisma.user.updateMany({
     where: { stripeSubscriptionId: subscription.id },
     data: {
@@ -220,11 +236,17 @@ async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
 async function handleInvoicePaymentSucceeded(invoice: Stripe.Invoice) {
   if (!(invoice as any).subscription) return;
   const subscription = await stripe.subscriptions.retrieve((invoice as any).subscription as string) as any;
+
+  // Tutaj również: Jeśli chcesz obsługiwać zmianę planu przez fakturę,
+  // musiałbyś pobrać Product ID z subskrypcji i zmapować na rolę.
+  // Obecnie zostawiamy rolę bez zmian (lub ustawiamy 'active'),
+  // zakładając że rola została ustawiona przy Checkout.
+
   await prisma.user.updateMany({
     where: { stripeSubscriptionId: subscription.id },
     data: {
       subscriptionStatus: 'active',
-      role: 'rookie',
+      // role: 'rookie', // <-- USUNIĘTO sztywne ustawianie roli, aby nie nadpisać Creatora
       nextBillingDate: new Date(subscription.current_period_end * 1000),
     },
   });
