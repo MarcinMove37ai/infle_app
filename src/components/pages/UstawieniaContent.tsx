@@ -308,7 +308,7 @@ const translations = {
     planPremium: 'Premium',
     planActive: 'Aktywna',
     planInactive: 'Nieaktywna',
-    renewsAt: 'Odnowienie:',
+    renewsAt: 'Plan aktywny do:',
     manageSubscription: 'Zarządzaj subskrypcją',
     managePlan: 'Zarządzaj planem',
     verifyPayment: 'Zweryfikuj tożsamości ze Stripe',
@@ -360,7 +360,7 @@ const translations = {
 
     authorLogo: 'Logo Autora / Zdjęcie',
     processing: 'Przetwarzanie...',
-    logoRestrictedTitle: 'Własne logo dostępne w płatnych planach',
+    logoRestrictedTitle: 'Własne logo dostępne w planach Creator i Unlimited',
     logoRestrictedBtn: 'Zaktualizuj swój Plan Inflee.app',
     uploading: 'Wgrywanie...',
     processingAvatar: 'Przetwarzanie awatara',
@@ -807,8 +807,9 @@ function SubscriptionCard({
   subscriptionData,
   loading,
   setConfirmModal,
-  onOpenVerificationModal // <--- ODBIERAMY
+  onOpenVerificationModal
 }: SubscriptionCardProps) {
+  const [isRedirectingToStripe, setIsRedirectingToStripe] = React.useState(false);
 
   // Helper function to translate plan names and descriptions
   const translatePlan = (key: string) => {
@@ -852,6 +853,16 @@ function SubscriptionCard({
     });
   };
 
+  const formatDate = (dateString: string | null | undefined) => {
+    if (!dateString) return 'N/A';
+    return new Date(dateString).toLocaleDateString(lang === 'pl' ? 'pl-PL' : 'en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+  };
+
+  // 1. WIDOK ŁADOWANIA
   if (loading) {
     return (
       <div className={compact ? "" : "bg-white rounded-xl border border-gray-200 p-6"}>
@@ -862,133 +873,189 @@ function SubscriptionCard({
     );
   }
 
-  const formatDate = (dateString: string | null | undefined) => {
-    if (!dateString) return 'N/A';
-    return new Date(dateString).toLocaleDateString(lang === 'pl' ? 'pl-PL' : 'en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    });
-  };
-
+  // 2. WIDOK KOMPAKTOWY (Starter, Demo, Paid, Trial)
   if (compact) {
+    const isFree = subscriptionData?.role === 'free';
+    const isTrialVer = subscriptionData?.role === 'free_ver';
+    const isDemo = subscriptionData?.role === 'demo';
+
+    // 1. ZMIANA NAZWY: Dla free wymuszamy nazwę "Starter"
+    let planName = translatePlan(subscriptionData?.plan || 'planFree');
+    if (isFree) {
+        planName = "Starter";
+    }
+
+    // 2. OPIS PLANU: Ukrywamy go dla DEMO oraz TRIAL
+    let planDescription = translatePlan(subscriptionData?.planDescription || 'planDescriptionFree');
+    if (isDemo || isTrialVer) {
+        planDescription = null;
+    }
+
+    const renewsDate = formatDate(subscriptionData?.nextBillingDate);
+    const nextAmount = subscriptionData?.nextBillingAmount || '---';
+    const valueLabel = lang === 'pl' ? 'Wartość:' : 'Value:';
+
+    // Tekst statusu obok nazwy (Tylko dla Triala - Twoje customowe tłumaczenie)
+    let statusText = '';
+    if (isTrialVer) {
+      statusText = lang === 'pl' ? '(Bezpłatny Okres Próbny)' : '(Free Trial Period)';
+    }
+
+    // Sprawdzamy, czy potrzebujemy prawej kolumny (tylko dla Starter i Demo)
+    const hasRightColumn = isFree || isDemo;
+
+    // --- NOWE: Logika rodzaju płatności (Badge) ---
+    let paymentTypeLabel = null;
+    let paymentTypeClass = '';
+
+    if (subscriptionData?.subscriptionStatus === 'one_time_paid') {
+        paymentTypeLabel = lang === 'pl' ? 'Płatność jednorazowa' : 'One-time payment';
+        paymentTypeClass = 'bg-purple-100 text-purple-700 border border-purple-200';
+    } else if (subscriptionData?.subscriptionStatus === 'active' || subscriptionData?.subscriptionStatus === 'trialing') {
+        // Pokazujemy "Subskrypcja" tylko dla płatnych ról (nie Free/Demo)
+        if (!isFree && !isDemo) {
+            paymentTypeLabel = lang === 'pl' ? 'Subskrypcja' : 'Subscription';
+            paymentTypeClass = 'bg-blue-100 text-blue-700 border border-blue-200';
+        }
+    }
+
     return (
-      <div className="space-y-4">
-        <label className="block text-sm font-medium text-gray-700 mb-2">{t.subscription}</label>
+      <div className="space-y-6">
 
-        <div className="lg:grid lg:grid-cols-1 lg:gap-4">
-          {/* Left Column - Plan Card */}
-          <div className="space-y-4 lg:min-h-full lg:flex lg:flex-col">
-            <div className="p-4 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg border border-blue-200 lg:flex-1">
-              <div className="flex items-center justify-between mb-3">
-                <div>
-                  <p className="text-xs text-gray-600 uppercase tracking-wide">{t.currentPlan}</p>
-                  <p className="text-xl font-bold text-gray-900">{translatePlan(subscriptionData?.plan || 'planFree')}</p>
-                </div>
-                <CreditCard className="h-6 w-6 text-blue-600" />
-              </div>
-              {subscriptionData?.planDescription && (
-                <p className="text-sm text-gray-600">{translatePlan(subscriptionData.planDescription)}</p>
-              )}
-            </div>
-          </div>
+        {/* === CZĘŚĆ 1: KARTA WIZUALNA === */}
+        <div className="bg-white border border-gray-200 rounded-xl p-5 sm:p-6 shadow-sm relative overflow-hidden">
 
-          {/* Right Column - Features & Limitation */}
-          <div className="space-y-4 mt-4 lg:mt-0">
-            {/* Trial/Billing Info */}
-            {subscriptionData?.isTrialing && subscriptionData?.nextBillingDate && (
-              <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                <div className="flex items-start space-x-2">
-                  <AlertCircle className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
-                  <div className="text-xs">
-                    <p className="font-medium text-blue-900">
-                      {t.trialEnds}: {formatDate(subscriptionData.nextBillingDate)}
-                    </p>
-                    <p className="text-blue-700 mt-0.5">
-                      {t.nextPaymentAmount} {subscriptionData.nextBillingAmount}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
+          {/* KONTENER GŁÓWNY GÓRY */}
+          <div className={(!isDemo && !isFree) ? "mb-4" : "mb-0"}>
 
-            {/* Next Billing Info */}
-            {!subscriptionData?.isTrialing && subscriptionData?.nextBillingDate && (
-              <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
-                <p className="text-xs font-medium text-gray-700 mb-1">{t.nextBilling}</p>
-                <div className="flex items-baseline justify-between">
-                   <p className="text-sm text-gray-900">{formatDate(subscriptionData.nextBillingDate)}</p>
-                   {subscriptionData?.nextBillingAmount && (
-                     <p className="text-sm text-gray-600">{t.billingAmount} {subscriptionData.nextBillingAmount}</p>
+             {/* UKŁAD: Grid tylko jeśli mamy prawą kolumnę (Starter/Demo). */}
+             <div className={hasRightColumn ? "grid grid-cols-1 sm:grid-cols-3 gap-6 items-center" : "block"}>
+
+                {/* --- LEWA KOLUMNA (Nazwa planu) --- */}
+                <div className={hasRightColumn ? "sm:col-span-1" : "w-full"}>
+
+                   {/* BADGE CONTAINER */}
+                   <div className="flex flex-wrap gap-2 mb-3">
+                       <span className="inline-block px-2 py-1 bg-emerald-100 text-emerald-700 border border-emerald-200 text-xs font-bold rounded-md uppercase tracking-wider">
+                         {t.currentPlan}
+                       </span>
+
+                       {/* NOWY BADGE: Rodzaj płatności */}
+                       {paymentTypeLabel && (
+                           <span className={`inline-block px-2 py-1 text-xs font-bold rounded-md uppercase tracking-wider ${paymentTypeClass}`}>
+                             {paymentTypeLabel}
+                           </span>
+                       )}
+                   </div>
+
+                   {/* Tytuł i Status obok siebie */}
+                   <div className="flex items-baseline flex-wrap gap-2">
+                      <h3 className="text-2xl sm:text-3xl font-bold text-gray-900 capitalize leading-none">
+                        {planName}
+                      </h3>
+                      {statusText && (
+                        <p className="text-sm sm:text-base text-gray-500 font-normal italic">
+                          {statusText}
+                        </p>
+                      )}
+                   </div>
+
+                   {/* Opis planu (Wyświetlany tylko jeśli nie został wyczyszczony wyżej) */}
+                   {planDescription && (
+                     <p className="text-sm text-gray-500 mt-2 font-medium">
+                       {planDescription}
+                     </p>
                    )}
                 </div>
-              </div>
-            )}
 
-            {/* Payment Management & Owner Info - UKRYTE DLA FREE I DEMO */}
-            {subscriptionData?.role !== 'free' && subscriptionData?.role !== 'demo' && (
-              <div className="space-y-5">
-                {/* Oznaczenie właściciela strony zapisu (Widok po wyborze w modalu) */}
-                <div>
-                  <p className="text-xs font-medium text-gray-700 mb-2">{t.billingOwner}</p>
-                  <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
-                     {/*
-                        LOGIKA WYŚWIETLANIA:
-                        1. Jeśli wybrano 'company' -> Pokaż firmę
-                        2. Jeśli nie ma jeszcze wyboru (billingPreference), ale jest firma (companyName) -> Pokaż firmę (domyślnie)
-                        3. W przeciwnym razie -> Pokaż osobę prywatną
-                     */}
-                     {(subscriptionData?.billingPreference === 'company' || (!subscriptionData?.billingPreference && subscriptionData?.companyName)) ? (
-                       // Widok Firmy
-                       <div className="text-sm text-gray-900">
-                         <p className="font-semibold">
-                            {subscriptionData?.companyName} <span className="text-gray-400 font-normal mx-1">|</span> {subscriptionData?.taxId}
-                         </p>
-                         {/* Usunięto oddzielną linię z NIP-em */}
-                         <p className="text-xs text-gray-500 mt-1 whitespace-pre-wrap leading-relaxed">
-                           {formatAddress(subscriptionData?.billingAddress)}
-                         </p>
+                {/* --- PRAWA KOLUMNA (2/3 szerokości) - Twoje Komunikaty (Tylko Free/Demo) --- */}
+                {hasRightColumn && (
+                  <div className="sm:col-span-2 flex justify-start sm:justify-end">
+
+                     {/* Komunikat dla STARTERA */}
+                     {isFree && (
+                       <div className="py-3 px-4 bg-amber-50 border border-amber-200 rounded-lg flex gap-3 items-center w-full justify-center sm:justify-start">
+                          <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0" />
+                          <p className="text-sm text-amber-800 font-medium leading-relaxed">
+                            {lang === 'pl'
+                              ? 'Zweryfikuj tożsamość, aby opublikować Twoją pierwszą Stronę Zapisu.'
+                              : 'Verify Identity to publish your first Landing Page'}
+                          </p>
                        </div>
-                     ) : (
-                       // Widok Osoby (Prywatna)
-                       <div className="text-sm text-gray-900">
-                         <p className="font-semibold">{subscriptionData?.billingName || '---'}</p>
-                         <p className="text-xs text-gray-500 mt-2 whitespace-pre-wrap leading-relaxed">
-                           {formatAddress(subscriptionData?.billingAddress)}
-                         </p>
+                     )}
+
+                     {/* Komunikat dla DEMO */}
+                     {isDemo && (
+                       <div className="py-3 px-5 bg-amber-50 border border-amber-200 rounded-lg flex gap-3 items-center w-full justify-center sm:justify-start shadow-sm">
+                          <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0" />
+                          <p className="text-sm text-amber-800 font-medium leading-relaxed">
+                            {lang === 'pl'
+                              ? 'Tylko dostęp do Kontaktów. Aktywuj dowolny Plan, aby Tworzyć, Publikować i gromadzić nowe Kontakty'
+                              : 'Leads Access Only. Activate any Plan to Create, Publish and collect new Leads'}
+                          </p>
                        </div>
                      )}
                   </div>
-                </div>
-
-              </div>
-            )}
-
-            {/* Limitation Warning */}
-            {subscriptionData?.limitation && (
-              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                <div className="flex items-start space-x-2">
-                  <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
-                  <p className="text-xs text-amber-900">{t.limitationPublish}</p>
-                </div>
-              </div>
-            )}
+                )}
+             </div>
           </div>
+
+          {/* DÓŁ: Data i Cena - Widoczne dla Trial i Paid (Ukryte dla Demo i Free) */}
+          {!isDemo && !isFree && (
+            <div className="flex justify-between items-end mt-2 pt-2 border-t border-gray-200">
+               <div className="text-sm text-gray-500 font-medium">
+                 {/* ZMIANA 2: Dodano whitespace-nowrap dla daty */}
+                 {t.renewsAt} <span className="text-gray-900 whitespace-nowrap">{renewsDate}</span>
+               </div>
+               <div className="text-right">
+                  <p className="text-xs text-gray-500 mb-1 font-medium uppercase tracking-wide">{valueLabel}</p>
+                  <p className="text-xl sm:text-2xl font-bold text-gray-900 leading-none">{nextAmount}</p>
+               </div>
+            </div>
+          )}
         </div>
 
-        {/* Action Button */}
+        {/* === CZĘŚĆ 2: INFORMACJE O WŁAŚCICIELU (Ukryte dla Free/Demo) === */}
+        {subscriptionData?.role !== 'free' && subscriptionData?.role !== 'demo' && (
+          <div>
+              <p className="text-xs font-medium text-gray-700 mb-2">{t.billingOwner}</p>
+              <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl">
+                {(subscriptionData?.billingPreference === 'company' || (!subscriptionData?.billingPreference && subscriptionData?.companyName)) ? (
+                   <div className="text-sm text-gray-900">
+                     <p className="font-semibold">
+                        {subscriptionData?.companyName} <span className="text-gray-400 font-normal mx-1">|</span> {subscriptionData?.taxId}
+                     </p>
+                     <p className="text-xs text-gray-500 mt-1 whitespace-pre-wrap leading-relaxed">
+                       {formatAddress(subscriptionData?.billingAddress)}
+                     </p>
+                   </div>
+                 ) : (
+                   <div className="text-sm text-gray-900">
+                     <p className="font-semibold">{subscriptionData?.billingName || '---'}</p>
+                     <p className="text-xs text-gray-500 mt-2 whitespace-pre-wrap leading-relaxed">
+                       {formatAddress(subscriptionData?.billingAddress)}
+                     </p>
+                   </div>
+                 )}
+              </div>
+          </div>
+        )}
+
+        {/* === CZĘŚĆ 3: PRZYCISKI AKCJI === */}
         <div className="pt-2">
           {subscriptionData?.role === 'free' ? (
             <>
+              {/* Przycisk z obsługą Loadera */}
               <button
                 onClick={async () => {
-                  // LOGIKA: Jeśli polski -> otwórz modal wyboru. Jeśli inny (en) -> idź prosto do trial.
                   if (lang === 'pl') {
                     onOpenVerificationModal();
                     return;
                   }
 
-                  // STARA LOGIKA (Dla EN)
+                  // Dla EN włączamy spinner
+                  setIsRedirectingToStripe(true);
+
                   try {
                     const response = await fetch('/api/stripe/create-trial-checkout-session', {
                       method: 'POST',
@@ -996,20 +1063,33 @@ function SubscriptionCard({
                       body: JSON.stringify({ locale: lang }),
                     });
                     const data = await response.json();
+
                     if (!response.ok) {
                       console.error('Error:', data.error);
                       alert('Błąd: ' + (data.error || 'Nie udało się utworzyć sesji'));
+                      setIsRedirectingToStripe(false);
                       return;
                     }
+
                     window.location.href = data.url;
+
                   } catch (error) {
                     console.error('Error:', error);
                     alert('Wystąpił błąd podczas tworzenia sesji płatności');
+                    setIsRedirectingToStripe(false);
                   }
                 }}
-                className="w-full inline-flex justify-center items-center px-4 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors cursor-pointer"
+                disabled={isRedirectingToStripe}
+                className="w-full inline-flex justify-center items-center px-4 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed"
               >
-                {t.verifyPayment}
+                {isRedirectingToStripe ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin mr-2" />
+                    {lang === 'pl' ? 'Przekierowywanie...' : 'Redirecting...'}
+                  </>
+                ) : (
+                  t.verifyPayment
+                )}
               </button>
 
               <div className="mt-4 p-4 bg-emerald-50 border border-emerald-200 rounded-lg flex items-start gap-3">
@@ -1024,18 +1104,19 @@ function SubscriptionCard({
               onClick={() => {
                 (window as any).openUpgradeModal();
               }}
-              className="w-full inline-flex justify-center items-center px-4 py-2.5 bg-gray-600 text-white text-sm font-medium rounded-lg hover:bg-gray-700 transition-colors cursor-pointer"
+              className="w-full inline-flex justify-center items-center px-4 py-3 bg-gray-800 text-white text-sm font-medium rounded-xl hover:bg-gray-900 transition-all cursor-pointer shadow-sm hover:shadow-md"
             >
               <CreditCard className="w-4 h-4 mr-2" />
               {t.managePlan}
             </button>
           )}
         </div>
+
       </div>
     );
   }
 
-  // Tryb pełny (standalone card) - jeśli używany
+  // 3. WIDOK PEŁNY (STANDARDOWY)
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-6">
       <div className="flex items-center mb-6">
@@ -1121,7 +1202,7 @@ export default function SettingsContent() {
       const role = String(roleRaw).toLowerCase();
 
       // Zestaw ról, które NIE MOGĄ edytować
-      const restricted = new Set(['free', 'free_ver', 'rookie']);
+      const restricted = new Set(['free', 'free_ver', 'rookie', 'demo']);
 
       // Jeśli rola nie jest określona (np. ładowanie), blokuj
       if (!role) return false;
@@ -2263,7 +2344,7 @@ export default function SettingsContent() {
   return (
     <div className="space-y-8">
       {/* Author Profile */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6">
+      <div className="bg-white rounded-xl border border-gray-200 px-3 py-4 sm:p-6">
         <div className="flex items-center mb-6">
           <User className="h-5 w-5 text-blue-600 mr-2" />
           <h2 className="text-xl font-bold text-gray-900">{t.authorProfile}</h2>
@@ -2273,10 +2354,12 @@ export default function SettingsContent() {
         </div>
 
         {/* === ZMIANA (Task 1): Nowy układ pulpitu === */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* ZMIANA: Na desktopie (lg) zerujemy gap, bo odstępy zrobimy paddingiem przy linii */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-0">
 
           {/* --- LEWA KOLUMNA (Nazwa + Logo) --- */}
-          <div className="space-y-6">
+          {/* ZMIANA: Dodano delikatną linię po prawej (border-r) i duży padding (pr-8 lub pr-12) dla oddechu */}
+          <div className="space-y-6 lg:border-r lg:border-gray-200 lg:pr-12">
             {/* Nazwa Autora */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">{t.authorName}</label>
@@ -2286,7 +2369,8 @@ export default function SettingsContent() {
                   value={settings.username}
                   onChange={(e) => setSettings(prev => ({ ...prev, username: e.target.value }))}
                   placeholder={t.usernamePlaceholder}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-500 pr-28"
+                  // ZMIANA: bg-gray-50 (kolor Ownera), border-gray-200 i rounded-xl (styl ramki Current Plan)
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-500 pr-28 transition-colors"
                 />
                 {settings.username !== lastSavedUsername && settings.username.trim() !== '' && (
                   <button
@@ -2307,17 +2391,16 @@ export default function SettingsContent() {
               </div>
             </div>
 
-            {/* Logo Autora (Przeniesione) */}
+            {/* Logo Autora */}
+            {/* Logo Autora */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">{t.authorLogo}</label>
               <div className="relative group">
                 {settings.logo || isUploadingAvatar ? (
                   <div
-                    // === ZMIANA (Task 4): Poprawka kursora ===
-                    className={`relative border-2 border-gray-200 rounded-lg overflow-hidden flex items-center justify-center bg-white ${canCustomizeLogo ? 'cursor-pointer hover:border-gray-300' : 'cursor-not-allowed'}`}
+                    className={`relative border border-gray-200 rounded-xl overflow-hidden flex items-center justify-center bg-white shadow-sm h-auto min-h-[120px] sm:h-[200px] ${canCustomizeLogo ? 'cursor-pointer hover:border-gray-300' : 'cursor-not-allowed'}`}
                     style={{
                       width: '100%',
-                      height: '200px',
                       padding: '16px'
                     }}
                     onClick={triggerFileInput}
@@ -2352,18 +2435,14 @@ export default function SettingsContent() {
                         <Loader2 className="h-6 w-6 text-white animate-spin" />
                       </div>
                     )}
+
+                    {/* OVERLAY BLOKADY - BEZ PRZYCISKU */}
                     {!canCustomizeLogo && (
                       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center p-4">
                         <div className="text-center space-y-2">
                           <AlertTriangle className="w-8 h-8 text-amber-400 mx-auto" />
                           <p className="text-white text-sm font-medium">{t.logoRestrictedTitle}</p>
-                          <button
-                            onClick={() => (window as any).openUpgradeModal()}
-                            className="inline-flex items-center px-3 py-1.5 bg-white text-gray-900 text-xs font-medium rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
-                          >
-                            <CreditCard className="w-3 h-3 mr-1.5" />
-                            {t.logoRestrictedBtn}
-                          </button>
+                          {/* Przycisk został całkowicie usunięty */}
                         </div>
                       </div>
                     )}
@@ -2371,7 +2450,7 @@ export default function SettingsContent() {
                 ) : (
                   <label
                     onClick={triggerFileInput}
-                    className={`w-full h-32 bg-gray-50 border-2 border-dashed border-gray-300 rounded-lg ${canCustomizeLogo ? 'cursor-pointer hover:border-gray-400 hover:bg-gray-100' : 'cursor-not-allowed'} transition-colors flex flex-col items-center justify-center relative`}>
+                    className={`w-full h-40 sm:h-48 bg-white border-2 border-dashed border-gray-200 rounded-xl ${canCustomizeLogo ? 'cursor-pointer hover:border-gray-400 hover:bg-gray-100' : 'cursor-not-allowed'} transition-colors flex flex-col items-center justify-center relative`}>
                     {isUploadingAvatar ? (
                       <>
                         <Loader2 className="h-8 w-8 text-gray-400 mb-2 animate-spin" />
@@ -2380,23 +2459,21 @@ export default function SettingsContent() {
                       </>
                     ) : (
                       <>
-                        <ImageIcon className="h-8 w-8 text-gray-400 mb-2" />
-                        <span className="text-sm font-medium text-gray-600">{t.addLogo}</span>
-                        <span className="text-xs text-gray-500">{t.logoFormats}</span>
+                        <div className="p-3 bg-gray-50 rounded-full mb-3">
+                           <ImageIcon className="h-6 w-6 text-gray-400" />
+                        </div>
+                        <span className="text-sm font-medium text-gray-900">{t.addLogo}</span>
+                        <span className="text-xs text-gray-500 mt-1">{t.logoFormats}</span>
                       </>
                     )}
+
+                    {/* OVERLAY BLOKADY (Stan pusty) - BEZ PRZYCISKU */}
                     {!canCustomizeLogo && (
-                      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm opacity-0 hover:opacity-100 transition-opacity duration-200 flex items-center justify-center p-4 rounded-lg">
+                      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm opacity-0 hover:opacity-100 transition-opacity duration-200 flex items-center justify-center p-4 rounded-xl">
                         <div className="text-center space-y-2">
                           <AlertTriangle className="w-8 h-8 text-amber-400 mx-auto" />
                           <p className="text-white text-sm font-medium">{t.logoRestrictedTitle}</p>
-                          <button
-                            onClick={() => (window as any).openUpgradeModal()}
-                            className="inline-flex items-center px-3 py-1.5 bg-white text-gray-900 text-xs font-medium rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
-                          >
-                            <CreditCard className="w-3 h-3 mr-1.5" />
-                            {t.logoRestrictedBtn}
-                          </button>
+                          {/* Przycisk został całkowicie usunięty */}
                         </div>
                       </div>
                     )}
@@ -2434,7 +2511,7 @@ export default function SettingsContent() {
           {/* --- PRAWA KOLUMNA (Subskrypcja) --- */}
           <div>
             {/* Subskrypcja - zintegrowana z SubscriptionCard (Przeniesione) */}
-            <div>
+            <div className="lg:pl-12">
               <SubscriptionCard
                 lang={currentLang}
                 t={t}
@@ -2459,7 +2536,7 @@ export default function SettingsContent() {
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           {/* Text Generation */}
-          <div className="bg-white border border-gray-200 rounded-xl p-6 relative">
+          <div className="bg-white border border-gray-200 rounded-xl px-3 py-4 sm:p-6 relative">
             <div className="flex items-center space-x-2 mb-6">
               <Type className="w-5 h-5 text-blue-600" />
               <h3 className="text-lg font-semibold text-gray-900">
@@ -2557,7 +2634,7 @@ export default function SettingsContent() {
           </div>
 
           {/* Image Generation */}
-          <div className="bg-white border border-gray-200 rounded-xl p-6 relative">
+          <div className="bg-white border border-gray-200 rounded-xl px-3 py-4 sm:p-6 relative">
             <div className="flex items-center space-x-2 mb-6">
               <Palette className="w-5 h-5 text-purple-600" />
               <h3 className="text-lg font-semibold text-gray-900">
@@ -2663,7 +2740,7 @@ export default function SettingsContent() {
 
         {/* System Management - widoczny tylko dla GOD */}
         {userRole?.toUpperCase() === 'GOD' && (
-          <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <div className="bg-white rounded-xl border border-gray-200 px-3 py-4 sm:p-6">
             <div className="flex items-center mb-6">
               <FolderOpen className="h-5 w-5 text-gray-600 mr-2" />
               <h2 className="text-xl font-bold text-gray-900">{t.systemManagement}</h2>

@@ -113,8 +113,8 @@ function CancelConfirmationModal({
               </p>
               <p className="text-xs text-red-300 font-medium">
                 {currentLang === 'pl'
-                  ? 'Po anulowaniu stracisz natychmiast dostęp do wszystkich funkcji premium i konto zostanie przełączone na wersję Demo.'
-                  : 'After cancellation, you will immediately lose access to all premium features and your account will be switched to Demo version.'}
+                  ? 'Po anulowaniu stracisz natychmiast dostęp do wszystkich funkcji planu Rookie i konto zostanie przełączone na wersję Darmową.'
+                  : 'After cancellation, you will immediately lose access to all Rookie Plan features and your account will be switched to Free mode.'}
               </p>
             </div>
           )}
@@ -136,15 +136,15 @@ function CancelConfirmationModal({
         </div>
 
         {/* Przyciski */}
-        <div className="flex flex-col-reverse sm:flex-row gap-3">
+        <div className="flex flex-col sm:flex-row gap-3">
           {/* Przycisk główny - Zachowaj subskrypcję / okres próbny */}
           <button
             onClick={onClose}
             disabled={isLoading}
-            className="flex-1 py-3 px-4 bg-gradient-to-br from-violet-500 to-fuchsia-500 hover:from-violet-600 hover:to-fuchsia-600 text-white font-semibold rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex-1 py-3 px-4 bg-gradient-to-br from-violet-500 to-fuchsia-500 hover:from-violet-600 hover:to-fuchsia-600 text-white font-semibold rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer" // <-- DODANE
           >
             {isFreeVer
-              ? (currentLang === 'pl' ? 'Zachowaj okres próbny' : 'Keep trial period')
+              ? (currentLang === 'pl' ? 'Zachowuję Okres Próbny' : 'Continue Trial')
               : (currentLang === 'pl' ? 'Zachowaj subskrypcję' : 'Keep subscription')
             }
           </button>
@@ -153,7 +153,7 @@ function CancelConfirmationModal({
           <button
             onClick={onConfirm}
             disabled={isLoading}
-            className="flex-1 py-3 px-4 bg-transparent border border-red-500/30 hover:bg-red-500/10 text-red-400 hover:text-red-300 font-medium rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+            className="flex-1 py-3 px-4 bg-transparent border border-red-500/30 hover:bg-red-500/10 text-red-400 hover:text-red-300 font-medium rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center cursor-pointer" // <-- DODANE
           >
             {isLoading ? (
               <>
@@ -162,7 +162,7 @@ function CancelConfirmationModal({
               </>
             ) : (
               isFreeVer
-                ? (currentLang === 'pl' ? 'Przejdź na Demo' : 'Switch to Demo')
+                ? (currentLang === 'pl' ? 'Rezygnuję z Okresu Próbnego' : 'Cancel Trial')
                 : (currentLang === 'pl' ? 'Tak, anuluj' : 'Yes, cancel')
             )}
           </button>
@@ -297,6 +297,19 @@ export default function UpgradeModal({
   const showPaymentManagement = subscriptionData && subscriptionData.role !== 'free';
   const isDemoUser = subscriptionData?.role === 'demo';
 
+  let paymentTypeLabel = null;
+  let paymentTypeClass = '';
+
+  if (subscriptionData?.subscriptionStatus === 'one_time_paid') {
+      paymentTypeLabel = currentLang === 'pl' ? 'Płatność jednorazowa' : 'One-time payment';
+      paymentTypeClass = 'bg-purple-500/20 text-purple-300 border border-purple-500/30'; // Ciemny motyw
+  } else if (subscriptionData?.subscriptionStatus === 'active' || subscriptionData?.subscriptionStatus === 'trialing') {
+      if (showPaymentManagement && !isDemoUser) {
+          paymentTypeLabel = currentLang === 'pl' ? 'Subskrypcja' : 'Subscription';
+          paymentTypeClass = 'bg-blue-500/20 text-blue-300 border border-blue-500/30'; // Ciemny motyw
+      }
+  }
+
   return (
     <div
       ref={modalContainerRef}
@@ -331,10 +344,18 @@ export default function UpgradeModal({
 
                     {/* GÓRA: Badge i Nazwa Planu */}
                     <div>
-                        <div className="mb-1">
+                        {/* ZMIANA: Flex container dla badge'y */}
+                        <div className="mb-2 flex flex-wrap gap-2">
                            <span className="px-2 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-semibold rounded-md uppercase tracking-wider">
                              {t.currentPlan}
                            </span>
+
+                           {/* NOWY BADGE: Rodzaj płatności */}
+                           {paymentTypeLabel && (
+                             <span className={`px-2 py-1 text-xs font-semibold rounded-md uppercase tracking-wider ${paymentTypeClass}`}>
+                               {paymentTypeLabel}
+                             </span>
+                           )}
                         </div>
                         <p className="text-xl text-white capitalize">
                            <span className="font-bold">{translate(subscriptionData?.plan || 'planFree')}</span>
@@ -348,7 +369,7 @@ export default function UpgradeModal({
 
                     {/* DÓŁ: Data i Cena - ukryte dla demo */}
                     {!isDemoUser && (
-                      <div className="flex justify-between items-end mt-3">
+                      <div className="flex justify-between items-end mt-4 pt-4 border-t border-gray-700/50">
                           {/* Data odnowienia */}
                           <div>
                                {subscriptionData?.nextBillingDate && (
@@ -419,16 +440,18 @@ export default function UpgradeModal({
                         )}
                       </div>
 
-                      {/* DÓŁ: Przycisk Historii */}
+                      {/* DÓŁ: Przycisk Historii z linią podziału */}
                       {subscriptionData?.cardLast4 && (
-                        <button
-                          onClick={onManageBilling}
-                          className="w-fit self-end flex items-center px-1 py-1 text-gray-400 hover:text-white text-sm font-medium transition-colors cursor-pointer"
-                        >
-                          <FileText className="w-4 h-4 mr-2" />
-                          {t.billingHistory.replace(/\s*\(.*?\)\s*/g, "")}
-                          <span className="ml-1 text-gray-600">→</span>
-                        </button>
+                        <div className="w-full mt-4 pt-4 border-t border-gray-700/50 flex justify-end">
+                          <button
+                            onClick={onManageBilling}
+                            className="flex items-center px-1 py-1 text-gray-400 hover:text-white text-sm font-medium transition-colors cursor-pointer"
+                          >
+                            <FileText className="w-4 h-4 mr-2" />
+                            {t.billingHistory.replace(/\s*\(.*?\)\s*/g, "")}
+                            <span className="ml-1 text-gray-600">→</span>
+                          </button>
+                        </div>
                       )}
                     </>
                   )}
