@@ -50,9 +50,9 @@ ENV ENCRYPTION_KEY=$ENCRYPTION_KEY
 
 # Wyłączenie telemetrii i budowanie aplikacji
 ENV NEXT_TELEMETRY_DISABLED=1
-ENV DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy"
-ENV STRIPE_SECRET_KEY="sk_test_dummy_key_for_build"
-ENV NEXTAUTH_URL="http://localhost:3000"
+#ENV DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy"
+#ENV STRIPE_SECRET_KEY="sk_test_dummy_key_for_build"
+#ENV NEXTAUTH_URL="http://localhost:3000"
 RUN npm run build
 
 # Etap 2: Uruchomienie produkcyjne (runner)
