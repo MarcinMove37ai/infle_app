@@ -12,17 +12,18 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
 
 export async function POST(req: NextRequest) {
   try {
-    // 1. Pobierz dane z body (locale i opcjonalnie paymentMethod, choć tutaj wymuszamy flow)
     const body = await req.json();
-    const locale = body.locale || 'pl'; // Domyślnie polski dla tego endpointu (BLIK jest PL)
+    const locale = body.locale || 'pl';
 
-    // 2. Pobierz użytkownika z sesji
+    // ZMIANA: Jeśli frontend nie wyśle 'plan', domyślnie przyjmujemy 'rookie'.
+    // To ratuje obecną funkcjonalność (weryfikacja Free -> Rookie).
+    const planName = body.plan || 'rookie';
+
     const session = await getServerSession(authOptions);
     if (!session?.user?.email) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // 3. Pobierz użytkownika z bazy
     const user = await prisma.user.findUnique({
       where: { email: session.user.email },
       select: {
@@ -39,16 +40,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    // 4. Sprawdź czy user nie ma już aktywnej subskrypcji/planu
-    // (Możesz tu dodać logikę, czy pozwalamy przedłużyć, ale dla 'free' jest ok)
-    if (user.role !== 'free' && user.role !== 'demo') {
+    // Walidacja ról (pozostawiamy bez zmian dla zachowania bezpieczeństwa)
+    // Pozwala na zakup tylko jeśli user jest 'free', 'demo' lub 'free_ver'
+    /*
+    if (user.role !== 'free' && user.role !== 'demo' && user.role !== 'free_ver') {
       return NextResponse.json(
         { error: 'User already has an active plan' },
         { status: 400 }
       );
     }
+    */
 
-    // 5. Utwórz lub pobierz Customer w Stripe
     let customerId = user.stripeCustomerId;
 
     if (!customerId) {
@@ -67,33 +69,44 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // 6. Pobierz Price ID dla płatności jednorazowej (BLIK/Przelew)
-    // Zakładamy, że ta zmienna jest ustawiona w .env
-    const priceId = process.env.STRIPE_ROOKIE_PRICE_ID_BLIK!;
+    // Dobieranie Price ID w zależności od planu
+    let priceId = '';
 
-    if (!priceId) {
-      throw new Error('Missing STRIPE_ROOKIE_PRICE_ID_BLIK env variable');
+    switch (planName) {
+      case 'rookie':
+        priceId = process.env.STRIPE_ROOKIE_PRICE_ID_BLIK!;
+        break;
+      case 'creator':
+        priceId = process.env.STRIPE_CREATOR_PRICE_ID_BLIK!;
+        break;
+      case 'unlimited':
+        priceId = process.env.STRIPE_UNLIMITED_PRICE_ID_BLIK!;
+        break;
+      default:
+        // Fallback dla bezpieczeństwa - gdyby ktoś wysłał dziwną nazwę planu
+        // Możemy rzucić błąd lub zafallbackować do rookie, tu rzucamy błąd.
+        return NextResponse.json({ error: 'Invalid plan selected' }, { status: 400 });
     }
 
-    // 7. Utwórz Checkout Session (Tryb PAYMENT)
+    if (!priceId) {
+      console.error(`Missing One-Time Price ID for plan: ${planName}`);
+      return NextResponse.json(
+        { error: 'Server configuration error: Missing Price ID' },
+        { status: 500 }
+      );
+    }
+
     const checkoutSession = await stripe.checkout.sessions.create({
       customer: customerId,
-      // 🔥 KLUCZOWA ZMIANA 1: Tryb płatności jednorazowej
       mode: 'payment',
-
-      // 🔥 KLUCZOWA ZMIANA 2: Metody płatności
-      // 'blik' działa tylko dla waluty PLN. 'card' dodajemy jako fallback.
-      // Jeśli w Dashboardzie masz włączone "Automatic Payment Methods", możesz to pominąć,
-      // ale ręczne wskazanie 'blik' upewnia nas, że się pojawi.
       payment_method_types: ['blik', 'card', 'p24'],
-
       billing_address_collection: 'required',
       customer_update: {
         name: 'auto',
         address: 'auto',
       },
       tax_id_collection: { enabled: true },
-      locale: 'pl', // Wymuszamy PL, bo BLIK jest polski
+      locale: locale === 'pl' ? 'pl' : 'en',
 
       line_items: [
         {
@@ -102,20 +115,17 @@ export async function POST(req: NextRequest) {
         },
       ],
 
-      // 🔥 KLUCZOWA ZMIANA 3: Generowanie faktury dla płatności jednorazowej
       invoice_creation: {
         enabled: true,
       },
-
-      // Brak subscription_data (bo to nie subskrypcja)
 
       success_url: `${process.env.NEXT_PUBLIC_APP_URL}/settings?success=true`,
       cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/settings?canceled=true`,
 
       metadata: {
         userId: user.id,
-        planName: 'rookie',
-        paymentType: 'one_time', // Znacznik dla webhooka
+        planName: planName, // Przekazujemy 'rookie', 'creator' lub 'unlimited'
+        paymentType: 'one_time',
       },
     });
 

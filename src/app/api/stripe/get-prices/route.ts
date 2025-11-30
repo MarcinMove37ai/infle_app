@@ -14,9 +14,9 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const locale = searchParams.get('locale') || 'pl';
 
-    // 1. Wybierz odpowiednie Price ID w zależności od języka
-    // Używamy tych samych zmiennych co w create-checkout
-    const priceIds = {
+    // 1. Definiujemy mapę cen do pobrania
+    // Klucze standardowe (np. 'rookie') to subskrypcje
+    const priceIds: Record<string, string | undefined> = {
       rookie: locale === 'pl'
         ? process.env.STRIPE_ROOKIE_PRICE_ID_PLN
         : process.env.STRIPE_ROOKIE_PRICE_ID_USD,
@@ -28,36 +28,49 @@ export async function GET(req: NextRequest) {
         : process.env.STRIPE_UNLIMITED_PRICE_ID_USD,
     };
 
+    // 2. Jeśli język to PL, dodajemy ceny jednorazowe (BLIK)
+    // Klucze z sufiksem '_onetime' (np. 'rookie_onetime')
+    if (locale === 'pl') {
+      priceIds.rookie_onetime = process.env.STRIPE_ROOKIE_PRICE_ID_BLIK;
+      priceIds.creator_onetime = process.env.STRIPE_CREATOR_PRICE_ID_BLIK;
+      priceIds.unlimited_onetime = process.env.STRIPE_UNLIMITED_PRICE_ID_BLIK;
+    }
+
     const results: Record<string, string> = {};
 
-    // 2. Pobierz dane dla każdego planu ze Stripe
-    for (const [planName, priceId] of Object.entries(priceIds)) {
+    // 3. Pobierz dane dla każdego planu ze Stripe
+    // Używamy Promise.all dla przyspieszenia (równoległe pobieranie)
+    const fetchPromises = Object.entries(priceIds).map(async ([key, priceId]) => {
       if (!priceId) {
-        console.warn(`⚠️ Missing env variable for ${planName} (${locale})`);
-        continue;
+        // Cichy warn, żeby nie zaśmiecać logów jeśli np. nie ma BLIK w USD (co jest poprawne)
+        if (locale === 'pl') console.warn(`⚠️ Missing env variable for ${key}`);
+        return;
       }
 
       try {
         const price = await stripe.prices.retrieve(priceId);
 
-        // Formatowanie waluty (np. 900 -> 9.00 lub 9)
+        // Obliczenie kwoty (Stripe trzyma kwoty w groszach/centach)
         const amount = (price.unit_amount || 0) / 100;
 
-        // Formater walutowy (Intl)
+        // Formater walutowy (Intl) - używamy waluty zwróconej przez Stripe
         const formatter = new Intl.NumberFormat(locale === 'pl' ? 'pl-PL' : 'en-US', {
           style: 'currency',
           currency: price.currency,
-          // Jeśli kwota jest pełna (np. 29.00), nie pokazuj groszy (29 zł).
-          // Jeśli ma grosze (np. 29.99), pokazuj (29,99 zł).
+          // Jeśli kwota jest pełna (np. 29.00), nie pokazuj groszy.
+          // Jeśli ma grosze (np. 29.99), pokazuj.
           minimumFractionDigits: amount % 1 === 0 ? 0 : 2,
           maximumFractionDigits: 2,
         });
 
-        results[planName] = formatter.format(amount);
+        results[key] = formatter.format(amount);
       } catch (err) {
-        console.error(`❌ Failed to fetch price for ${planName} (ID: ${priceId}):`, err);
+        console.error(`❌ Failed to fetch price for ${key} (ID: ${priceId}):`, err);
+        // W razie błędu nie dodajemy klucza do results, frontend użyje fallbacka
       }
-    }
+    });
+
+    await Promise.all(fetchPromises);
 
     return NextResponse.json(results);
   } catch (error) {

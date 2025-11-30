@@ -1,6 +1,7 @@
 // src/components/ui/UpgradeModal.tsx
 import React from 'react';
-import { X, Check, CreditCard, FileText, AlertTriangle, Loader2, LucideIcon } from 'lucide-react';
+import { X, Check, CreditCard, FileText, AlertTriangle, Loader2, LucideIcon, Smartphone } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface UpgradeModalProps {
   isOpen: boolean;
@@ -18,7 +19,7 @@ interface PlanFeature {
   textEn: string;
 }
 
-// Modal potwierdzenia anulowania
+// Modal potwierdzenia anulowania (Bez zmian)
 function CancelConfirmationModal({
   isOpen,
   onClose,
@@ -54,114 +55,60 @@ function CancelConfirmationModal({
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center">
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={isLoading ? undefined : onClose} />
-
       <div className="relative bg-gray-900 border border-gray-700 rounded-2xl shadow-2xl max-w-md w-full p-6 sm:p-8 mx-4">
-
         <div className="flex justify-center mb-4">
           <div className="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center">
             <AlertTriangle className="w-8 h-8 text-red-400" />
           </div>
         </div>
-
         <h3 className="text-xl sm:text-2xl font-bold text-white text-center mb-3">
           {currentLang === 'pl' ? 'Czy na pewno chcesz anulować?' : 'Are you sure you want to cancel?'}
         </h3>
-
         <div className="space-y-3 mb-6">
           <p className="text-gray-300 text-center text-sm sm:text-base leading-relaxed">
-            {currentLang === 'pl'
-              ? 'Anulowanie subskrypcji spowoduje:'
-              : 'Canceling your subscription will result in:'}
+            {currentLang === 'pl' ? 'Anulowanie subskrypcji spowoduje:' : 'Canceling your subscription will result in:'}
           </p>
-
           <ul className="space-y-2.5 text-gray-400 text-sm">
             <li className="flex items-center gap-3">
               <span className="text-red-400 flex-shrink-0">•</span>
-              <span className="leading-relaxed">
-                {currentLang === 'pl'
-                  ? 'Utrata dostępu do funkcji AI'
-                  : 'Loss of access to AI features'}
-              </span>
+              <span className="leading-relaxed">{currentLang === 'pl' ? 'Utrata dostępu do funkcji AI' : 'Loss of access to AI features'}</span>
             </li>
             <li className="flex items-center gap-3">
               <span className="text-red-400 flex-shrink-0">•</span>
-              <span className="leading-relaxed">
-                {currentLang === 'pl'
-                  ? 'Strony Zapisu przestaną być publiczne'
-                  : 'Landing Pages will no longer be public'}
-              </span>
+              <span className="leading-relaxed">{currentLang === 'pl' ? 'Strony Zapisu przestaną być publiczne' : 'Landing Pages will no longer be public'}</span>
             </li>
             <li className="flex items-center gap-3">
               <span className="text-red-400 flex-shrink-0">•</span>
-              <span className="leading-relaxed">
-                {currentLang === 'pl'
-                  ? 'Nowe Ledy nie będą się pojawiać'
-                  : 'New Leads will stop appearing'}
-              </span>
+              <span className="leading-relaxed">{currentLang === 'pl' ? 'Nowe Leady nie będą się pojawiać' : 'New Leads will stop appearing'}</span>
             </li>
           </ul>
-
           {isFreeVer && formattedDate && daysRemaining > 0 && (
             <div className="mt-4 p-3 bg-red-900/20 border border-red-500/30 rounded-lg">
-              <p className="text-sm font-semibold text-red-300 mb-2">
-                {currentLang === 'pl' ? '⚠️ Uwaga - Skutki natychmiastowe!' : '⚠️ Warning - Immediate effect!'}
-              </p>
+              <p className="text-sm font-semibold text-red-300 mb-2">{currentLang === 'pl' ? '⚠️ Uwaga - Skutki natychmiastowe!' : '⚠️ Warning - Immediate effect!'}</p>
               <p className="text-xs text-gray-300 mb-2">
-                {currentLang === 'pl'
-                  ? `Pozostało Ci jeszcze ${daysRemaining} ${daysRemaining === 1 ? 'dzień' : 'dni'} darmowego okresu próbnego (do ${formattedDate}).`
-                  : `You still have ${daysRemaining} ${daysRemaining === 1 ? 'day' : 'days'} of free trial period remaining (until ${formattedDate}).`
-                }
+                {currentLang === 'pl' ? `Pozostało Ci jeszcze ${daysRemaining} ${daysRemaining === 1 ? 'dzień' : 'dni'} darmowego okresu próbnego (do ${formattedDate}).` : `You still have ${daysRemaining} ${daysRemaining === 1 ? 'day' : 'days'} of free trial period remaining (until ${formattedDate}).`}
               </p>
               <p className="text-xs text-red-300 font-medium">
-                {currentLang === 'pl'
-                  ? 'Po anulowaniu stracisz natychmiast dostęp do wszystkich funkcji planu Rookie i konto zostanie przełączone na wersję Darmową.'
-                  : 'After cancellation, you will immediately lose access to all Rookie Plan features and your account will be switched to Free mode.'}
+                {currentLang === 'pl' ? 'Po anulowaniu stracisz natychmiast dostęp do wszystkich funkcji planu Rookie i konto zostanie przełączone na wersję Darmową.' : 'After cancellation, you will immediately lose access to all Rookie Plan features and your account will be switched to Free mode.'}
               </p>
             </div>
           )}
-
           {!isFreeVer && formattedDate && (
             <div className="mt-4 p-3 bg-gray-800/50 border border-gray-700 rounded-lg">
-              <p className="text-xs text-gray-500 mb-1">
-                {currentLang === 'pl' ? 'Dostęp do:' : 'Access until:'}
-              </p>
+              <p className="text-xs text-gray-500 mb-1">{currentLang === 'pl' ? 'Dostęp do:' : 'Access until:'}</p>
               <p className="text-white font-medium">{formattedDate}</p>
               <p className="text-xs text-gray-400 mt-1">
-                {currentLang === 'pl'
-                  ? 'Twoja subskrypcja pozostanie aktywna do końca okresu rozliczeniowego. Po tej dacie konto zostanie przełączone na wersję Demo.'
-                  : 'Your subscription will remain active until the end of the billing period. After this date, your account will be switched to Demo version.'}
+                {currentLang === 'pl' ? 'Twoja subskrypcja pozostanie aktywna do końca okresu rozliczeniowego. Po tej dacie konto zostanie przełączone na wersję Demo.' : 'Your subscription will remain active until the end of the billing period. After this date, your account will be switched to Demo version.'}
               </p>
             </div>
           )}
         </div>
-
         <div className="flex flex-col sm:flex-row gap-3">
-          <button
-            onClick={onClose}
-            disabled={isLoading}
-            className="flex-1 py-3 px-4 bg-gradient-to-br from-violet-500 to-fuchsia-500 hover:from-violet-600 hover:to-fuchsia-600 text-white font-semibold rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-          >
-            {isFreeVer
-              ? (currentLang === 'pl' ? 'Zachowuję Okres Próbny' : 'Continue Trial')
-              : (currentLang === 'pl' ? 'Zachowaj subskrypcję' : 'Keep subscription')
-            }
+          <button onClick={onClose} disabled={isLoading} className="flex-1 py-3 px-4 bg-gradient-to-br from-violet-500 to-fuchsia-500 hover:from-violet-600 hover:to-fuchsia-600 text-white font-semibold rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer">
+            {isFreeVer ? (currentLang === 'pl' ? 'Zachowuję Okres Próbny' : 'Continue Trial') : (currentLang === 'pl' ? 'Zachowaj subskrypcję' : 'Keep subscription')}
           </button>
-
-          <button
-            onClick={onConfirm}
-            disabled={isLoading}
-            className="flex-1 py-3 px-4 bg-transparent border border-red-500/30 hover:bg-red-500/10 text-red-400 hover:text-red-300 font-medium rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center cursor-pointer"
-          >
-            {isLoading ? (
-              <>
-                <Loader2 className="animate-spin w-4 h-4 mr-2" />
-                {currentLang === 'pl' ? 'Anulowanie...' : 'Canceling...'}
-              </>
-            ) : (
-              isFreeVer
-                ? (currentLang === 'pl' ? 'Rezygnuję z Okresu Próbnego' : 'Cancel Trial')
-                : (currentLang === 'pl' ? 'Tak, anuluj' : 'Yes, cancel')
-            )}
+          <button onClick={onConfirm} disabled={isLoading} className="flex-1 py-3 px-4 bg-transparent border border-red-500/30 hover:bg-red-500/10 text-red-400 hover:text-red-300 font-medium rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center cursor-pointer">
+            {isLoading ? (<><Loader2 className="animate-spin w-4 h-4 mr-2" />{currentLang === 'pl' ? 'Anulowanie...' : 'Canceling...'}</>) : (isFreeVer ? (currentLang === 'pl' ? 'Rezygnuję z Okresu Próbnego' : 'Cancel Trial') : (currentLang === 'pl' ? 'Tak, anuluj' : 'Yes, cancel'))}
           </button>
         </div>
       </div>
@@ -185,6 +132,12 @@ export default function UpgradeModal({
   const [fetchedPrices, setFetchedPrices] = React.useState<Record<string, string> | null>(null);
   const [isLoadingPrices, setIsLoadingPrices] = React.useState(false);
 
+  // --- NOWE STANY DLA PRZEŁĄCZNIKA ---
+  const isDemoUser = subscriptionData?.role === 'demo';
+  const isOneTimePaid = subscriptionData?.subscriptionStatus === 'one_time_paid';
+
+  const [paymentMethod, setPaymentMethod] = React.useState<'subscription' | 'onetime'>('subscription');
+
   const modalContainerRef = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
@@ -203,19 +156,22 @@ export default function UpgradeModal({
           setIsLoadingPrices(false);
         }
       };
+      // Ceny subskrypcyjne pobieramy zawsze
       fetchPrices();
     }
   }, [isOpen, currentLang]);
 
   // --- DEFINICJA PLANÓW ---
+  // UWAGA: Uzupełnij 'priceOneTimePln' właściwymi kwotami!
   const allPlans = [
     {
       roleName: 'rookie',
       apiPlanName: 'rookie',
       planKey: 'planRookie',
       descriptionKey: 'planDescriptionRookie',
-      pricePln: '0 zł', // FALLBACK
-      priceUsd: '$0',   // FALLBACK
+      pricePln: '0 zł', // Fallback subskrypcja
+      priceUsd: '$0',
+      priceOneTimePln: '000 zł', // TODO: WPISZ TUTAJ CENĘ JEDNORAZOWĄ DLA ROOKIE
       currencyKey: 'pricing.currencyPerMonth',
       demoBadge: currentLang === 'pl' ? 'Świetny by zacząć' : 'Great to start',
       demoBadgeColor: 'from-emerald-500 to-teal-500',
@@ -235,10 +191,10 @@ export default function UpgradeModal({
       apiPlanName: 'creator',
       planKey: 'planCreator',
       descriptionKey: 'planDescriptionCreator',
-      pricePln: '0 zł', // FALLBACK
-      priceUsd: '$0',   // FALLBACK
+      pricePln: '0 zł', // Fallback subskrypcja
+      priceUsd: '$0',
+      priceOneTimePln: '000 zł', // TODO: WPISZ TUTAJ CENĘ JEDNORAZOWĄ DLA CREATOR
       currencyKey: 'pricing.currencyPerMonth',
-      // highlighted: true, // ZOSTANIE NADPISANE DYNAMICZNIE
       demoBadge: currentLang === 'pl' ? 'Najpopularniejszy' : 'Most Popular',
       demoBadgeColor: 'from-violet-500 to-fuchsia-500',
       features: [
@@ -257,8 +213,9 @@ export default function UpgradeModal({
       apiPlanName: 'unlimited',
       planKey: 'planUnlimited',
       descriptionKey: 'planDescriptionUnlimited',
-      pricePln: '0 zł', // FALLBACK
-      priceUsd: '$0',   // FALLBACK
+      pricePln: '0 zł', // Fallback subskrypcja
+      priceUsd: '$0',
+      priceOneTimePln: '000 zł', // TODO: WPISZ TUTAJ CENĘ JEDNORAZOWĄ DLA UNLIMITED
       currencyKey: 'pricing.currencyPerMonth',
       demoBadge: 'No Limits',
       demoBadgeColor: 'from-amber-500 to-orange-500',
@@ -276,26 +233,20 @@ export default function UpgradeModal({
   ];
 
   const showPaymentManagement = subscriptionData && subscriptionData.role !== 'free';
-  const isDemoUser = subscriptionData?.role === 'demo';
 
-  // --- HIERARCHIA RÓL ---
-  // Używana do określania upgrade/downgrade i highlight
+  // --- WARUNEK WYŚWIETLANIA PRZEŁĄCZNIKA ---
+  // Tylko PL ORAZ (Rola Demo LUB (Inna rola ALE OneTimePaid))
+  const showPaymentToggle = currentLang === 'pl' && (isDemoUser || isOneTimePaid);
+
   const PLAN_ORDER = ['rookie', 'creator', 'unlimited'];
-
-  // Normalizuj currentPlanRole: 'free_ver' -> 'rookie', inne -> bez zmian
-  // Jeśli rola nie istnieje w tablicy (np. free), indexOf zwróci -1
   const normalizedCurrentRole = currentPlanRole === 'free_ver' ? 'rookie' : currentPlanRole;
   const currentPlanIndex = PLAN_ORDER.indexOf(normalizedCurrentRole);
 
-  // --- LOGIKA FILTROWANIA PLANÓW ---
   let availablePlans = [];
-
   if (isDemoUser) {
     availablePlans = allPlans;
   } else {
-    // Dla innych ról: Usuwamy aktualny plan i bierzemy 2 pozostałe
     availablePlans = allPlans.filter(plan => {
-      // Usuwamy plan, który jest aktualnym planem
       if (plan.roleName === normalizedCurrentRole) return false;
       return true;
     }).slice(0, 2);
@@ -308,19 +259,14 @@ export default function UpgradeModal({
   }
 
   const handleCancelClick = () => {
-    if (modalContainerRef.current) {
-      modalContainerRef.current.scrollTop = 0;
-    }
+    if (modalContainerRef.current) modalContainerRef.current.scrollTop = 0;
     setShowCancelConfirm(true);
   };
 
   const handleCancelConfirm = async () => {
     setIsCanceling(true);
     try {
-      const response = await fetch('/api/subscription/cancel', {
-        method: 'POST',
-      });
-
+      const response = await fetch('/api/subscription/cancel', { method: 'POST' });
       if (response.ok) {
         setShowCancelConfirm(false);
         onClose();
@@ -338,17 +284,32 @@ export default function UpgradeModal({
   };
 
   const handleUpgradeClick = async (plan: typeof allPlans[0]) => {
-    // ZMIANA: Usunięto blokadę 'alert' dla PL. Teraz wysyłamy locale: currentLang
-
     setIsRedirecting(plan.roleName);
+
     try {
-      const response = await fetch('/api/stripe/create-checkout', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      let url = '';
+      let bodyData = {};
+
+      if (paymentMethod === 'onetime') {
+        // --- ŚCIEŻKA JEDNORAZOWA (BLIK/PRZELEW) ---
+        url = '/api/stripe/create-one-time-checkout-session';
+        bodyData = {
           plan: plan.apiPlanName,
           locale: currentLang
-        }),
+        };
+      } else {
+        // --- ŚCIEŻKA SUBSKRYPCYJNA (KARTA) ---
+        url = '/api/stripe/create-checkout';
+        bodyData = {
+          plan: plan.apiPlanName,
+          locale: currentLang
+        };
+      }
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(bodyData),
       });
 
       const data = await response.json();
@@ -394,65 +355,58 @@ export default function UpgradeModal({
           <X className="w-6 h-6" />
         </button>
 
-        <div className="text-center max-w-2xl mx-auto mb-6 sm:mb-8">
-          <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white">{t.upgradeModalTitle}</h2>
-          <p className="mt-2 sm:mt-3 text-base sm:text-lg text-gray-400">{t.upgradeModalSubtitle}</p>
-        </div>
-
         {/* --- SEKCJA GÓRNA: INFO O SUBSKRYPCJI --- */}
         {showPaymentManagement && (
-          <div className="mb-6 sm:mb-8 py-4 sm:py-8 border-y border-gray-700/50">
+          <div className="mb-6 sm:mb-8 py-4 sm:py-8 border-b border-gray-700/50">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 md:items-stretch">
               <div className="flex flex-col h-full">
-                 <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-3 sm:p-5 w-full h-full flex flex-col gap-0 justify-center">
-                    <div>
-                        <div className="mb-2 flex flex-wrap gap-2">
-                           <span className="px-2 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-semibold rounded-md uppercase tracking-wider">
-                             {t.currentPlan}
-                           </span>
-                           {paymentTypeLabel && (
-                             <span className={`px-2 py-1 text-xs font-semibold rounded-md uppercase tracking-wider ${paymentTypeClass}`}>
-                               {paymentTypeLabel}
-                             </span>
-                           )}
-                        </div>
-                        <p className="text-xl text-white capitalize">
-                           <span className="font-bold">{translate(subscriptionData?.plan || 'planFree')}</span>
-                           {currentPlanRole === 'free_ver' && (
-                             <span className="ml-2 text-base italic font-normal text-gray-400">
-                               ({currentLang === 'pl' ? 'bezpłatny okres próbny' : 'free trial period'})
-                             </span>
-                           )}
-                        </p>
+                <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-3 sm:p-5 w-full h-full flex flex-col gap-0 justify-center">
+                  <div>
+                    <div className="mb-2 flex flex-wrap gap-2">
+                      <span className="px-2 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-semibold rounded-md uppercase tracking-wider">
+                        {t.currentPlan}
+                      </span>
+                      {paymentTypeLabel && (
+                        <span className={`px-2 py-1 text-xs font-semibold rounded-md uppercase tracking-wider ${paymentTypeClass}`}>
+                          {paymentTypeLabel}
+                        </span>
+                      )}
                     </div>
+                    <p className="text-xl text-white capitalize">
+                      <span className="font-bold">{translate(subscriptionData?.plan || 'planFree')}</span>
+                      {currentPlanRole === 'free_ver' && (
+                        <span className="ml-2 text-base italic font-normal text-gray-400">
+                          ({currentLang === 'pl' ? 'bezpłatny okres próbny' : 'free trial period'})
+                        </span>
+                      )}
+                    </p>
+                  </div>
 
-                    {!isDemoUser && (
-                      <div className="flex justify-between items-end mt-4 pt-4 border-t border-gray-700/50">
-                          <div>
-                               {subscriptionData?.nextBillingDate && (
-                                 <p className="text-sm text-gray-500">
-                                   <span className="block sm:inline">{t.renewsAt}</span>{' '}
-                                   <span className="text-gray-300 whitespace-nowrap">
-                                     {new Date(subscriptionData.nextBillingDate).toLocaleDateString(currentLang === 'pl' ? 'pl-PL' : 'en-US', {
-                                        day: 'numeric',
-                                        month: 'long',
-                                        year: 'numeric'
-                                     })}
-                                   </span>
-                                 </p>
-                               )}
-                          </div>
-                          {subscriptionData?.nextBillingAmount && (
-                              <div className="text-right">
-                                 <p className="text-xs text-gray-500 mb-1">{currentLang === 'pl' ? 'Wartość' : 'Value'}</p>
-                                 <span className="text-xl font-bold text-white block">
-                                   {subscriptionData.nextBillingAmount}
-                                 </span>
-                              </div>
-                          )}
+                  {!isDemoUser && (
+                    <div className="flex justify-between items-end mt-4 pt-4 border-t border-gray-700/50">
+                      <div>
+                        {subscriptionData?.nextBillingDate && (
+                          <p className="text-sm text-gray-500">
+                            <span className="block sm:inline">{t.renewsAt}</span>{' '}
+                            <span className="text-gray-300 whitespace-nowrap">
+                              {new Date(subscriptionData.nextBillingDate).toLocaleDateString(currentLang === 'pl' ? 'pl-PL' : 'en-US', {
+                                day: 'numeric', month: 'long', year: 'numeric'
+                              })}
+                            </span>
+                          </p>
+                        )}
                       </div>
-                    )}
-                 </div>
+                      {subscriptionData?.nextBillingAmount && (
+                        <div className="text-right">
+                          <p className="text-xs text-gray-500 mb-1">{currentLang === 'pl' ? 'Wartość' : 'Value'}</p>
+                          <span className="text-xl font-bold text-white block">
+                            {subscriptionData.nextBillingAmount}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div className="flex flex-col h-full">
@@ -473,16 +427,16 @@ export default function UpgradeModal({
                       <div>
                         <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-3">{t.currentPaymentMethod}</p>
                         {subscriptionData?.cardLast4 ? (
-                            <div className="flex items-center space-x-4">
-                              <div className="w-12 h-8 bg-gray-700 rounded flex items-center justify-center border border-gray-600">
-                                 <CreditCard className="w-5 h-5 text-gray-300" />
-                              </div>
-                              <div>
-                                <p className="text-white font-medium capitalize flex items-center">
-                                  {subscriptionData.cardBrand} <span className="mx-2 text-gray-500">•</span> •••• {subscriptionData.cardLast4}
-                                </p>
-                              </div>
+                          <div className="flex items-center space-x-4">
+                            <div className="w-12 h-8 bg-gray-700 rounded flex items-center justify-center border border-gray-600">
+                              <CreditCard className="w-5 h-5 text-gray-300" />
                             </div>
+                            <div>
+                              <p className="text-white font-medium capitalize flex items-center">
+                                {subscriptionData.cardBrand} <span className="mx-2 text-gray-500">•</span> •••• {subscriptionData.cardLast4}
+                              </p>
+                            </div>
+                          </div>
                         ) : (
                           <div className="flex items-center space-x-2 text-gray-400">
                             <AlertTriangle className="w-5 h-5" />
@@ -490,13 +444,9 @@ export default function UpgradeModal({
                           </div>
                         )}
                       </div>
-
                       {subscriptionData?.cardLast4 && (
                         <div className="w-full mt-4 pt-4 border-t border-gray-700/50 flex justify-end">
-                          <button
-                            onClick={onManageBilling}
-                            className="flex items-center px-1 py-1 text-gray-400 hover:text-white text-sm font-medium transition-colors cursor-pointer"
-                          >
+                          <button onClick={onManageBilling} className="flex items-center px-1 py-1 text-gray-400 hover:text-white text-sm font-medium transition-colors cursor-pointer">
                             <FileText className="w-4 h-4 mr-2" />
                             {t.billingHistory.replace(/\s*\(.*?\)\s*/g, "")}
                             <span className="ml-1 text-gray-600">→</span>
@@ -511,52 +461,96 @@ export default function UpgradeModal({
           </div>
         )}
 
+        <div className="text-center pb-6 mx-auto mb-2">
+          <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white">{t.upgradeModalTitle}</h2>
+          <p className="mt-2 sm:mt-3 text-base sm:text-lg text-gray-400">{t.upgradeModalSubtitle}</p>
+        </div>
+
+        {/* --- PRZEŁĄCZNIK PŁATNOŚCI (TOGGLE) --- */}
+        {showPaymentToggle && (
+          <div className="text-center mb-10">
+            <div className="bg-slate-900/80 rounded-lg ring-1 ring-white/10 p-1 inline-flex backdrop-blur-sm relative">
+              <motion.div
+                className="absolute top-1 bottom-1 bg-gradient-to-r from-purple-600 to-indigo-600 rounded-md shadow-lg pointer-events-none"
+                animate={{
+                  left: paymentMethod === 'subscription' ? '4px' : 'calc(50% + 2px)',
+                  width: 'calc(50% - 6px)'
+                }}
+                transition={{
+                  type: "spring",
+                  stiffness: 350,
+                  damping: 35,
+                  mass: 0.8
+                }}
+              />
+
+              <button
+                onClick={() => setPaymentMethod('subscription')}
+                className={`relative z-10 flex items-center justify-center px-6 py-3 rounded-md text-sm font-medium transition-colors duration-200 cursor-pointer ${
+                  paymentMethod === 'subscription'
+                    ? 'text-white'
+                    : 'text-slate-300 hover:text-white'
+                }`}
+              >
+                <CreditCard className="w-4 h-4 mr-2" />
+                Subskrypcja (Płatność kartą)
+              </button>
+              <button
+                onClick={() => setPaymentMethod('onetime')}
+                className={`relative z-10 flex items-center justify-center px-6 py-3 rounded-md text-sm font-medium transition-colors duration-200 cursor-pointer ${
+                  paymentMethod === 'onetime'
+                    ? 'text-white'
+                    : 'text-slate-300 hover:text-white'
+                }`}
+              >
+                <Smartphone className="w-4 h-4 mr-2" />
+                Jednorazowo (Płatność BLIK)
+              </button>
+            </div>
+            <p className="text-slate-400 text-sm mt-4">Płać tak jak jest Ci wygodnie</p>
+          </div>
+        )}
+
         {/* --- SEKCJA ŚRODKOWA: KARTY PLANÓW --- */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 relative z-0">
-
-          {/* 1. KARTY STANDARDOWE (Rookie, Creator, Unlimited) */}
+          {/* 1. KARTY STANDARDOWE */}
           {availablePlans.map((plan) => {
             const planName = translate(plan.planKey);
 
-            // Pobieranie cen
-            const livePrice = fetchedPrices?.[plan.roleName];
-            const fallbackPrice = currentLang === 'pl' ? plan.pricePln : plan.priceUsd;
-            const displayPrice = livePrice || fallbackPrice;
+            // 1. Logika cen
+            let displayPrice = '';
+            // ZMIANA: Dopisek (np. / mies.) jest teraz zawsze widoczny, zgodnie z prośbą
+            let currencySuffix = translate(plan.currencyKey);
 
-            // --- NOWA LOGIKA HIGHLIGHT / DOWNGRADE (TYLKO DLA NIE-DEMO) ---
-            let isHighlighted = false; // Domyślnie brak highlightu
-            let isDowngrade = false;   // Domyślnie dostępny
+            const oneTimePriceKey = `${plan.roleName}_onetime`;
+            const liveOneTimePrice = fetchedPrices?.[oneTimePriceKey];
+
+            if (paymentMethod === 'onetime') {
+                // Dla jednorazowej: Cena z API -> lub z propsów
+                displayPrice = liveOneTimePrice || plan.priceOneTimePln;
+            } else {
+                // Dla subskrypcji: Cena z API -> lub fallback (PL/USD)
+                const livePrice = fetchedPrices?.[plan.roleName];
+                const fallbackPrice = currentLang === 'pl' ? plan.pricePln : plan.priceUsd;
+                displayPrice = livePrice || fallbackPrice;
+            }
+
+            // 2. Wyróżnienie planów (logika bez zmian)
+            let isHighlighted = false;
+            let isDowngrade = false;
 
             if (!isDemoUser) {
               const thisPlanIndex = PLAN_ORDER.indexOf(plan.roleName);
-              // Wyjątek dla Free: next level to Rookie (0)
-              // Jeśli currentPlanIndex = -1 (Free), to Rookie (0) jest next upgrade (0 == -1 + 1)
-              if (thisPlanIndex === currentPlanIndex + 1) {
-                isHighlighted = true; // Polecany (Next Step)
-              }
-
-              if (thisPlanIndex < currentPlanIndex) {
-                isDowngrade = true; // Niższy plan
-              }
-            } else {
-              // Dla Demo zachowujemy logikę ze statycznej definicji lub badge
-              // (Ale tutaj nie używamy highlighted z allPlans, bo demo ma własne badge)
+              if (thisPlanIndex === currentPlanIndex + 1) isHighlighted = true;
+              if (thisPlanIndex < currentPlanIndex) isDowngrade = true;
             }
 
-            // Styl badge'a dla Demo (lub "Recommended" dla nie-demo)
             const badgeText = isDemoUser ? plan.demoBadge : (isHighlighted ? (currentLang === 'pl' ? 'Polecany' : 'Recommended') : null);
-            const badgeColor = isDemoUser
-                ? plan.demoBadgeColor
-                : 'from-violet-500 to-fuchsia-500'; // Fiolet dla polecanego
-
-            // Czy karta jest "wyróżniona" (fioletowa ramka)?
-            // Dla demo: nie wyróżniamy ramką (mają badge). Dla nie-demo: jeśli isHighlighted.
+            const badgeColor = isDemoUser ? plan.demoBadgeColor : 'from-violet-500 to-fuchsia-500';
             const isCardHighlighted = !isDemoUser && isHighlighted;
 
             return (
               <div key={plan.roleName} className={`relative rounded-2xl p-px ${isCardHighlighted ? `bg-gradient-to-b ${badgeColor}` : ''} ${isDemoUser ? `bg-gradient-to-b ${plan.demoBadgeColor} shadow-[0_0_20px_rgba(0,0,0,0.3)]` : ''}`}>
-
-                {/* Badge (Dla Demo ZAWSZE, dla nie-demo tylko jeśli Highlighted) */}
                 {(isDemoUser || isHighlighted) && (
                   <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 z-20">
                      <span className={`bg-gradient-to-r ${badgeColor} text-white text-xs font-bold px-4 py-1 rounded-full shadow-lg whitespace-nowrap uppercase tracking-wider`}>
@@ -564,58 +558,108 @@ export default function UpgradeModal({
                      </span>
                   </div>
                 )}
-
                 <div className={`relative bg-gray-950 backdrop-blur-sm rounded-[15px] h-full flex flex-col p-6 ${(!isCardHighlighted && !isDemoUser) ? 'border-2 border-purple-500/20' : ''} ${isDowngrade ? 'opacity-60 grayscale-[0.5]' : ''}`}>
-
                   <div className="flex flex-col h-full">
                     <h3 className="text-2xl font-bold text-white mb-2">{planName}</h3>
                     <p className="text-sm text-gray-400 mb-6 min-h-[40px]">{translate(plan.descriptionKey)}</p>
 
-                    <div className="mb-6 flex flex-col items-center justify-center">
+                    <div className="mb-1 flex flex-col items-center justify-center">
                       <div className="border border-purple-500/30 rounded-xl px-6 py-3 bg-purple-500/5 min-w-[140px] text-center">
-
                         {isLoadingPrices && !fetchedPrices ? (
-                           <div className="flex justify-center py-1">
-                             <Loader2 className="w-6 h-6 animate-spin text-purple-400" />
-                           </div>
+                          <div className="flex justify-center py-1">
+                            <Loader2 className="w-6 h-6 animate-spin text-purple-400" />
+                          </div>
                         ) : (
-                           <div className="text-3xl sm:text-4xl font-bold text-white flex items-baseline justify-center">
+                          <AnimatePresence mode="wait">
+                            <motion.div
+                              key={paymentMethod}
+                              initial={{ opacity: 0, y: -20 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              exit={{ opacity: 0, y: 20 }}
+                              transition={{ duration: 0.3, ease: "easeInOut" }}
+                              className="text-3xl sm:text-4xl font-bold text-white flex items-baseline justify-center"
+                            >
                               <span>{displayPrice}</span>
                               <span className="text-lg sm:text-xl font-medium text-gray-400 ml-2">
-                                {translate(plan.currencyKey)}
+                                {currencySuffix}
                               </span>
-                           </div>
+                            </motion.div>
+                          </AnimatePresence>
                         )}
+                      </div>
 
+                      {/* --- MONIT O OSZCZĘDNOŚCI (Z ANIMACJĄ) --- */}
+                      <div className="min-h-[32px] mt-2">
+                        <AnimatePresence>
+                          {paymentMethod === 'onetime' && currentLang === 'pl' && (() => {
+                            const subStr = fetchedPrices?.[plan.roleName] || plan.pricePln;
+                            const oneTimeStr = displayPrice;
+
+                            const parsePrice = (str: string) => {
+                              if (!str) return 0;
+                              const cleaned = str.replace(/[^0-9.,]/g, '').replace(',', '.');
+                              return parseFloat(cleaned) || 0;
+                            };
+
+                            const subVal = parsePrice(subStr);
+                            const oneTimeVal = parsePrice(oneTimeStr);
+
+                            if (subVal === 0 || oneTimeVal === 0) return null;
+
+                            const savings = Math.round((oneTimeVal - subVal) * 12);
+
+                            if (savings > 0) {
+                              return (
+                                <motion.div
+                                  initial={{ height: 0, opacity: 0 }}
+                                  animate={{ height: "auto", opacity: 1 }}
+                                  exit={{ height: 0, opacity: 0 }}
+                                  transition={{ duration: 0.4, ease: "easeInOut" }}
+                                  style={{ overflow: 'hidden' }}
+                                  className="text-center"
+                                >
+                                  <span className="text-xs text-gray-400 whitespace-nowrap inline-block scale-90">
+                                    {`Z subskrypcją oszczędzasz ${savings} zł rocznie. `}
+                                    <button
+                                      onClick={() => setPaymentMethod('subscription')}
+                                      className="font-semibold text-purple-400 hover:text-purple-300 transition-colors cursor-pointer uppercase"
+                                    >
+                                      SPRAWDŹ
+                                    </button>
+                                  </span>
+                                </motion.div>
+                              );
+                            }
+                            return null;
+                          })()}
+                        </AnimatePresence>
                       </div>
                     </div>
 
                     <div className="mb-8 mt-auto">
                       <button
-                        onClick={() => !isDowngrade && handleUpgradeClick(plan)}
-                        disabled={!!isRedirecting || isDowngrade}
-                        className={`w-full inline-flex justify-center items-center py-3 px-4 rounded-lg font-semibold text-sm transition-all shadow-md cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
-                          isDowngrade
-                            ? 'bg-gray-800 text-gray-500 border border-gray-700' // Styl dla zablokowanego downgrade
-                            : (isCardHighlighted || isDemoUser
-                                ? `bg-gradient-to-br ${badgeColor} text-white shadow-[0_10px_20px_rgba(139,92,246,0.20)] hover:shadow-[0_15px_25px_rgba(139,92,246,0.30)] hover:-translate-y-0.5`
-                                : 'bg-white/10 border border-white/10 hover:bg-white/20 text-white')
-                        }`}
-                      >
-                        {isRedirecting === plan.roleName ? (
-                          <Loader2 className="w-5 h-5 animate-spin mr-2" />
-                        ) : null}
+                          onClick={() => !isDowngrade && handleUpgradeClick(plan)}
+                          disabled={!!isRedirecting || isDowngrade}
+                          className={`w-full inline-flex justify-center items-center py-3 px-4 rounded-lg font-semibold text-sm transition-all shadow-md cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
+                            isDowngrade
+                              ? 'bg-gray-800 text-gray-500 border border-gray-700'
+                              : (isCardHighlighted || isDemoUser
+                                  ? `bg-gradient-to-br ${badgeColor} text-white shadow-[0_10px_20px_rgba(139,92,246,0.20)] hover:shadow-[0_15px_25px_rgba(139,92,246,0.30)] hover:-translate-y-0.5`
+                                  : 'bg-white/10 border border-white/10 hover:bg-white/20 text-white')
+                          }`}
+                        >
+                          {isRedirecting === plan.roleName ? (
+                            <Loader2 className="w-5 h-5 animate-spin mr-2" />
+                          ) : null}
 
-                        {/* Tekst przycisku: Upgrade lub Downgrade Info */}
-                        {isDowngrade
-                            ? (currentLang === 'pl' ? 'Downgrade niemożliwy' : 'Downgrade unavailable')
-                            : t.upgradeTo.replace('{planName}', planName)
-                        }
-                      </button>
+                          {isDowngrade
+                              ? (currentLang === 'pl' ? 'Downgrade niemożliwy' : 'Downgrade unavailable')
+                              : t.upgradeTo.replace('{planName}', planName)
+                          }
+                        </button>
                     </div>
 
                     <div className="flex-grow space-y-4">
-                      {/* Główne Cechy */}
                       <div>
                         <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">{currentLang === 'pl' ? 'CO ZAWIERA:' : "WHAT'S INCLUDED:"}</div>
                         {plan.features.map((feature, index) => (
@@ -627,8 +671,6 @@ export default function UpgradeModal({
                           </div>
                         ))}
                       </div>
-
-                      {/* Limity (jeśli są) */}
                       {plan.limits && plan.limits.length > 0 && (
                         <div>
                           <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3 mt-4">{currentLang === 'pl' ? 'LIMITY:' : 'LIMITS:'}</div>
@@ -649,7 +691,7 @@ export default function UpgradeModal({
             );
           })}
 
-          {/* 2. Karta: WHITE LABEL (Tylko jeśli NIE jest Demo) */}
+          {/* 2. Karta: WHITE LABEL */}
           {!isDemoUser && (
             <div className="relative rounded-2xl p-px bg-gradient-to-b from-amber-400 to-orange-500 shadow-[0_0_25px_rgba(245,158,11,0.2)]">
               <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 z-20">
@@ -657,23 +699,27 @@ export default function UpgradeModal({
                    {currentLang === 'pl' ? 'Własna Aplikacja' : 'Own Your App'}
                  </span>
               </div>
-
               <div className="relative bg-gray-950 backdrop-blur-sm rounded-[15px] h-full flex flex-col p-6">
-
                 <div className="flex flex-col h-full">
                   <h3 className="text-2xl font-bold text-white mb-2">White Label</h3>
                   <p className="text-sm text-gray-400 mb-6 min-h-[40px]">
                     {currentLang === 'pl' ? 'Dla agencji i firm' : 'For agencies and businesses'}
                   </p>
 
-                  <div className="mb-6 flex flex-col items-center justify-center">
-                    <div className="border border-amber-500/30 rounded-xl px-6 py-3 bg-amber-500/5">
-                      <div className="text-center">
-                        <div className="text-sm text-gray-400 mb-1">{currentLang === 'pl' ? 'od' : 'from'}</div>
-                        <div className="text-3xl font-bold text-white">10 000 $</div>
-                        <div className="text-xs text-gray-500 mt-1">{currentLang === 'pl' ? '+ koszty utrzymania' : '+ maintenance costs'}</div>
+                  <div className="mb-7 flex flex-col items-center justify-center">
+                      <div className="border border-amber-500/30 rounded-xl px-6 py-3 bg-amber-500/5">
+                        <div className="flex items-baseline justify-center">
+                          <span className="text-lg sm:text-xl font-medium text-gray-400 mr-2">
+                            {currentLang === 'pl' ? 'od' : 'from'}
+                          </span>
+                          <span className="text-3xl font-bold text-white">
+                            10 000 $
+                          </span>
+                        </div>
                       </div>
-                    </div>
+                      <div className="text-xs text-gray-500 mt-2">
+                        {currentLang === 'pl' ? '+ koszty utrzymania' : '+ maintenance costs'}
+                      </div>
                   </div>
 
                   <div className="mb-8 mt-auto">
@@ -712,16 +758,12 @@ export default function UpgradeModal({
               </div>
             </div>
           )}
-
         </div>
 
         {/* --- PRZYCISK ANULOWANIA SUBSKRYPCJI --- */}
-        {showPaymentManagement && !isDemoUser && (
+        {showPaymentManagement && !isDemoUser && !isOneTimePaid && (
           <div className="mt-8 pt-6 border-t border-gray-700/50">
-            <button
-              onClick={handleCancelClick}
-              className="w-full py-3 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 hover:border-red-500/30 text-red-400 hover:text-red-300 text-sm font-medium rounded-xl transition-all cursor-pointer flex items-center justify-center group"
-            >
+            <button onClick={handleCancelClick} className="w-full py-3 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 hover:border-red-500/30 text-red-400 hover:text-red-300 text-sm font-medium rounded-xl transition-all cursor-pointer flex items-center justify-center group">
               <AlertTriangle className="w-4 h-4 mr-2 group-hover:scale-110 transition-transform" />
               {currentLang === 'pl' ? 'Anuluj subskrypcję' : 'Cancel subscription'}
             </button>
