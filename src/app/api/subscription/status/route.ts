@@ -40,19 +40,15 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    // --- SEKCJA: USTALANIE KWOT (ZMODYFIKOWANA) ---
+    // --- SEKCJA: USTALANIE KWOT (WERSJA: WALUTA ZE STRIPE + CENA Z KATALOGU) ---
 
-    // 1. Pobierz parametr locale z URL (frontend musi wysyłać ?locale=pl lub en)
+    // 1. Pobierz parametr locale z URL (służy TYLKO do formatowania zapisu liczby: przecinek vs kropka)
     const { searchParams } = new URL(req.url);
-    const locale = searchParams.get('locale') || 'pl';
+    const browserLocale = searchParams.get('locale') || 'pl';
 
-    // 2. Definicja zmiennych wyjściowych
-    let nextBillingAmount = '---';
-    let oneTimePriceFormatted = '29,00 zł'; // Domyślna cena BLIK do wyświetlenia w opcjach
-
-    // 3. Pomocnicza funkcja do formatowania waluty
+    // Helper formatowania (używa waluty przekazanej dynamicznie)
     const formatCurrency = (amount: number, currency: string) => {
-      return new Intl.NumberFormat(locale === 'pl' ? 'pl-PL' : 'en-US', {
+      return new Intl.NumberFormat(browserLocale === 'pl' ? 'pl-PL' : 'en-US', {
         style: 'currency',
         currency: currency.toUpperCase(),
         minimumFractionDigits: amount % 1 === 0 ? 0 : 2,
@@ -60,23 +56,46 @@ export async function GET(req: NextRequest) {
       }).format(amount);
     };
 
-    // 4. Pobierz ogólną cenę BLIK (dla przycisku "Kup jednorazowo") - niezależnie od roli
-    try {
-      if (process.env.STRIPE_ROOKIE_PRICE_ID_BLIK) {
-        const blikPriceObj = await stripe.prices.retrieve(process.env.STRIPE_ROOKIE_PRICE_ID_BLIK);
-        oneTimePriceFormatted = formatCurrency((blikPriceObj.unit_amount || 0) / 100, blikPriceObj.currency);
+    // --- KROK 1: Wykryj rzeczywistą walutę klienta ze Stripe ---
+    let detectedCurrency = 'pln'; // Domyślnie, jeśli nie znajdziemy klienta
+
+    if (user.stripeCustomerId) {
+      try {
+        // A. Sprawdzamy subskrypcje (WSZYSTKIE statusy, by złapać też trial)
+        const subscriptions = await stripe.subscriptions.list({
+          customer: user.stripeCustomerId,
+          status: 'all',
+          limit: 1,
+        });
+
+        if (subscriptions.data.length > 0) {
+          // Bierzemy walutę z subskrypcji
+          detectedCurrency = subscriptions.data[0].items.data[0].price.currency;
+        } else {
+          // B. Brak subskrypcji? Sprawdzamy historię płatności (One-Time / BLIK)
+          const paymentIntents = await stripe.paymentIntents.list({
+            customer: user.stripeCustomerId,
+            limit: 1,
+          });
+          if (paymentIntents.data.length > 0) {
+            detectedCurrency = paymentIntents.data[0].currency;
+          }
+        }
+      } catch (error) {
+        console.error('Błąd pobierania waluty ze Stripe:', error);
       }
-    } catch (e) {
-      console.error('Error fetching generic BLIK price:', e);
     }
 
-    // 5. Ustal ID ceny dla BIEŻĄCEGO planu użytkownika (do wyświetlenia "Wartość/Cena")
+    // --- KROK 2: Ustal tryb cennika (PL vs EN) na podstawie wykrytej waluty ---
+    // Jeśli waluta to PLN -> traktujemy jak rynek PL. Każda inna (USD, EUR) -> rynek EN.
+    const configMode = detectedCurrency.toLowerCase() === 'pln' ? 'pl' : 'en';
+
+    // --- KROK 3: Wybierz ID ceny katalogowej (Oryginalna logika, ale sterowana przez configMode) ---
     const role = user.role?.toLowerCase();
     const isOneTime = user.subscriptionStatus === 'one_time_paid';
     let currentPlanPriceId = '';
 
-    // Logika mapowania Rola + Język + Status -> Zmienna środowiskowa
-    if (locale === 'pl') {
+    if (configMode === 'pl') {
       if (role === 'rookie' || role === 'free_ver') {
         currentPlanPriceId = isOneTime
           ? process.env.STRIPE_ROOKIE_PRICE_ID_BLIK!
@@ -91,31 +110,49 @@ export async function GET(req: NextRequest) {
           : process.env.STRIPE_UNLIMITED_PRICE_ID_PLN!;
       }
     } else {
-      // Logika dla EN / USD (zakładamy brak one-time dla USD)
-      if (role === 'rookie') currentPlanPriceId = process.env.STRIPE_ROOKIE_PRICE_ID_USD!;
+      // Logika dla rynków zagranicznych (USD)
+      // POPRAWKA: Dodano obsługę free_ver (trial), który mapuje się na cenę Rookie USD
+      if (role === 'rookie' || role === 'free_ver') {
+          currentPlanPriceId = process.env.STRIPE_ROOKIE_PRICE_ID_USD!;
+      }
       else if (role === 'creator') currentPlanPriceId = process.env.STRIPE_CREATOR_PRICE_ID_USD!;
       else if (role === 'unlimited') currentPlanPriceId = process.env.STRIPE_UNLIMITED_PRICE_ID_USD!;
     }
 
-    // 6. Pobierz i sformatuj cenę bieżącego planu
+    // --- KROK 4: Pobierz PEŁNĄ wartość planu ze Stripe na podstawie ID ---
+    let nextBillingAmount = '---';
+
+    // Obsługa Free/Demo
     if (role === 'free' || role === 'demo') {
-      nextBillingAmount = locale === 'pl' ? '0,00 zł' : '$0.00';
-    } else if (currentPlanPriceId) {
+       // Dla darmowych pokazujemy 0 w walucie odpowiedniej dla języka przeglądarki
+       nextBillingAmount = browserLocale === 'pl' ? '0,00 zł' : '$0.00';
+    }
+    else if (currentPlanPriceId) {
       try {
+        // Pobieramy cenę STANDARDOWĄ (katalogową) - to rozwiązuje problem proratingu
         const priceObj = await stripe.prices.retrieve(currentPlanPriceId);
+
+        // Formatujemy cenę używając:
+        // 1. Kwoty katalogowej (priceObj.unit_amount)
+        // 2. Wykrytej waluty klienta (detectedCurrency) - dla pewności zgodności
         nextBillingAmount = formatCurrency((priceObj.unit_amount || 0) / 100, priceObj.currency);
       } catch (error) {
-        console.error(`Error fetching price for role ${role} (ID: ${currentPlanPriceId}):`, error);
-        // Fallback w razie awarii Stripe lub błędnego ID w .env
-        if (locale === 'pl') {
-            if (role === 'creator') nextBillingAmount = '87 zł';
-            else if (role === 'unlimited') nextBillingAmount = '299 zł';
-            else nextBillingAmount = '29 zł';
-        } else {
-             nextBillingAmount = '---';
-        }
+        console.error(`Błąd pobierania ceny katalogowej ID: ${currentPlanPriceId}`, error);
+        nextBillingAmount = '---';
       }
     }
+
+    // Dodatek: Cena One-Time (dla modala) - zawsze w PLN
+    let oneTimePriceFormatted = '29,00 zł';
+    try {
+      if (process.env.STRIPE_ROOKIE_PRICE_ID_BLIK) {
+        const blikPriceObj = await stripe.prices.retrieve(process.env.STRIPE_ROOKIE_PRICE_ID_BLIK);
+        // Tu wymuszamy formatowanie PL, bo to oferta specyficzna dla PL
+        oneTimePriceFormatted = new Intl.NumberFormat('pl-PL', {
+             style: 'currency', currency: blikPriceObj.currency.toUpperCase()
+        }).format((blikPriceObj.unit_amount || 0) / 100);
+      }
+    } catch (e) {}
 
     // --- KONIEC SEKCJI USTALANIA KWOT ---
 

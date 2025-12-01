@@ -294,7 +294,7 @@ const translations = {
     currentPlan: 'Aktualny plan',
     features: 'Funkcje',
     planFree: 'Darmowy',
-    planDescriptionFree: 'Darmowy plan startowy',
+    planDescriptionFree: 'Darmowy plan na początek',
     planRookie: 'Rookie',
     planRookieTrial: 'Rookie (Okres próbny)',
     planDescriptionRookie: 'Plan dla początkujących autorów',
@@ -340,7 +340,7 @@ const translations = {
     nextPaymentAmount: 'Następna płatność:',
 
     // Info weryfikacji
-    verifyIdentityInfo: 'Aby opublikować własną stronę musimy zweryfikować Twoją tożsamość. Dane zostaną użyte w Polityce prywatności dotyczącej pozyskanych Leadów oraz do oznaczenia strony zapisu, która jest Twoją własnością w czasie trwania subskrypcji. Aby potwierdzić tożsamość rozpocznij 21-dniowy okres próbny planu Rookie, możesz zrezygnować w dowolnym momencie. Przy płatności BLIK, okres próbny nie obowiązuje i aby publikować należy opłacić Plan na jeden miesiąc.',
+    verifyIdentityInfo: 'Aby opublikować Twoją pierwszą Stronę Zapisu musimy poznać Twoją tożsamość. Niezbędne dane, zostaną umieszczone w Polityce Prywatności (wzór) dotyczącej pozyskiwania kontaktów oraz do oznaczenia Strony Zapisu, która jest Twoją własnością w czasie trwania subskrypcji.',
 
     // Tłumaczenia Modala Upgrade
     upgradeModalTitle: 'Zmień swój plan',
@@ -372,14 +372,14 @@ const translations = {
 
     // Modal Wyboru Weryfikacji (PL ONLY)
     verifyModalTitle: 'Wybierz metodę weryfikacji',
-    verifyModalSubtitle: 'Aby opublikować stronę, musimy zweryfikować Twoją tożsamość. Wybierz metodę, która Ci odpowiada.',
-    verifyOptionCardTitle: 'Karta Płatnicza',
-    verifyOptionCardBadge: 'Okres Próbny 21 Dni',
-    verifyOptionCardDesc: 'Rozpocznij darmowy okres próbny. Żadne środki nie zostaną pobrane dzisiaj. Możesz anulować w dowolnym momencie.',
+    verifyModalSubtitle: 'Aby publikować Strony Zapisu, musimy poznać Twoją tożsamość. Rozpocznij bezpłątny okres próbny lub opłać plan Rookie.',
+    verifyOptionCardTitle: 'Plan Rookie - 21 dni za darmo',
+    verifyOptionCardBadge: 'Karta płatnicza',
+    verifyOptionCardDesc: 'Rozpocznij darmowy okres próbny. Żadne środki nie zostaną dziś pobrane. Możesz anulować w dowolnym momencie.',
     verifyOptionCardBtn: 'Rozpocznij Subskrypcję',
-    verifyOptionBlikTitle: 'Szybki Przelew / BLIK',
-    verifyOptionBlikBadge: 'Płatność Jednorazowa',
-    verifyOptionBlikDesc: 'Opłać dostęp na 1 miesiąc z góry. Bez podawania karty, bez automatycznego odnawiania. Brak okresu próbnego.',
+    verifyOptionBlikTitle: 'Plan Rookie - płatność jednorazowa',
+    verifyOptionBlikBadge: 'Blik/Przelew/Karta',
+    verifyOptionBlikDesc: 'Opłać dostęp na 1 miesiąc z góry. Bez podawania karty, bez automatycznego odnawiania, bez zobowiązań',
     verifyOptionBlikBtn: 'Zapłać BLIKiem (29 zł)',
 
     authorLogo: 'Logo Autora / Zdjęcie',
@@ -474,7 +474,7 @@ const translations = {
     currentPlan: 'Current plan',
     features: 'Features',
     planFree: 'Free',
-    planDescriptionFree: 'Free starter plan',
+    planDescriptionFree: 'Free plan for a good start',
     planRookie: 'Rookie',
     planRookieTrial: 'Rookie (Trial)',
     planDescriptionRookie: 'Plan for beginner authors',
@@ -520,7 +520,7 @@ const translations = {
     nextPaymentAmount: 'Next payment:',
 
     // Verification Info
-    verifyIdentityInfo: 'To publish your own page, we must verify your identity. The data will be used in the Privacy Policy regarding acquired Leads and to designate the landing page as your property during the subscription period. To confirm your identity, start a 21-day trial of the Rookie plan; you can cancel at any time.',
+    verifyIdentityInfo: 'To publish your first Landing Page, we must know your identity. The data will be used in the Privacy Policy regarding acquired Leads and to designate the Landing Page as your property during the subscription period. To confirm your identity, start a 21-day trial of the Rookie plan; you can cancel at any time.',
 
     // Upgrade Modal Translations
     upgradeModalTitle: 'Change Your Plan',

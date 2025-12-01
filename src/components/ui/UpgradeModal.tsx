@@ -98,17 +98,17 @@ function CancelConfirmationModal({
               <p className="text-xs text-gray-500 mb-1">{currentLang === 'pl' ? 'Dostęp do:' : 'Access until:'}</p>
               <p className="text-white font-medium">{formattedDate}</p>
               <p className="text-xs text-gray-400 mt-1">
-                {currentLang === 'pl' ? 'Twoja subskrypcja pozostanie aktywna do końca okresu rozliczeniowego. Po tej dacie konto zostanie przełączone na wersję Demo.' : 'Your subscription will remain active until the end of the billing period. After this date, your account will be switched to Demo version.'}
+                {currentLang === 'pl' ? 'Twoja subskrypcja pozostanie aktywna do końca okresu rozliczeniowego. Po tej dacie konto zostanie przełączone na wersję Darmową' : 'Your subscription will remain active until the end of the billing period. After this date, your account will be switched to Demo version.'}
               </p>
             </div>
           )}
         </div>
         <div className="flex flex-col sm:flex-row gap-3">
           <button onClick={onClose} disabled={isLoading} className="flex-1 py-3 px-4 bg-gradient-to-br from-violet-500 to-fuchsia-500 hover:from-violet-600 hover:to-fuchsia-600 text-white font-semibold rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer">
-            {isFreeVer ? (currentLang === 'pl' ? 'Zachowuję Okres Próbny' : 'Continue Trial') : (currentLang === 'pl' ? 'Zachowaj subskrypcję' : 'Keep subscription')}
+            {isFreeVer ? (currentLang === 'pl' ? 'Zachowuję Okres Próbny' : 'Continue Trial') : (currentLang === 'pl' ? 'Utrzymaj Subskrypcję' : 'Keep subscription')}
           </button>
           <button onClick={onConfirm} disabled={isLoading} className="flex-1 py-3 px-4 bg-transparent border border-red-500/30 hover:bg-red-500/10 text-red-400 hover:text-red-300 font-medium rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center cursor-pointer">
-            {isLoading ? (<><Loader2 className="animate-spin w-4 h-4 mr-2" />{currentLang === 'pl' ? 'Anulowanie...' : 'Canceling...'}</>) : (isFreeVer ? (currentLang === 'pl' ? 'Rezygnuję z Okresu Próbnego' : 'Cancel Trial') : (currentLang === 'pl' ? 'Tak, anuluj' : 'Yes, cancel'))}
+            {isLoading ? (<><Loader2 className="animate-spin w-4 h-4 mr-2" />{currentLang === 'pl' ? 'Anulowanie...' : 'Canceling...'}</>) : (isFreeVer ? (currentLang === 'pl' ? 'Rezygnuję z Okresu Próbnego' : 'Cancel Trial') : (currentLang === 'pl' ? 'Anuluj Subskrypcję' : 'Cancel Subscription'))}
           </button>
         </div>
       </div>
