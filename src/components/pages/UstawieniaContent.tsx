@@ -96,6 +96,30 @@ interface BillingChoiceModalProps {
   t: typeof translations['pl'];
 }
 
+const handleManageBilling = async () => {
+  try {
+    // Automatyczne wykrycie języka
+    const detectedLang =
+      (typeof window !== 'undefined' && localStorage.getItem('language')) ||
+      (typeof navigator !== 'undefined' && navigator.language?.startsWith('pl') ? 'pl' : 'en') ||
+      'pl';
+
+    const response = await fetch('/api/stripe/create-portal-session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ locale: detectedLang }),
+    });
+
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error);
+
+    window.location.href = data.url;
+  } catch (error) {
+    console.error(error);
+    alert('Błąd - spróbuj ponownie');
+  }
+};
+
 function BillingChoiceModal({ isOpen, subscriptionData, onSave, t }: BillingChoiceModalProps) {
   const [selectedProfile, setSelectedProfile] = useState<'company' | 'personal'>('company');
   const [isSaving, setIsSaving] = useState(false);
@@ -2813,7 +2837,7 @@ export default function SettingsContent() {
         currentLang={currentLang}
         currentPlanRole={subscriptionData?.role || ''}
         subscriptionData={subscriptionData}
-        onManageBilling={() => console.log('Redirect to Stripe Billing History')}
+        onManageBilling={handleManageBilling}
       />
 
       {/* Modal Wymuszenia Wyboru Właściciela (Blocking) */}

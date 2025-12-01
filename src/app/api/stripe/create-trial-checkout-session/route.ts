@@ -1,4 +1,4 @@
-// app/api/stripe/create-trial-checkout-session/route.ts
+// src/app/api/stripe/create-trial-checkout-session/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { prisma } from '@/lib/prisma';
@@ -13,7 +13,8 @@ export async function POST(req: NextRequest) {
   try {
     // 1. Pobierz locale z body
     const body = await req.json();
-    const locale = body.locale || 'en'; // Domyślnie angielski
+    // Frontend wysyła 'pl' lub 'en'. Jeśli brak, fallback do 'en'.
+    const locale = body.locale === 'pl' ? 'pl' : 'en';
 
     // 2. Pobierz użytkownika z sesji
     const session = await getServerSession(authOptions);
@@ -46,23 +47,30 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 5. Utwórz lub pobierz Customer w Stripe
+    // 5. Utwórz lub pobierz Customer w Stripe ORAZ ZAKTUALIZUJ JĘZYK
     let customerId = user.stripeCustomerId;
 
     if (!customerId) {
+      // A. Tworzymy nowego klienta od razu z językiem
       const customer = await stripe.customers.create({
         email: user.email,
         name: `${user.firstName} ${user.lastName}`,
         metadata: {
           userId: user.id,
         },
+        preferred_locales: [locale], // <--- KLUCZOWE: Ustawiamy język przy tworzeniu
       });
       customerId = customer.id;
 
-      // Zapisz customerId w bazie
       await prisma.user.update({
         where: { id: user.id },
         data: { stripeCustomerId: customerId },
+      });
+    } else {
+      // B. KLUCZOWE: Jeśli klient już istnieje, MUSIMY zaktualizować jego język.
+      // Inaczej Stripe użyje starego ustawienia (np. angielskiego z momentu założenia konta).
+      await stripe.customers.update(customerId, {
+        preferred_locales: [locale],
       });
     }
 
@@ -82,7 +90,10 @@ export async function POST(req: NextRequest) {
         address: 'auto',
       },
       tax_id_collection: { enabled: true },
-      locale: locale === 'pl' ? 'pl' : 'en',
+
+      // To ustawia język interfejsu płatności (formularza)
+      locale: locale,
+
       line_items: [
         {
           price: priceId,

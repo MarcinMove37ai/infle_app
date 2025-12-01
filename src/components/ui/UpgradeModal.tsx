@@ -1,6 +1,6 @@
 // src/components/ui/UpgradeModal.tsx
 import React from 'react';
-import { X, Check, CreditCard, FileText, AlertTriangle, Loader2, LucideIcon, Smartphone } from 'lucide-react';
+import { X, Check, CreditCard, FileText, AlertTriangle, Loader2, LucideIcon, Smartphone, Download, ExternalLink } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface UpgradeModalProps {
@@ -138,7 +138,34 @@ export default function UpgradeModal({
 
   const [paymentMethod, setPaymentMethod] = React.useState<'subscription' | 'onetime'>('subscription');
 
+  // Billing History Modal
+  const [showBillingHistory, setShowBillingHistory] = React.useState(false);
+  const [billingHistory, setBillingHistory] = React.useState<any[]>([]);
+  const [isLoadingHistory, setIsLoadingHistory] = React.useState(false);
+
   const modalContainerRef = React.useRef<HTMLDivElement>(null);
+
+  // Funkcja pobierająca historię płatności
+  const fetchBillingHistory = React.useCallback(async () => {
+    setIsLoadingHistory(true);
+    try {
+      // 1. Pobierz język z localStorage (zgodnie z Twoim ustawieniem)
+      // Jeśli brak, domyślnie 'pl'
+      const storedLang = localStorage.getItem('appLanguage') || 'pl';
+
+      // 2. Przekaż parametr ?locale=... do backendu
+      const response = await fetch(`/api/stripe/history?locale=${storedLang}`);
+
+      if (response.ok) {
+        const data = await response.json();
+        setBillingHistory(data.invoices || []);
+      }
+    } catch (error) {
+      console.error('Failed to load billing history', error);
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  }, []);
 
   React.useEffect(() => {
     if (isOpen) {
@@ -292,18 +319,50 @@ export default function UpgradeModal({
 
       if (paymentMethod === 'onetime') {
         // --- ŚCIEŻKA JEDNORAZOWA (BLIK/PRZELEW) ---
-        url = '/api/stripe/create-one-time-checkout-session';
-        bodyData = {
-          plan: plan.apiPlanName,
-          locale: currentLang
-        };
+
+        // SCENARIUSZ 1: Upgrade One-Time -> One-Time (z rabatem za niewykorzystany czas)
+        if (isOneTimePaid) {
+            url = '/api/stripe/upgrade-onetime-to-onetime';
+            bodyData = {
+              targetPlan: plan.apiPlanName,
+              locale: currentLang
+            };
+        } else {
+            // SCENARIUSZ 2: Nowy zakup One-Time (np. z Demo)
+            url = '/api/stripe/create-one-time-checkout-session';
+            bodyData = {
+              plan: plan.apiPlanName,
+              locale: currentLang
+            };
+        }
+
       } else {
         // --- ŚCIEŻKA SUBSKRYPCYJNA (KARTA) ---
-        url = '/api/stripe/create-checkout';
-        bodyData = {
-          plan: plan.apiPlanName,
-          locale: currentLang
-        };
+
+        // 1. Sprawdzamy, czy to jest rola "free_ver" (okres próbny)
+        const isFreeVer = currentPlanRole === 'free_ver';
+
+        // 2. Definiujemy, kto ma "prawdziwą" aktywną subskrypcję do upgrade'u.
+        //    Warunek: Nie jest to płatność jednorazowa, nie jest to Demo ORAZ nie jest to free_ver.
+        const hasActiveSubscription = !isOneTimePaid && !isDemoUser && !isFreeVer;
+
+        // SCENARIUSZ A: Upgrade (One-Time -> Sub LUB Sub -> Sub)
+        // Wykonujemy tylko jeśli użytkownik ma już opłacony plan (ale nie trial/free_ver)
+        if (isOneTimePaid || hasActiveSubscription) {
+          url = '/api/stripe/upgrade-onetime-to-subscription';
+          bodyData = {
+            targetPlan: plan.apiPlanName,
+            locale: currentLang
+          };
+        } else {
+          // SCENARIUSZ B: Nowa subskrypcja od zera (Demo LUB FreeVer)
+          // Dla free_ver tworzymy nową sesję checkout, tak jak dla Demo
+          url = '/api/stripe/create-checkout';
+          bodyData = {
+            plan: plan.apiPlanName,
+            locale: currentLang
+          };
+        }
       }
 
       const response = await fetch(url, {
@@ -426,7 +485,9 @@ export default function UpgradeModal({
                     <>
                       <div>
                         <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-3">{t.currentPaymentMethod}</p>
+
                         {subscriptionData?.cardLast4 ? (
+                          /* SCENARIUSZ 1: JEST KARTA */
                           <div className="flex items-center space-x-4">
                             <div className="w-12 h-8 bg-gray-700 rounded flex items-center justify-center border border-gray-600">
                               <CreditCard className="w-5 h-5 text-gray-300" />
@@ -437,16 +498,34 @@ export default function UpgradeModal({
                               </p>
                             </div>
                           </div>
+                        ) : isOneTimePaid ? (
+                          /* SCENARIUSZ 2: NIE MA KARTY, ALE JEST PŁATNOŚĆ ONE-TIME (Neutralny komunikat) */
+                          <div className="flex items-center space-x-4">
+                             <div className="w-12 h-8 bg-gray-800/50 rounded flex items-center justify-center border border-gray-700 border-dashed">
+                               <CreditCard className="w-5 h-5 text-gray-600" />
+                             </div>
+                             <div>
+                               <p className="text-gray-400 text-sm font-medium">
+                                 {currentLang === 'pl' ? 'Karta nie została dodana' : 'Card not added'}
+                               </p>
+                             </div>
+                          </div>
                         ) : (
+                          /* SCENARIUSZ 3: BRAK KARTY I BRAK PŁATNOŚCI (Ostrzeżenie) */
                           <div className="flex items-center space-x-2 text-gray-400">
                             <AlertTriangle className="w-5 h-5" />
                             <span className="text-sm">{t.paymentMethodPlaceholder}</span>
                           </div>
                         )}
                       </div>
-                      {subscriptionData?.cardLast4 && (
+
+                      {/* PRZYCISK HISTORII: Wyświetl jeśli jest karta LUB płatność jednorazowa */}
+                      {(subscriptionData?.cardLast4 || isOneTimePaid) && (
                         <div className="w-full mt-4 pt-4 border-t border-gray-700/50 flex justify-end">
-                          <button onClick={onManageBilling} className="flex items-center px-1 py-1 text-gray-400 hover:text-white text-sm font-medium transition-colors cursor-pointer">
+                          <button onClick={() => {
+                            setShowBillingHistory(true);
+                            fetchBillingHistory();
+                          }} className="flex items-center px-1 py-1 text-gray-400 hover:text-white text-sm font-medium transition-colors cursor-pointer">
                             <FileText className="w-4 h-4 mr-2" />
                             {t.billingHistory.replace(/\s*\(.*?\)\s*/g, "")}
                             <span className="ml-1 text-gray-600">→</span>
@@ -780,6 +859,125 @@ export default function UpgradeModal({
         isLoading={isCanceling}
         currentPlanRole={currentPlanRole}
       />
+
+      {showBillingHistory && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setShowBillingHistory(false)} />
+
+          <div className="relative bg-gray-900 border border-gray-700 rounded-2xl shadow-2xl max-w-3xl w-full max-h-[80vh] overflow-hidden">
+            <div className="sticky top-0 bg-gray-900 border-b border-gray-700 px-6 py-4 flex items-center justify-between">
+              <h3 className="text-xl font-bold text-white flex items-center">
+                <FileText className="w-5 h-5 mr-2" />
+                {currentLang === 'pl' ? 'Historia płatności' : 'Billing History'}
+              </h3>
+              <button onClick={() => setShowBillingHistory(false)} className="text-gray-400 hover:text-white transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="overflow-y-auto max-h-[calc(80vh-80px)] p-6">
+              {isLoadingHistory ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="w-8 h-8 animate-spin text-violet-500" />
+                </div>
+              ) : billingHistory.length === 0 ? (
+                <div className="text-center py-12">
+                  <FileText className="w-16 h-16 mx-auto text-gray-600 mb-4" />
+                  <p className="text-gray-400">
+                    {currentLang === 'pl' ? 'Brak historii płatności' : 'No billing history'}
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {billingHistory.map((invoice) => {
+                    const date = new Date(invoice.date).toLocaleDateString(
+                      currentLang === 'pl' ? 'pl-PL' : 'en-US',
+                      { day: 'numeric', month: 'long', year: 'numeric' }
+                    );
+                    const amount = (invoice.amount / 100).toFixed(2);
+                    const isPaid = invoice.status === 'paid';
+
+                    return (
+                      <div
+                        key={invoice.id}
+                        className="bg-gray-800/50 border border-gray-700 rounded-xl p-4 hover:bg-gray-800/70 transition-all"
+                      >
+                        {/* ZMIANA: flex-col na mobile, sm:flex-row na desktop */}
+                        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 sm:gap-4">
+
+                          {/* LEWA STRONA (TREŚĆ) */}
+                          <div className="flex-1 w-full">
+                            <div className="flex items-center gap-2 mb-2">
+                              <span className="text-sm text-gray-400">{date}</span>
+                              <span
+                                className={`px-2 py-0.5 text-xs font-semibold rounded ${
+                                  isPaid
+                                    ? 'bg-green-500/10 text-green-400 border border-green-500/20'
+                                    : 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20'
+                                }`}
+                              >
+                                {isPaid
+                                  ? (currentLang === 'pl' ? 'Opłacona' : 'Paid')
+                                  : (currentLang === 'pl' ? 'Oczekująca' : 'Pending')
+                                }
+                              </span>
+                            </div>
+
+                            <p className="text-white font-medium mb-1">
+                              {amount} {invoice.currency}
+                            </p>
+
+                            {invoice.lines && invoice.lines.length > 0 && (
+                              <div className="text-sm text-gray-400">
+                                {invoice.lines.map((line: any, idx: number) => (
+                                  <div key={idx}>{line.description}</div>
+                                ))}
+                              </div>
+                            )}
+
+                            {invoice.number && (
+                              <p className="text-xs text-gray-500 mt-2">
+                                {currentLang === 'pl' ? 'Numer' : 'Number'}: {invoice.number}
+                              </p>
+                            )}
+                          </div>
+
+                          {/* PRAWA STRONA / DÓŁ (PRZYCISKI) */}
+                          {/* ZMIANA: Dodano border-t na mobile, paddingi i układ flex-row dla przycisków */}
+                          <div className="flex flex-row sm:flex-col gap-3 sm:gap-2 w-full sm:w-auto mt-2 sm:mt-0 pt-3 sm:pt-0 border-t border-gray-700 sm:border-0">
+                            {invoice.pdfUrl && (
+                              <a
+                                href={invoice.pdfUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex-1 sm:flex-none justify-center flex items-center gap-1.5 px-3 py-2 sm:py-1.5 bg-violet-500/10 hover:bg-violet-500/20 border border-violet-500/20 text-violet-400 text-sm font-medium rounded-lg transition-all cursor-pointer"
+                              >
+                                <Download className="w-4 h-4" />
+                                PDF
+                              </a>
+                            )}
+                            {invoice.hostedUrl && (
+                              <a
+                                href={invoice.hostedUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex-1 sm:flex-none justify-center flex items-center gap-1.5 px-3 py-2 sm:py-1.5 bg-gray-700/50 hover:bg-gray-700 border border-gray-600 text-gray-300 text-sm font-medium rounded-lg transition-all cursor-pointer"
+                              >
+                                <ExternalLink className="w-4 h-4" />
+                                {currentLang === 'pl' ? 'Pokaż' : 'View'}
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

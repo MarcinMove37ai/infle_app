@@ -1,3 +1,6 @@
+// src/app/api/webhooks/stripe/route.ts
+// ZAKTUALIZOWANA WERSJA Z PEŁNĄ OBSŁUGĄ UPGRADE'ÓW
+
 import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { prisma } from '@/lib/prisma';
@@ -32,21 +35,28 @@ export async function POST(req: NextRequest) {
 
   try {
     switch (event.type) {
-      case 'checkout.session.completed':
-        await handleCheckoutCompleted(event.data.object as Stripe.Checkout.Session);
+      case 'checkout.session.completed': {
+        const session = event.data.object as Stripe.Checkout.Session;
+        await handleCheckoutCompleted(session);
         break;
+      }
+
       case 'customer.subscription.updated':
         await handleSubscriptionUpdated(event.data.object as Stripe.Subscription);
         break;
+
       case 'customer.subscription.deleted':
         await handleSubscriptionDeleted(event.data.object as Stripe.Subscription);
         break;
+
       case 'invoice.payment_succeeded':
         await handleInvoicePaymentSucceeded(event.data.object as Stripe.Invoice);
         break;
+
       case 'invoice.payment_failed':
         await handleInvoicePaymentFailed(event.data.object as Stripe.Invoice);
         break;
+
       default:
         console.log(`Unhandled event type: ${event.type}`);
     }
@@ -63,33 +73,39 @@ export async function POST(req: NextRequest) {
 
 async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   const userId = session.metadata?.userId;
-  // Pobieramy nazwę planu z metadanych (np. 'rookie', 'creator', 'unlimited')
   const planName = session.metadata?.planName;
+  const isUpgradeFlow = session.metadata?.upgradeType === 'onetime_to_subscription' ||
+                        session.metadata?.upgradeType === 'subscription_upgrade';
+
+  console.log('[Webhook] checkout.session.completed:', {
+    userId,
+    planName,
+    upgradeType: session.metadata?.upgradeType,
+    mode: session.mode,
+  });
 
   if (!userId) {
-    console.error('No userId in session metadata');
+    console.error('[Webhook] No userId in session metadata');
     return;
   }
 
   const userExists = await prisma.user.findUnique({
     where: { id: userId },
-    select: { id: true }
+    select: { id: true, role: true }
   });
 
   if (!userExists) {
-    console.error('User not found in DB');
+    console.error('[Webhook] User not found in DB');
     return;
   }
 
-  // --- LOGIKA TRYBU ---
   let stripeSubscriptionId: string | null = null;
   let subscriptionStatus = 'active';
-
-  // Domyślna rola to 'rookie', chyba że w metadanych jest inna poprawna rola
   let role = 'rookie';
   const validRoles = ['rookie', 'creator', 'unlimited'];
+
   if (planName && validRoles.includes(planName)) {
-      role = planName;
+    role = planName;
   }
 
   let nextBillingDate: Date;
@@ -100,11 +116,16 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     stripeSubscriptionId = subscription.id;
     subscriptionStatus = subscription.status;
 
-    // Jeśli status to 'trialing', nadpisujemy rolę na 'free_ver' (Trial),
-    // CHYBA ŻE to plan wyższy niż Rookie (Creator/Unlimited nie mają triala w naszej logice, ale na wszelki wypadek)
-    // W Twoim przypadku Creator/Unlimited idą bez triala, więc status będzie 'active'.
-    if (subscription.status === 'trialing') {
+    // KLUCZOWA LOGIKA DLA UPGRADE'ÓW
+    if (isUpgradeFlow) {
+      // Upgrade flow - użytkownik płaci dopłatę, więc od razu aktywny
+      subscriptionStatus = 'active';
+      console.log(`[Webhook] Upgrade flow detected. Status: active, Role: ${role}`);
+    } else {
+      // Standardowy trial dla nowych użytkowników
+      if (subscription.status === 'trialing') {
         role = 'free_ver';
+      }
     }
 
     paymentMethodId = subscription.default_payment_method as string;
@@ -112,51 +133,44 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     nextBillingDate = timestamp ? new Date(timestamp * 1000) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
   } else if (session.mode === 'payment') {
-    // Płatność jednorazowa (One-Time)
+    // Płatność jednorazowa (One-Time) - BLIK
     stripeSubscriptionId = null;
     subscriptionStatus = 'one_time_paid';
 
-    // Rola zostaje taka, jak ustaliliśmy na podstawie planName (np. 'creator')
-
     const now = new Date();
-    nextBillingDate = new Date(now.setMonth(now.getMonth() + 1)); // Dostęp na 1 miesiąc
+    nextBillingDate = new Date(now.setMonth(now.getMonth() + 1));
     paymentMethodId = null;
 
-    // Dla płatności jednorazowych musimy pobrać PaymentIntent, aby dostać ID metody płatności
     if (session.payment_intent) {
       try {
         const pi = await stripe.paymentIntents.retrieve(session.payment_intent as string);
         paymentMethodId = pi.payment_method as string;
       } catch (e) {
-        console.error('Error fetching payment intent:', e);
+        console.error('[Webhook] Error fetching payment intent:', e);
       }
     }
   } else {
     return;
   }
 
-  // --- LOGIKA DANYCH BILLINGOWYCH (ZACHOWANA) ---
-
-  // 1. Pobieramy dane bezpośrednio z obiektu PaymentMethod
+  // Pobierz dane karty i billing
   let cardholderName: string | null = null;
   let cardLast4 = null;
   let cardBrand = null;
 
   if (paymentMethodId) {
-      try {
-        const pm = await stripe.paymentMethods.retrieve(paymentMethodId);
-        cardholderName = pm.billing_details.name; // <-- Prawdziwe imię z karty
-        cardLast4 = pm.card?.last4;
-        cardBrand = pm.card?.brand;
-      } catch (e) {
-        console.error('Error fetching payment method:', e);
-      }
+    try {
+      const pm = await stripe.paymentMethods.retrieve(paymentMethodId);
+      cardholderName = pm.billing_details.name;
+      cardLast4 = pm.card?.last4;
+      cardBrand = pm.card?.brand;
+    } catch (e) {
+      console.error('[Webhook] Error fetching payment method:', e);
+    }
   }
 
-  // 2. Ustalamy Billing Name (Imie i Nazwisko)
   const billingName = cardholderName || session.customer_details?.name || 'N/A';
 
-  // 3. Dane Firmy (NIP i Nazwa)
   let taxId: string | null = null;
   let taxIdType: string | null = null;
   let companyName: string | null = null;
@@ -164,22 +178,22 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   const sessionTaxIds = session.customer_details?.tax_ids;
 
   if (sessionTaxIds && sessionTaxIds.length > 0) {
-      taxId = sessionTaxIds[0].value || null;
-      taxIdType = sessionTaxIds[0].type || null;
+    taxId = sessionTaxIds[0].value || null;
+    taxIdType = sessionTaxIds[0].type || null;
   } else {
-      try {
-        const taxIdsList = await stripe.customers.listTaxIds(session.customer as string);
-        if (taxIdsList.data.length > 0) {
-          taxId = taxIdsList.data[0].value;
-          taxIdType = taxIdsList.data[0].type;
-        }
-      } catch (e) {
-        console.error('Error fetching tax IDs:', e);
+    try {
+      const taxIdsList = await stripe.customers.listTaxIds(session.customer as string);
+      if (taxIdsList.data.length > 0) {
+        taxId = taxIdsList.data[0].value;
+        taxIdType = taxIdsList.data[0].type;
       }
+    } catch (e) {
+      console.error('[Webhook] Error fetching tax IDs:', e);
+    }
   }
 
   if (taxId) {
-      companyName = session.customer_details?.name || null;
+    companyName = session.customer_details?.name || null;
   }
 
   const billingAddress = session.customer_details?.address;
@@ -190,10 +204,9 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
       stripeCustomerId: session.customer as string,
       stripeSubscriptionId: stripeSubscriptionId,
       subscriptionStatus: subscriptionStatus,
-      role: role as Role, // <-- TUTAJ WPADA 'creator', 'unlimited' LUB 'rookie'
+      role: role as Role,
       paymentVerifiedAt: new Date(),
       nextBillingDate: nextBillingDate,
-
       billingName: billingName,
       companyName: companyName,
       billingAddress: billingAddress as any,
@@ -204,60 +217,161 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     },
   });
 
-  console.log(`✅ [${session.mode}] User updated to role: ${role}. Billing: "${billingName}", Company: "${companyName}"`);
+  console.log(`✅ [Webhook][${session.mode}] User ${userId} updated to role: ${role}, Status: ${subscriptionStatus}`);
 }
 
 async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
-  // UWAGA: Przy update subskrypcji (np. zmiana planu w Stripe Portal)
-  // warto byłoby też zaktualizować rolę, ale to wymagałoby mapowania Product ID -> Role.
-  // Na razie aktualizujemy tylko status i datę.
+  console.log('[Webhook] customer.subscription.updated:', {
+    subscriptionId: subscription.id,
+    status: subscription.status,
+  });
 
-  await prisma.user.updateMany({
+  // Pobierz użytkownika z bazy
+  const user = await prisma.user.findFirst({
     where: { stripeSubscriptionId: subscription.id },
+    select: { id: true, role: true, subscriptionStatus: true }
+  });
+
+  if (!user) {
+    console.log('[Webhook] No user found for subscription:', subscription.id);
+    return;
+  }
+
+  // Sprawdź czy to upgrade planu (zmianaPrice ID)
+  const subscriptionItems = subscription.items.data;
+  let newRole: string | null = null;
+
+  if (subscriptionItems.length > 0) {
+    const priceId = subscriptionItems[0].price.id;
+
+    // Mapowanie Price ID na role
+    const priceToRoleMap: Record<string, string> = {
+      [process.env.STRIPE_ROOKIE_PRICE_ID_PLN || '']: 'rookie',
+      [process.env.STRIPE_ROOKIE_PRICE_ID_USD || '']: 'rookie',
+      [process.env.STRIPE_CREATOR_PRICE_ID_PLN || '']: 'creator',
+      [process.env.STRIPE_CREATOR_PRICE_ID_USD || '']: 'creator',
+      [process.env.STRIPE_UNLIMITED_PRICE_ID_PLN || '']: 'unlimited',
+      [process.env.STRIPE_UNLIMITED_PRICE_ID_USD || '']: 'unlimited',
+    };
+
+    newRole = priceToRoleMap[priceId] || null;
+
+    if (newRole && newRole !== user.role) {
+      console.log(`[Webhook] Plan upgrade detected: ${user.role} → ${newRole}`);
+    }
+  }
+
+  // Określ nowy status i rolę
+  let updatedStatus = subscription.status;
+  let updatedRole = newRole || user.role;
+
+  // Jeśli status zmienił się z trialing na active
+  if (user.subscriptionStatus === 'trialing' && subscription.status === 'active') {
+    // Jeśli był free_ver (trial), przejdź na właściwą rolę
+    if (user.role === 'free_ver' && newRole) {
+      updatedRole = newRole;
+    }
+    console.log(`[Webhook] Trial ended, activating subscription. Role: ${updatedRole}`);
+  }
+
+  // Aktualizuj użytkownika
+  await prisma.user.update({
+    where: { id: user.id },
     data: {
-      subscriptionStatus: subscription.status,
+      subscriptionStatus: updatedStatus,
+      role: updatedRole as Role,
       nextBillingDate: new Date((subscription as any).current_period_end * 1000),
     },
   });
-  console.log(`✅ Subscription updated: ${subscription.id}`);
+
+  console.log(`✅ [Webhook] Subscription ${subscription.id} updated. Status: ${updatedStatus}, Role: ${updatedRole}`);
 }
 
 async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
+  console.log('[Webhook] customer.subscription.deleted:', subscription.id);
+
   await prisma.user.updateMany({
     where: { stripeSubscriptionId: subscription.id },
     data: {
       subscriptionStatus: 'canceled',
-      role: 'free',
+      role: 'demo', // Zmienione z 'free' na 'demo'
     },
   });
-  console.log(`✅ Subscription canceled: ${subscription.id}`);
+
+  console.log(`✅ [Webhook] Subscription ${subscription.id} canceled, user moved to demo`);
 }
 
 async function handleInvoicePaymentSucceeded(invoice: Stripe.Invoice) {
-  if (!(invoice as any).subscription) return;
+  if (!(invoice as any).subscription) {
+    console.log('[Webhook] invoice.payment_succeeded: No subscription attached');
+    return;
+  }
+
   const subscription = await stripe.subscriptions.retrieve((invoice as any).subscription as string) as any;
 
-  // Tutaj również: Jeśli chcesz obsługiwać zmianę planu przez fakturę,
-  // musiałbyś pobrać Product ID z subskrypcji i zmapować na rolę.
-  // Obecnie zostawiamy rolę bez zmian (lub ustawiamy 'active'),
-  // zakładając że rola została ustawiona przy Checkout.
+  console.log('[Webhook] invoice.payment_succeeded:', {
+    invoiceId: invoice.id,
+    subscriptionId: subscription.id,
+    status: subscription.status,
+  });
 
-  await prisma.user.updateMany({
+  // Pobierz użytkownika
+  const user = await prisma.user.findFirst({
     where: { stripeSubscriptionId: subscription.id },
+    select: { id: true, role: true }
+  });
+
+  if (!user) {
+    console.log('[Webhook] No user found for subscription:', subscription.id);
+    return;
+  }
+
+  // Sprawdź czy zmienił się plan (Price ID)
+  let newRole: string | null = null;
+  const subscriptionItems = subscription.items.data;
+
+  if (subscriptionItems.length > 0) {
+    const priceId = subscriptionItems[0].price.id;
+
+    const priceToRoleMap: Record<string, string> = {
+      [process.env.STRIPE_ROOKIE_PRICE_ID_PLN || '']: 'rookie',
+      [process.env.STRIPE_ROOKIE_PRICE_ID_USD || '']: 'rookie',
+      [process.env.STRIPE_CREATOR_PRICE_ID_PLN || '']: 'creator',
+      [process.env.STRIPE_CREATOR_PRICE_ID_USD || '']: 'creator',
+      [process.env.STRIPE_UNLIMITED_PRICE_ID_PLN || '']: 'unlimited',
+      [process.env.STRIPE_UNLIMITED_PRICE_ID_USD || '']: 'unlimited',
+    };
+
+    newRole = priceToRoleMap[priceId] || null;
+  }
+
+  await prisma.user.update({
+    where: { id: user.id },
     data: {
       subscriptionStatus: 'active',
-      // role: 'rookie', // <-- USUNIĘTO sztywne ustawianie roli, aby nie nadpisać Creatora
+      role: (newRole || user.role) as Role,
       nextBillingDate: new Date(subscription.current_period_end * 1000),
     },
   });
-  console.log(`✅ Payment succeeded for subscription: ${subscription.id}`);
+
+  console.log(`✅ [Webhook] Payment succeeded for subscription ${subscription.id}. Role: ${newRole || user.role}`);
 }
 
 async function handleInvoicePaymentFailed(invoice: Stripe.Invoice) {
-  if (!(invoice as any).subscription) return;
+  if (!(invoice as any).subscription) {
+    console.log('[Webhook] invoice.payment_failed: No subscription attached');
+    return;
+  }
+
+  console.log('[Webhook] invoice.payment_failed:', {
+    invoiceId: invoice.id,
+    subscriptionId: (invoice as any).subscription,
+  });
+
   await prisma.user.updateMany({
     where: { stripeSubscriptionId: (invoice as any).subscription as string },
     data: { subscriptionStatus: 'past_due' },
   });
-  console.log(`⚠️ Payment failed for subscription: ${(invoice as any).subscription}`);
+
+  console.log(`⚠️ [Webhook] Payment failed for subscription: ${(invoice as any).subscription}`);
 }

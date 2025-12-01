@@ -40,67 +40,84 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    // --- 1. POBIERANIE CENY JEDNORAZOWEJ (BLIK) ZE STRIPE ---
-    let oneTimePriceFormatted = '29,00 zł'; // Wartość domyślna (fallback)
+    // --- SEKCJA: USTALANIE KWOT (ZMODYFIKOWANA) ---
+
+    // 1. Pobierz parametr locale z URL (frontend musi wysyłać ?locale=pl lub en)
+    const { searchParams } = new URL(req.url);
+    const locale = searchParams.get('locale') || 'pl';
+
+    // 2. Definicja zmiennych wyjściowych
+    let nextBillingAmount = '---';
+    let oneTimePriceFormatted = '29,00 zł'; // Domyślna cena BLIK do wyświetlenia w opcjach
+
+    // 3. Pomocnicza funkcja do formatowania waluty
+    const formatCurrency = (amount: number, currency: string) => {
+      return new Intl.NumberFormat(locale === 'pl' ? 'pl-PL' : 'en-US', {
+        style: 'currency',
+        currency: currency.toUpperCase(),
+        minimumFractionDigits: amount % 1 === 0 ? 0 : 2,
+        maximumFractionDigits: 2,
+      }).format(amount);
+    };
+
+    // 4. Pobierz ogólną cenę BLIK (dla przycisku "Kup jednorazowo") - niezależnie od roli
     try {
       if (process.env.STRIPE_ROOKIE_PRICE_ID_BLIK) {
-        const price = await stripe.prices.retrieve(process.env.STRIPE_ROOKIE_PRICE_ID_BLIK);
-        const amount = (price.unit_amount || 0) / 100;
-        oneTimePriceFormatted = new Intl.NumberFormat('pl-PL', {
-            style: 'currency',
-            currency: price.currency.toUpperCase()
-        }).format(amount);
+        const blikPriceObj = await stripe.prices.retrieve(process.env.STRIPE_ROOKIE_PRICE_ID_BLIK);
+        oneTimePriceFormatted = formatCurrency((blikPriceObj.unit_amount || 0) / 100, blikPriceObj.currency);
       }
     } catch (e) {
-      console.error('Error fetching BLIK price from Stripe:', e);
+      console.error('Error fetching generic BLIK price:', e);
     }
 
-    // --- 2. USTALANIE KWOTY NASTĘPNEJ PŁATNOŚCI (POPRAWIONE) ---
-    // Zamiast zgadywać z faktur pro-forma, pobieramy cenę przypisaną do subskrypcji.
+    // 5. Ustal ID ceny dla BIEŻĄCEGO planu użytkownika (do wyświetlenia "Wartość/Cena")
+    const role = user.role?.toLowerCase();
+    const isOneTime = user.subscriptionStatus === 'one_time_paid';
+    let currentPlanPriceId = '';
 
-    let nextBillingAmount = '';
+    // Logika mapowania Rola + Język + Status -> Zmienna środowiskowa
+    if (locale === 'pl') {
+      if (role === 'rookie' || role === 'free_ver') {
+        currentPlanPriceId = isOneTime
+          ? process.env.STRIPE_ROOKIE_PRICE_ID_BLIK!
+          : process.env.STRIPE_ROOKIE_PRICE_ID_PLN!;
+      } else if (role === 'creator') {
+        currentPlanPriceId = isOneTime
+          ? process.env.STRIPE_CREATOR_PRICE_ID_BLIK!
+          : process.env.STRIPE_CREATOR_PRICE_ID_PLN!;
+      } else if (role === 'unlimited') {
+        currentPlanPriceId = isOneTime
+          ? process.env.STRIPE_UNLIMITED_PRICE_ID_BLIK!
+          : process.env.STRIPE_UNLIMITED_PRICE_ID_PLN!;
+      }
+    } else {
+      // Logika dla EN / USD (zakładamy brak one-time dla USD)
+      if (role === 'rookie') currentPlanPriceId = process.env.STRIPE_ROOKIE_PRICE_ID_USD!;
+      else if (role === 'creator') currentPlanPriceId = process.env.STRIPE_CREATOR_PRICE_ID_USD!;
+      else if (role === 'unlimited') currentPlanPriceId = process.env.STRIPE_UNLIMITED_PRICE_ID_USD!;
+    }
 
-    // A. Subskrypcje (Aktywne lub Trial)
-    if (user.stripeSubscriptionId && (user.subscriptionStatus === 'active' || user.subscriptionStatus === 'trialing')) {
-       try {
-          // Pobieramy obiekt subskrypcji, aby dostać się do items -> price
-          const subscription = await stripe.subscriptions.retrieve(user.stripeSubscriptionId);
-
-          if (subscription.items && subscription.items.data.length > 0) {
-             // To jest obiekt ceny, który jest faktycznie podpięty pod subskrypcję
-             const priceObject = subscription.items.data[0].price;
-
-             // Kwota w bazie Stripe jest w groszach (np. 2900), dzielimy przez 100
-             const amount = (priceObject.unit_amount || 0) / 100;
-             const currency = priceObject.currency.toUpperCase();
-
-             nextBillingAmount = new Intl.NumberFormat('pl-PL', {
-                style: 'currency',
-                currency: currency
-             }).format(amount);
-          } else {
-             // Fallback, jeśli struktura subskrypcji jest nietypowa
+    // 6. Pobierz i sformatuj cenę bieżącego planu
+    if (role === 'free' || role === 'demo') {
+      nextBillingAmount = locale === 'pl' ? '0,00 zł' : '$0.00';
+    } else if (currentPlanPriceId) {
+      try {
+        const priceObj = await stripe.prices.retrieve(currentPlanPriceId);
+        nextBillingAmount = formatCurrency((priceObj.unit_amount || 0) / 100, priceObj.currency);
+      } catch (error) {
+        console.error(`Error fetching price for role ${role} (ID: ${currentPlanPriceId}):`, error);
+        // Fallback w razie awarii Stripe lub błędnego ID w .env
+        if (locale === 'pl') {
+            if (role === 'creator') nextBillingAmount = '87 zł';
+            else if (role === 'unlimited') nextBillingAmount = '299 zł';
+            else nextBillingAmount = '29 zł';
+        } else {
              nextBillingAmount = '---';
-          }
-
-       } catch (error) {
-          console.error('Error fetching subscription price:', error);
-
-          // Ostateczny fallback na podstawie roli (Hardcoded values), gdyby API Stripe padło
-          if (user.role === 'creator') nextBillingAmount = '87,00 zł';
-          else if (user.role === 'unlimited') nextBillingAmount = '299,00 zł';
-          else nextBillingAmount = '29,00 zł'; // Domyślnie dla Rookie
-       }
-    }
-    // B. Płatność jednorazowa (BLIK) - tutaj cena jest stała
-    else if (user.subscriptionStatus === 'one_time_paid') {
-      nextBillingAmount = oneTimePriceFormatted;
-    }
-    // C. Brak płatnego planu (Free, Demo, brak subskrypcji)
-    else {
-      nextBillingAmount = '0,00 zł';
+        }
+      }
     }
 
+    // --- KONIEC SEKCJI USTALANIA KWOT ---
 
     // Mapowanie nazw planów
     const planMapping: Record<string, { name: string; description: string }> = {
@@ -109,7 +126,7 @@ export async function GET(req: NextRequest) {
       rookie: { name: 'planRookie', description: 'planDescriptionRookie' },
       creator: { name: 'planCreator', description: 'planDescriptionCreator' },
       unlimited: { name: 'planUnlimited', description: 'planDescriptionUnlimited' },
-      demo: { name: 'planFree', description: 'planDescriptionFree' } // POPRAWIONE: Używa nazw planu Free
+      demo: { name: 'planFree', description: 'planDescriptionFree' }
     };
 
     const planInfo = planMapping[user.role] || planMapping.free;
@@ -124,7 +141,7 @@ export async function GET(req: NextRequest) {
       upgradeRequired: user.role === 'free' || user.role === 'demo',
 
       nextBillingDate: user.nextBillingDate,
-      nextBillingAmount: nextBillingAmount,
+      nextBillingAmount: nextBillingAmount, // <--- Teraz pochodzi z logicznego mapowania env
       oneTimePrice: oneTimePriceFormatted,
 
       paymentVerifiedAt: user.paymentVerifiedAt,
