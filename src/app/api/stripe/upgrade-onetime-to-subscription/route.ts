@@ -70,10 +70,12 @@ export async function POST(req: NextRequest) {
       subscriptionStatus: user.subscriptionStatus,
     });
 
-    // 3. Walidacja - musi mieć one_time_paid LUB active
-    if (user.subscriptionStatus !== 'one_time_paid' && user.subscriptionStatus !== 'active') {
+    // 3. Walidacja - musi mieć one_time_paid, active LUB canceled (w okresie wypowiedzenia)
+    const allowedStatuses = ['one_time_paid', 'active', 'canceled'];
+
+    if (!user.subscriptionStatus || !allowedStatuses.includes(user.subscriptionStatus)) {
       return NextResponse.json(
-        { error: 'User must have one-time payment or active subscription' },
+        { error: 'User must have one-time payment or active/canceled subscription' },
         { status: 400 }
       );
     }

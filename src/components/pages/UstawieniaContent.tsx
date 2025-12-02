@@ -6,7 +6,7 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import {
   User, Key, Eye, EyeOff, Save, Trash2, CheckCircle, AlertCircle, Loader2,
   Palette, Type, ChevronDown, Check, Image as ImageIcon, X, AlertTriangle, FolderOpen,
-  Shield, CreditCard, ShieldCheck, Smartphone
+  Shield, CreditCard, ShieldCheck, Smartphone, RotateCcw // <--- DODANO RotateCcw
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import Link from 'next/link';
@@ -834,6 +834,26 @@ function SubscriptionCard({
   onOpenVerificationModal
 }: SubscriptionCardProps) {
   const [isRedirectingToStripe, setIsRedirectingToStripe] = React.useState(false);
+  const [isResuming, setIsResuming] = React.useState(false); // <--- NOWY STAN
+
+  // Funkcja wznawiania (analogiczna do tej w modalu)
+  const handleResumeSubscription = async () => {
+    setIsResuming(true);
+    try {
+      const response = await fetch('/api/subscription/resume', { method: 'POST' });
+      if (response.ok) {
+        window.location.reload();
+      } else {
+        const data = await response.json();
+        alert(data.error || 'Błąd podczas wznawiania.');
+      }
+    } catch (error) {
+      console.error('Error resuming subscription:', error);
+      alert('Błąd połączenia z serwerem.');
+    } finally {
+      setIsResuming(false);
+    }
+  };
 
   // Helper function to translate plan names and descriptions
   const translatePlan = (key: string) => {
@@ -935,12 +955,26 @@ function SubscriptionCard({
     if (subscriptionData?.subscriptionStatus === 'one_time_paid') {
         paymentTypeLabel = lang === 'pl' ? 'Płatność jednorazowa' : 'One-time payment';
         paymentTypeClass = 'bg-purple-100 text-purple-700 border border-purple-200';
+    } else if (subscriptionData?.subscriptionStatus === 'canceled') {
+        paymentTypeLabel = lang === 'pl' ? 'Subskrypcja anulowana' : 'Subscription Canceled';
+        paymentTypeClass = 'bg-red-100 text-red-700 border border-red-200';
     } else if (subscriptionData?.subscriptionStatus === 'active' || subscriptionData?.subscriptionStatus === 'trialing') {
         // Pokazujemy "Subskrypcja" tylko dla płatnych ról (nie Free/Demo)
         if (!isFree && !isDemo) {
             paymentTypeLabel = lang === 'pl' ? 'Subskrypcja' : 'Subscription';
             paymentTypeClass = 'bg-blue-100 text-blue-700 border border-blue-200';
         }
+    }
+
+    // --- NOWE: Logika etykiety daty (Active / Canceled / One-time) ---
+    let dateLabel = t.renewsAt; // Domyślnie "Plan aktywny do:" (fallback)
+
+    if (subscriptionData?.subscriptionStatus === 'canceled') {
+        dateLabel = lang === 'pl' ? 'Data wygaśnięcia:' : 'Expiration date:';
+    } else if (subscriptionData?.subscriptionStatus === 'one_time_paid') {
+        dateLabel = lang === 'pl' ? 'Konieczne odnowienie:' : 'Renewal required:';
+    } else if (subscriptionData?.subscriptionStatus === 'active' || subscriptionData?.subscriptionStatus === 'trialing') {
+        dateLabel = lang === 'pl' ? 'Kolejne odnowienie:' : 'Next renewal:';
     }
 
     return (
@@ -959,7 +993,8 @@ function SubscriptionCard({
                 <div className={hasRightColumn ? "sm:col-span-1" : "w-full"}>
 
                    {/* BADGE CONTAINER */}
-                   <div className="flex flex-wrap gap-2 mb-3">
+                   {/* ZMIANA: flex-col-reverse wrzuca status (ostatni element w DOM) na górę wizualnie na mobile */}
+                   <div className="flex flex-col-reverse items-start gap-2 mb-3 sm:flex-row sm:items-center sm:flex-wrap">
                        <span className="inline-block px-2 py-1 bg-emerald-100 text-emerald-700 border border-emerald-200 text-xs font-bold rounded-md uppercase tracking-wider">
                          {t.currentPlan}
                        </span>
@@ -1027,10 +1062,35 @@ function SubscriptionCard({
           {/* DÓŁ: Data i Cena - Widoczne dla Trial i Paid (Ukryte dla Demo i Free) */}
           {!isDemo && !isFree && (
             <div className="flex justify-between items-end mt-2 pt-2 border-t border-gray-200">
-               <div className="text-sm text-gray-500 font-medium">
-                 {/* ZMIANA 2: Dodano whitespace-nowrap dla daty */}
-                 {t.renewsAt} <span className="text-gray-900 whitespace-nowrap">{renewsDate}</span>
+               {/* LEWA STRONA: Data + Opcja Wznowienia */}
+               <div className="flex flex-col items-start">
+                 <div className="text-sm text-gray-500 font-medium">
+                   {dateLabel} <span className="text-gray-900 whitespace-nowrap font-semibold ml-1">{renewsDate}</span>
+                 </div>
+
+                 {/* --- PRZYCISK WZNÓW (Z Borderem i Odstępem) --- */}
+                 {subscriptionData?.subscriptionStatus === 'canceled' && (
+                    <div className="mt-2 pt-5 border-t border-gray-200 w-full">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleResumeSubscription();
+                          }}
+                          disabled={isResuming}
+                          className="group flex items-center gap-2 text-xs font-bold text-emerald-600 hover:text-emerald-700 transition-colors uppercase tracking-wider cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {isResuming ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : (
+                            <RotateCcw className="w-3 h-3 group-hover:-rotate-90 transition-transform duration-300" />
+                          )}
+                          <span>{lang === 'pl' ? 'Wznów subskrypcję' : 'Resume subscription'}</span>
+                        </button>
+                    </div>
+                 )}
                </div>
+
+               {/* PRAWA STRONA: Cena */}
                <div className="text-right">
                   <p className="text-xs text-gray-500 mb-1 font-medium uppercase tracking-wide">{valueLabel}</p>
                   <p className="text-xl sm:text-2xl font-bold text-gray-900 leading-none">{nextAmount}</p>

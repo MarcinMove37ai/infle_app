@@ -1,6 +1,6 @@
 // src/components/ui/UpgradeModal.tsx
 import React from 'react';
-import { X, Check, CreditCard, FileText, AlertTriangle, Loader2, LucideIcon, Smartphone, Download, ExternalLink } from 'lucide-react';
+import { X, Check, CreditCard, FileText, AlertTriangle, RotateCcw,Loader2, LucideIcon, Smartphone, Download, ExternalLink } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface UpgradeModalProps {
@@ -116,6 +116,163 @@ function CancelConfirmationModal({
   );
 }
 
+// --- NOWY KOMPONENT: Modal Kontaktowy White Label (Stylizowany na page.tsx) ---
+function WhiteLabelContactModal({
+  isOpen,
+  onClose,
+  currentLang
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  currentLang: 'pl' | 'en';
+}) {
+  const [isSubmitting, setIsSubmitting] = React.useState(false);
+  const [isSuccess, setIsSuccess] = React.useState(false);
+
+  // Reset stanu po zamknięciu
+  React.useEffect(() => {
+    if (isOpen) {
+      setIsSuccess(false);
+      setIsSubmitting(false);
+    }
+  }, [isOpen]);
+
+  if (!isOpen) return null;
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+
+    // Symulacja wysyłki (Tu można podpiąć realne API)
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+
+    setIsSubmitting(false);
+    setIsSuccess(true);
+
+    // Automatyczne zamknięcie po sukcesie
+    setTimeout(() => {
+      onClose();
+    }, 2500);
+  };
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
+
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 10 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95, y: 10 }}
+        transition={{ duration: 0.2 }}
+        className="relative bg-gray-900 border border-gray-700 rounded-2xl shadow-2xl max-w-md w-full p-8 overflow-hidden"
+      >
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 text-gray-400 hover:text-white transition-colors hover:bg-white/10 rounded-full p-1"
+        >
+          <X className="w-5 h-5" />
+        </button>
+
+        {isSuccess ? (
+          <div className="flex flex-col items-center justify-center py-10 text-center animate-in fade-in zoom-in">
+            <div className="w-16 h-16 bg-emerald-500/20 rounded-full flex items-center justify-center mb-4 text-emerald-400">
+              <Check className="w-8 h-8" />
+            </div>
+            <h3 className="text-2xl font-bold text-white mb-2">
+              {currentLang === 'pl' ? 'Wiadomość wysłana!' : 'Message Sent!'}
+            </h3>
+            <p className="text-gray-400">
+              {currentLang === 'pl'
+                ? 'Dziękujemy. Skontaktujemy się z Tobą wkrótce.'
+                : 'Thank you. We will contact you shortly.'}
+            </p>
+          </div>
+        ) : (
+          <>
+            <div className="text-center mb-6">
+              <h2 className="text-2xl font-bold text-white mb-2">
+                {currentLang === 'pl' ? 'White Label' : 'White Label Inquiry'}
+              </h2>
+              <p className="text-sm text-gray-400">
+                {currentLang === 'pl'
+                  ? 'Zostaw namiar. Porozmawiajmy o Twojej własnej aplikacji.'
+                  : 'Leave your details. Let\'s talk about your own app.'}
+              </p>
+            </div>
+
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-400 uppercase tracking-wider mb-1.5 ml-1">
+                  {currentLang === 'pl' ? 'Temat' : 'Subject'}
+                </label>
+                <input
+                  type="text"
+                  value={currentLang === 'pl' ? 'Zainteresowanie White Label' : 'White Label Interest'}
+                  readOnly
+                  className="w-full bg-gray-800/50 border border-gray-700 rounded-xl py-2.5 px-4 text-gray-500 focus:outline-none cursor-not-allowed text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-400 uppercase tracking-wider mb-1.5 ml-1">
+                  Email
+                </label>
+                <input
+                  type="email"
+                  required
+                  placeholder="name@company.com"
+                  className="w-full bg-gray-800 border border-gray-700 rounded-xl py-2.5 px-4 text-white placeholder-gray-500 focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500 transition-all text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-400 uppercase tracking-wider mb-1.5 ml-1">
+                  {currentLang === 'pl' ? 'Telefon' : 'Phone'}
+                </label>
+                <input
+                  type="tel"
+                  required
+                  placeholder="+48..."
+                  className="w-full bg-gray-800 border border-gray-700 rounded-xl py-2.5 px-4 text-white placeholder-gray-500 focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500 transition-all text-sm"
+                />
+              </div>
+
+              <div className="flex items-start space-x-3 pt-2">
+                <input
+                  id="wl-consent"
+                  type="checkbox"
+                  required
+                  className="h-4 w-4 mt-0.5 rounded border-gray-600 bg-gray-800 text-amber-500 focus:ring-amber-500/50 cursor-pointer"
+                />
+                <label htmlFor="wl-consent" className="text-xs text-gray-500 leading-relaxed cursor-pointer">
+                  {currentLang === 'pl'
+                    ? 'Wyrażam zgodę na kontakt w celu przedstawienia oferty współpracy.'
+                    : 'I agree to be contacted for the purpose of presenting a cooperation offer.'}
+                </label>
+              </div>
+
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="w-full py-3 px-4 mt-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-bold rounded-xl shadow-lg shadow-orange-500/20 transition-all hover:-translate-y-0.5 disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center"
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    {currentLang === 'pl' ? 'Wysyłanie...' : 'Sending...'}
+                  </>
+                ) : (
+                  currentLang === 'pl' ? 'Wyślij zapytanie' : 'Send Inquiry'
+                )}
+              </button>
+            </form>
+          </>
+        )}
+      </motion.div>
+    </div>
+  );
+}
+
 export default function UpgradeModal({
   isOpen,
   onClose,
@@ -126,7 +283,9 @@ export default function UpgradeModal({
   onManageBilling
 }: UpgradeModalProps) {
   const [showCancelConfirm, setShowCancelConfirm] = React.useState(false);
+  const [showContactModal, setShowContactModal] = React.useState(false);
   const [isCanceling, setIsCanceling] = React.useState(false);
+  const [isResuming, setIsResuming] = React.useState(false);
   const [isRedirecting, setIsRedirecting] = React.useState<string | null>(null);
 
   const [fetchedPrices, setFetchedPrices] = React.useState<Record<string, string> | null>(null);
@@ -382,19 +541,53 @@ export default function UpgradeModal({
     }
   };
 
+  const handleResumeSubscription = async () => {
+    setIsResuming(true);
+    try {
+      const response = await fetch('/api/subscription/resume', { method: 'POST' });
+
+      if (response.ok) {
+        window.location.reload(); // Odświeżamy, aby pobrać status 'active'
+      } else {
+        const data = await response.json();
+        alert(data.error || (currentLang === 'pl' ? 'Wystąpił błąd podczas wznawiania.' : 'An error occurred while resuming.'));
+      }
+    } catch (error) {
+      console.error('Error resuming subscription:', error);
+      alert(currentLang === 'pl' ? 'Błąd połączenia z serwerem.' : 'Server connection error.');
+    } finally {
+      setIsResuming(false);
+    }
+  };
+
   if (!isOpen) return null;
 
   let paymentTypeLabel = null;
   let paymentTypeClass = '';
 
+  // 1. Logika Badge'a (Status)
   if (subscriptionData?.subscriptionStatus === 'one_time_paid') {
       paymentTypeLabel = currentLang === 'pl' ? 'Płatność jednorazowa' : 'One-time payment';
       paymentTypeClass = 'bg-purple-500/20 text-purple-300 border border-purple-500/30';
+  } else if (subscriptionData?.subscriptionStatus === 'canceled') {
+      paymentTypeLabel = currentLang === 'pl' ? 'Subskrypcja anulowana' : 'Subscription Canceled';
+      paymentTypeClass = 'bg-red-500/20 text-red-300 border border-red-500/30';
   } else if (subscriptionData?.subscriptionStatus === 'active' || subscriptionData?.subscriptionStatus === 'trialing') {
       if (showPaymentManagement && !isDemoUser) {
           paymentTypeLabel = currentLang === 'pl' ? 'Subskrypcja' : 'Subscription';
           paymentTypeClass = 'bg-blue-500/20 text-blue-300 border border-blue-500/30';
       }
+  }
+
+  // 2. Logika etykiety daty (Data wygaśnięcia vs Odnowienia)
+  let dateLabel = t.renewsAt; // Fallback
+
+  if (subscriptionData?.subscriptionStatus === 'canceled') {
+      dateLabel = currentLang === 'pl' ? 'Data wygaśnięcia:' : 'Expiration date:';
+  } else if (subscriptionData?.subscriptionStatus === 'one_time_paid') {
+      dateLabel = currentLang === 'pl' ? 'Odnowienie konieczne:' : 'Renewal required:';
+  } else if (subscriptionData?.subscriptionStatus === 'active' || subscriptionData?.subscriptionStatus === 'trialing') {
+      dateLabel = currentLang === 'pl' ? 'Kolejne odnowienie:' : 'Next renewal:';
   }
 
   return (
@@ -421,7 +614,8 @@ export default function UpgradeModal({
               <div className="flex flex-col h-full">
                 <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-3 sm:p-5 w-full h-full flex flex-col gap-0 justify-center">
                   <div>
-                    <div className="mb-2 flex flex-wrap gap-2">
+                    {/* ZMIANA: flex-col-reverse wrzuca status (ostatni element) na górę na mobile */}
+                    <div className="mb-2 flex flex-col-reverse items-start gap-2 sm:flex-row sm:items-center sm:flex-wrap">
                       <span className="px-2 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-semibold rounded-md uppercase tracking-wider">
                         {t.currentPlan}
                       </span>
@@ -443,16 +637,40 @@ export default function UpgradeModal({
 
                   {!isDemoUser && (
                     <div className="flex justify-between items-end mt-4 pt-4 border-t border-gray-700/50">
-                      <div>
+                      {/* Kontener: Data + Opcja Wznowienia */}
+                      <div className="flex flex-col items-start w-full">
                         {subscriptionData?.nextBillingDate && (
-                          <p className="text-sm text-gray-500">
-                            <span className="block sm:inline">{t.renewsAt}</span>{' '}
-                            <span className="text-gray-300 whitespace-nowrap">
+                          // ZMIANA: Dodano warunkowy border do samego kontenera z datą.
+                          // Dzięki temu linia ma dokładnie taką długość jak tekst daty.
+                          <div className={`text-sm text-gray-500 flex flex-col sm:flex-row sm:items-baseline sm:gap-1 ${
+                            subscriptionData?.subscriptionStatus === 'canceled' ? 'pb-3 border-b border-gray-700/50 mb-5' : ''
+                          }`}>
+                            <span>{dateLabel}</span>
+                            <span className="text-gray-300 whitespace-nowrap font-medium">
                               {new Date(subscriptionData.nextBillingDate).toLocaleDateString(currentLang === 'pl' ? 'pl-PL' : 'en-US', {
                                 day: 'numeric', month: 'long', year: 'numeric'
                               })}
                             </span>
-                          </p>
+                          </div>
+                        )}
+
+                        {/* --- PRZYCISK WZNÓW (Bez własnego kontenera) --- */}
+                        {subscriptionData?.subscriptionStatus === 'canceled' && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleResumeSubscription();
+                              }}
+                              disabled={isResuming}
+                              className="group flex items-center gap-2 text-xs font-bold text-emerald-500 hover:text-emerald-400 transition-colors uppercase tracking-wider cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              {isResuming ? (
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                              ) : (
+                                <RotateCcw className="w-3 h-3 group-hover:-rotate-90 transition-transform duration-300" />
+                              )}
+                              <span>{currentLang === 'pl' ? 'Wznów subskrypcję' : 'Resume subscription'}</span>
+                            </button>
                         )}
                       </div>
                       {subscriptionData?.nextBillingAmount && (
@@ -628,8 +846,22 @@ export default function UpgradeModal({
             const badgeColor = isDemoUser ? plan.demoBadgeColor : 'from-violet-500 to-fuchsia-500';
             const isCardHighlighted = !isDemoUser && isHighlighted;
 
+            // --- POPRAWIONA LOGIKA KOLEJNOŚCI NA MOBILE ---
+            // 1. Rekomendowany -> order-1 (Szczyt)
+            // 2. Reszta -> order-2 (Środek)
+            // 3. White Label -> order-3 (Musi być ustawione ręcznie w karcie poniżej)
+            // 4. Downgrade -> order-4 (Absolutny koniec)
+            let mobileOrderClass = 'order-2';
+
+            if (isCardHighlighted || (isDemoUser && plan.roleName === 'creator')) {
+                mobileOrderClass = 'order-1';
+            } else if (isDowngrade) {
+                mobileOrderClass = 'order-4';
+            }
+
             return (
-              <div key={plan.roleName} className={`relative rounded-2xl p-px ${isCardHighlighted ? `bg-gradient-to-b ${badgeColor}` : ''} ${isDemoUser ? `bg-gradient-to-b ${plan.demoBadgeColor} shadow-[0_0_20px_rgba(0,0,0,0.3)]` : ''}`}>
+              // DODANO: {mobileOrderClass} oraz lg:order-none (reset na desktop)
+              <div key={plan.roleName} className={`relative rounded-2xl p-px ${mobileOrderClass} lg:order-none ${isCardHighlighted ? `bg-gradient-to-b ${badgeColor}` : ''} ${isDemoUser ? `bg-gradient-to-b ${plan.demoBadgeColor} shadow-[0_0_20px_rgba(0,0,0,0.3)]` : ''}`}>
                 {(isDemoUser || isHighlighted) && (
                   <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 z-20">
                      <span className={`bg-gradient-to-r ${badgeColor} text-white text-xs font-bold px-4 py-1 rounded-full shadow-lg whitespace-nowrap uppercase tracking-wider`}>
@@ -772,7 +1004,8 @@ export default function UpgradeModal({
 
           {/* 2. Karta: WHITE LABEL */}
           {!isDemoUser && (
-            <div className="relative rounded-2xl p-px bg-gradient-to-b from-amber-400 to-orange-500 shadow-[0_0_25px_rgba(245,158,11,0.2)]">
+            // ZMIANA: order-3 (Dzięki temu White Label będzie PRZED Downgrade, który ma order-4)
+            <div className="relative rounded-2xl p-px order-3 lg:order-none bg-gradient-to-b from-amber-400 to-orange-500 shadow-[0_0_25px_rgba(245,158,11,0.2)]">
               <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 z-20">
                  <span className="bg-gradient-to-r from-amber-500 to-orange-500 text-white text-xs font-bold px-4 py-1 rounded-full shadow-lg whitespace-nowrap uppercase tracking-wider">
                    {currentLang === 'pl' ? 'Własna Aplikacja' : 'Own Your App'}
@@ -803,7 +1036,7 @@ export default function UpgradeModal({
 
                   <div className="mb-8 mt-auto">
                     <button
-                      onClick={() => alert(currentLang === 'pl' ? 'Skontaktuj się z nami: contact@inflee.app' : 'Contact us: contact@inflee.app')}
+                      onClick={() => setShowContactModal(true)} // <--- ZMIANA
                       className="w-full inline-flex justify-center items-center py-3 px-4 rounded-lg font-semibold text-sm transition-all shadow-md cursor-pointer bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white shadow-[0_10px_20px_rgba(245,158,11,0.20)] hover:-translate-y-0.5"
                     >
                       {currentLang === 'pl' ? 'Porozmawiajmy' : "Let's talk"}
@@ -839,8 +1072,8 @@ export default function UpgradeModal({
           )}
         </div>
 
-        {/* --- PRZYCISK ANULOWANIA SUBSKRYPCJI --- */}
-        {showPaymentManagement && !isDemoUser && !isOneTimePaid && (
+        {/* --- PRZYCISK ANULOWANIA (Tylko jeśli aktywna i NIE anulowana) --- */}
+        {showPaymentManagement && !isDemoUser && !isOneTimePaid && subscriptionData?.subscriptionStatus !== 'canceled' && (
           <div className="mt-8 pt-6 border-t border-gray-700/50">
             <button onClick={handleCancelClick} className="w-full py-3 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 hover:border-red-500/30 text-red-400 hover:text-red-300 text-sm font-medium rounded-xl transition-all cursor-pointer flex items-center justify-center group">
               <AlertTriangle className="w-4 h-4 mr-2 group-hover:scale-110 transition-transform" />
@@ -858,6 +1091,12 @@ export default function UpgradeModal({
         currentLang={currentLang}
         isLoading={isCanceling}
         currentPlanRole={currentPlanRole}
+      />
+
+      <WhiteLabelContactModal
+        isOpen={showContactModal}
+        onClose={() => setShowContactModal(false)}
+        currentLang={currentLang}
       />
 
       {showBillingHistory && (

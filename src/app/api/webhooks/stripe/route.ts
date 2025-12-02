@@ -237,7 +237,7 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
 
   if (!user) return;
 
-  // Rozpoznawanie roli na podstawie ceny
+  // 1. Rozpoznawanie roli (Zabezpieczenie przed brakiem ENV)
   const subscriptionItems = subscription.items.data;
   let newRole: string | null = null;
 
@@ -253,32 +253,44 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
 
   if (subscriptionItems.length > 0) {
     const priceId = subscriptionItems[0].price.id;
+    // Jeśli priceId jest w mapie, użyj go, w przeciwnym razie null
     newRole = priceToRoleMap[priceId] || null;
   }
 
-  let updatedRole = newRole || user.role;
+  // Jeśli nie udało się ustalić nowej roli, zostań przy starej (bezpieczny fallback)
+  const updatedRole = newRole || user.role;
   let updatedStatus = subscription.status;
 
-  // --- WYMUSZENIE STATUSU ACTIVE DLA PŁATNYCH PLANÓW ---
-  const paidRoles = ['rookie', 'creator', 'unlimited'];
+  // 2. LOGIKA STATUSU (POPRAWKA: Obsługa anulowania)
+  if (subscription.cancel_at_period_end) {
+    // Jeśli subskrypcja wygasa (cancel_at_period_end = true),
+    // w bazie ustawiamy status 'canceled', aby UI pokazało czerwony badge.
+    updatedStatus = 'canceled';
+  } else {
+    // Standardowa logika: Wymuszenie ACTIVE dla płatnych planów (tylko jeśli NIE anulowano)
+    const paidRoles = ['rookie', 'creator', 'unlimited'];
 
-  if (paidRoles.includes(updatedRole as string)) {
-    // Jeśli rola to płatny plan, ZAWSZE ustawiamy status na active w bazie,
-    // ignorując status 'trialing' ze Stripe.
-    updatedStatus = 'active';
-  } else if (subscription.status === 'trialing' && updatedRole === 'free_ver') {
-    // Tylko dla free_ver pozwalamy na status trialing (lub active)
-    // Bez zmian, bierzemy status ze Stripe
+    if (paidRoles.includes(updatedRole as string)) {
+       updatedStatus = 'active';
+    } else if (subscription.status === 'trialing' && updatedRole === 'free_ver') {
+       // logic for trial
+    }
   }
 
-  await prisma.user.update({
-    where: { id: user.id },
-    data: {
-      subscriptionStatus: updatedStatus,
-      role: updatedRole as Role,
-      nextBillingDate: new Date((subscription as any).current_period_end * 1000),
-    },
-  });
+  // 3. Aktualizacja w bazie (z try-catch dla bezpieczeństwa przed błędem 500)
+  try {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          subscriptionStatus: updatedStatus,
+          role: updatedRole as Role, // Upewnij się, że Role w Prisma Schema pasuje do stringów (lowercase)
+          nextBillingDate: new Date((subscription as any).current_period_end * 1000),
+        },
+      });
+  } catch (err) {
+      console.error('[Webhook Error] Failed to update user in DB:', err);
+      // Nie rzucamy błędu wyżej, żeby Stripe dostał 200 OK i nie ponawiał requestu w kółko
+  }
 }
 
 async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
