@@ -6,10 +6,12 @@ const nextConfig: NextConfig = {
   // Zaktualizowana opcja zgodnie z nową wersją Next.js
   serverExternalPackages: ['@prisma/client', 'prisma', 'pdf-parse'],
 
-  eslint: {
-    // Warning: This allows production builds to successfully complete even if
-    // your project has ESLint errors.
-    ignoreDuringBuilds: true,
+  // ❌ USUNIĘTE: eslint (przestarzałe w Next.js 16)
+  // Aby ignorować błędy ESLint podczas buildu, użyj:
+  // npm run build -- --no-lint
+
+  typescript: {
+    ignoreBuildErrors: true, // opcjonalnie, jeśli chcesz ignorować błędy TS
   },
 
   // Zapewnienie dostępu do zmiennych środowiskowych

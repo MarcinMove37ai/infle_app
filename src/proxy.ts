@@ -1,11 +1,12 @@
-// src/middleware.ts
+// src/proxy.ts
 
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { getToken } from 'next-auth/jwt'
 
-export async function middleware(request: NextRequest) {
-  console.log('🛡️ MIDDLEWARE:', {
+// ✅ ZMIENIONE: middleware → proxy
+export async function proxy(request: NextRequest) {
+  console.log('🛡️ PROXY:', {
     path: request.nextUrl.pathname,
     url: request.url
   });
@@ -16,7 +17,7 @@ export async function middleware(request: NextRequest) {
     secret: process.env.NEXTAUTH_SECRET
   });
 
-  console.log('🔐 TOKEN:', {
+  console.log('🔑 TOKEN:', {
     exists: !!token,
     email: token?.email,
     emailVerified: token?.emailVerified
@@ -36,7 +37,6 @@ export async function middleware(request: NextRequest) {
   }
   // ==================================================
 
-
   // Definiuj które strony to auth pages
   const isAuthPage = pathname.startsWith('/login') ||
                     pathname.startsWith('/register') ||
@@ -51,7 +51,7 @@ export async function middleware(request: NextRequest) {
                          pathname.startsWith('/landings') ||
                          pathname.startsWith('/trendy');
 
-  console.log('📍 PAGE TYPE:', {
+  console.log('🔍 PAGE TYPE:', {
     isAuthPage,
     isProtectedPage,
     isAuth
