@@ -18,9 +18,47 @@ interface AnthropicRequest {
   temperature?: number;
 }
 
+// 🔄 FETCH WITH RETRY AND TIMEOUT
+async function fetchWithRetry(
+  url: string,
+  options: RequestInit,
+  maxRetries: number = 3,
+  timeout: number = 30000
+): Promise<Response> {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`🔄 Attempt ${attempt}/${maxRetries} to ${url}`);
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+      const response = await fetch(url, {
+        ...options,
+        signal: controller.signal
+      });
+
+      clearTimeout(timeoutId);
+      console.log(`✅ Fetch succeeded on attempt ${attempt}`);
+      return response;
+
+    } catch (error: any) {
+      console.error(`❌ Attempt ${attempt}/${maxRetries} failed:`, error.message);
+
+      if (attempt === maxRetries) {
+        throw new Error(`Failed after ${maxRetries} attempts: ${error.message}`);
+      }
+
+      const delay = 1000 * Math.pow(2, attempt - 1);
+      console.log(`⏳ Waiting ${delay}ms before retry...`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+
+  throw new Error('Unexpected retry loop exit');
+}
+
 // 🎯 MODEL-SPECIFIC PROMPT CONFIGURATIONS
 const MODEL_PROMPT_CONFIGS = {
-  // 🆕 GOOGLE MODELS - RÓŻNE DŁUGOŚCI I SZCZEGÓŁOWOŚĆ
   "imagen-3": {
     provider: "google",
     maxLength: 4000,
@@ -29,52 +67,6 @@ const MODEL_PROMPT_CONFIGS = {
     style: "detailed-artistic",
     supportsComplexInstructions: true,
     recommendedTokens: 1200
-  },
-  "imagen-4": {
-    provider: "google",
-    maxLength: 4000,
-    optimalLength: 2500,
-    detailLevel: "ultra-high",
-    style: "premium-detailed",
-    supportsComplexInstructions: true,
-    recommendedTokens: 1400
-  },
-  "imagen-4-ultra": {
-    provider: "google",
-    maxLength: 4000,
-    optimalLength: 3000,
-    detailLevel: "maximum",
-    style: "ultra-sophisticated",
-    supportsComplexInstructions: true,
-    recommendedTokens: 1600
-  },
-  "gemini-image": {
-    provider: "google",
-    maxLength: 4000,
-    optimalLength: 1800,
-    detailLevel: "medium-high",
-    style: "conversational-detailed",
-    supportsComplexInstructions: true,
-    recommendedTokens: 1000
-  },
-  // OPENAI MODELS
-  "gpt-image-1": {
-    provider: "openai",
-    maxLength: 4000,
-    optimalLength: 2800,
-    detailLevel: "ultra-high",
-    style: "ultra-detailed-professional",
-    supportsComplexInstructions: true,
-    recommendedTokens: 1600
-  },
-  "dall-e-3": {
-    provider: "openai",
-    maxLength: 400,
-    optimalLength: 350,
-    detailLevel: "simple",
-    style: "concise-effective",
-    supportsComplexInstructions: false,
-    recommendedTokens: 400
   }
 } as const;
 
@@ -97,8 +89,8 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { title, subtitle, chapters, targetModel } = body;
 
-    const BASIC_AI_MODEL = process.env.BASIC_AI_MODEL || 'claude-3-5-haiku-20241022';
-    const PREMIUM_AI_MODEL = process.env.PREMIUM_AI_MODEL || 'claude-sonnet-4-20250514';
+    const BASIC_AI_MODEL = process.env.BASIC_AI_MODEL || 'claude-haiku-4-5';
+    const PREMIUM_AI_MODEL = process.env.PREMIUM_AI_MODEL || 'claude-sonnet-4-5';
 
     if (!title || !chapters || !Array.isArray(chapters)) {
       return NextResponse.json(
@@ -108,7 +100,7 @@ export async function POST(request: Request) {
     }
 
     // ✅ POBIERZ INFORMACJE O MODELU GRAFICZNYM UŻYTKOWNIKA
-    let imageModel: string = targetModel || 'dall-e-3'; // fallback
+    let imageModel: string = targetModel || 'imagen-3'; // fallback
     let anthropicApiKey: string | null = null;
     let keySource: 'user' | 'env' | 'none' = 'none';
     let userAiSettings: any = null;
@@ -121,7 +113,7 @@ export async function POST(request: Request) {
       if (userId) {
         // Pobierz ustawienia AI użytkownika
         userAiSettings = await getUserAiSettings(userId);
-        imageModel = userAiSettings.imageAiModel || 'dall-e-3';
+        imageModel = userAiSettings.imageAiModel || 'imagen-3';
 
         const { apiKey, source } = await getApiKeyForEndpoint(
           userId,
@@ -164,8 +156,8 @@ export async function POST(request: Request) {
     const modelConfig = MODEL_PROMPT_CONFIGS[imageModel as keyof typeof MODEL_PROMPT_CONFIGS];
 
     if (!modelConfig) {
-      console.warn(`⚠️ Unknown image model: ${imageModel}, using DALL-E 3 config`);
-      imageModel = 'dall-e-3';
+      console.warn(`⚠️ Unknown image model: ${imageModel}, using Imagen-3 config`);
+      imageModel = 'imagen-3';
     }
 
     const finalConfig = MODEL_PROMPT_CONFIGS[imageModel as keyof typeof MODEL_PROMPT_CONFIGS];
@@ -203,37 +195,8 @@ export async function POST(request: Request) {
       .filter(content => content.length > 0)
       .join('\n\n');
 
-    // 🎨 ADAPTIVE PROMPT GENERATION - RÓŻNE STYLE DLA RÓŻNYCH MODELI
-    let prompt: string;
-
-    if (finalConfig.detailLevel === "simple") {
-      // DALL-E 3 - PROSTY, ZWIĘZŁY PROMPT
-      prompt = `Jesteś ekspertem w tworzeniu prostych, zwięzłych promptów okładek książek dla DALL-E 3 (limit 400 znaków). Stwórz krótki, skuteczny prompt okładki dla ebooka.
-
-INFORMACJE O EBOOKU:
-- Tytuł: "${title}"${subtitle ? `\n- Podtytuł: "${subtitle}"` : ''}
-
-ROZDZIAŁY:
-${chaptersContext}
-
-${contentSamples ? `PRÓBKI TREŚCI:\n${contentSamples}` : ''}
-
-INSTRUKCJE:
-- Maksimum 350 znaków
-- Prostota i klarowność
-- Skupienie na głównym motywie
-- Format kwadratowy 1024x1024 (OBOWIĄZKOWY)
-- KRYTYCZNY ZAKAZ: ABSOLUTNIE ŻADEN TEKST, NAPISY, LITERY, CYFRY, SŁOWA
-- TYLKO CZYSTA GRAFIKA 1:1 BEZ JAKICHKOLWIEK ELEMENTÓW TEKSTOWYCH
-- Tylko czysty prompt bez komentarzy
-
-PAMIĘTAJ: Efektem ma być CZYSTA GRAFIKA 1:1 BEZ TEKSTU!
-
-Napisz TYLKO surowy prompt okładki (bez "Oto prompt:" czy innych komentarzy):`;
-
-    } else if (finalConfig.detailLevel === "medium-high") {
-      // GEMINI/IMAGEN-3 - ŚREDNIO SZCZEGÓŁOWY
-      prompt = `Jesteś ekspertem w tworzeniu szczegółowych promptów okładek książek dla ${imageModel.toUpperCase()} (limit ${finalConfig.maxLength} znaków). Stwórz profesjonalny prompt okładki dla ebooka o długości około ${finalConfig.optimalLength} znaków.
+    // 🎨 PROMPT GENERATION FOR IMAGEN-3 - FULL FRAME COMPOSITION
+    const prompt = `Jesteś ekspertem w tworzeniu szczegółowych promptów okładek książek dla ${imageModel.toUpperCase()} (limit ${finalConfig.maxLength} znaków). Stwórz profesjonalny prompt okładki dla ebooka o długości około ${finalConfig.optimalLength} znaków.
 
 INFORMACJE O EBOOKU:
 - Tytuł: "${title}"${subtitle ? `\n- Podtytuł: "${subtitle}"` : ''}
@@ -243,70 +206,53 @@ ${chaptersContext}
 
 ${contentSamples ? `PRÓBKI TREŚCI Z ROZDZIAŁÓW:\n${contentSamples}` : ''}
 
-INSTRUKCJE DLA ${imageModel.toUpperCase()}:
+KRYTYCZNE INSTRUKCJE KOMPOZYCJI DLA ${imageModel.toUpperCase()}:
 - Długość: ${finalConfig.optimalLength} znaków (cel)
-- Szczegółowy opis kompozycji
-- Profesjonalna jakość okładki
 - Format kwadratowy 1024x1024 (OBOWIĄZKOWY)
-- Przezroczyste tło preferowane
-- KRYTYCZNY ZAKAZ: ABSOLUTNIE ŻADEN TEKST, NAPISY, LITERY, CYFRY, SŁOWA, TYTUŁY, SYMBOLE TEKSTOWE
+
+KOMPOZYCJA - ABSOLUTNIE KRYTYCZNE:
+- FULL FRAME COMPOSITION - kompozycja wypełnia CAŁY obraz od krawędzi do krawędzi
+- EDGE-TO-EDGE DESIGN - wszystkie elementy rozciągają się na całą powierzchnię
+- ZERO MARGINESÓW - żadnych marginesów, żadnych pustych przestrzeni przy krawędziach
+- FULL BLEED - grafika rozlewa się na całą powierzchnię 1024x1024
+- NO FLOATING OBJECTS - żadnych obiektów "unoszących się" na tle
+- NO CENTERED SMALL ELEMENTS - żadnych małych wycentrowanych elementów
+- BACKGROUND FILLS EVERYTHING - tło wypełnia całkowicie cały obszar
+- SEAMLESS EDGES - elementy mogą wychodzić poza ramkę, bez widocznych granic
+
+TŁO I WYPEŁNIENIE:
+- Solidne, pełne tło (gradients, textures, scenes - ale WYPEŁNIAJĄCE CAŁOŚĆ)
+- Żadnych przezroczystych obszarów
+- Żadnych cieni wokół całej kompozycji
+- Żadnego efektu "kartki papieru" z cieniem
+- Kompozycja to PEŁNY obraz, nie obiekt na tle
+
+ZAKAZ TEKSTU (BEZ WYJĄTKÓW):
+- ABSOLUTNIE ŻADEN TEKST, NAPISY, LITERY, CYFRY, SŁOWA, TYTUŁY
 - ZABRONIONE: wszelkie napisane elementy, etykiety, znaki, napisy na obiektach
 - TYLKO CZYSTA GRAFIKA: bez jakichkolwiek elementów tekstowych
-- Marketingowa atrakcyjność
-- Gatunek-specyficzne elementy wizualne
-
-PAMIĘTAJ: Efektem ma być CZYSTA GRAFIKA 1:1 BEZ TEKSTU!
-
-Napisz TYLKO surowy prompt okładki (bez komentarzy czy nagłówków):`;
-
-    } else {
-      // IMAGEN-4/GPT-IMAGE-1 - ULTRA SZCZEGÓŁOWY
-      prompt = `Jesteś ekspertem w tworzeniu ultra-szczegółowych opisów ilustracji artystycznych i konceptualnych. Twoim zadaniem jest stworzyć opis grafiki, która będzie wizualną esencją danego ebooka dla ${imageModel.toUpperCase()} (limit ${finalConfig.maxLength} znaków). Stwórz bardzo długi, precyzyjny prompt okładki dla ebooka o długości ${finalConfig.optimalLength}-${finalConfig.maxLength} znaków.
-
-INFORMACJE O EBOOKU:
-- Tytuł: "${title}"${subtitle ? `\n- Podtytuł: "${subtitle}"` : ''}
-
-ROZDZIAŁY EBOOKA:
-${chaptersContext}
-
-${contentSamples ? `PRÓBKI TREŚCI Z ROZDZIAŁÓW:\n${contentSamples}` : ''}
-
-INSTRUKCJE DLA ${imageModel.toUpperCase()} (${finalConfig.detailLevel.toUpperCase()} DETAIL):
-- Długość: ${finalConfig.optimalLength}-${finalConfig.maxLength} znaków
-- Ultra-szczegółowy opis każdego elementu kompozycji
-- Zaawansowane specyfikacje techniczne
-- Profesjonalna jakość wydawnicza
-- Format kwadratowy 1024x1024 z przezroczystym tłem (OBOWIĄZKOWY)
-- Seamless composition bez ramek
-- Proper margins - wszystkie elementy oddalene od krawędzi
-- Fotorealistyczna jakość z studio lighting
-- Komercyjna atrakcyjność marketingowa
-- Gatunek-specyficzny visual language
-- Emocjonalny impact i storytelling
-- Efektem ma być wyłącznie czysta, nieprzerwana kompozycja wizualna.
-- Obraz musi być całkowicie pozbawiony jakichkolwiek liter, cyfr, słów, symboli, logotypów i napisów.
-- Kompozycja ma być czysto graficzna, bez żadnych elementów tekstowych.
-
-KRYTYCZNY ZAKAZ TEKSTU:
-- ABSOLUTNIE ŻADEN TEKST, NAPISY, LITERY, CYFRY, SŁOWA, TYTUŁY
-- ZABRONIONE: znaki, symbole tekstowe, etykiety, napisy na obiektach
 - ZABRONIONE: readable content, written elements, typography
 - ZABRONIONE: logos, brand names, captions, labels
-- ZABRONIONE: signs, banners, posters z tekstem
-- ZABRONIONE: książki z widocznym tekstem, gazety z napisami
-- TYLKO CZYSTA GRAFIKA: pure visual composition without any textual elements
-- KRYTYCZNA ZASADA: Wygenerowany obraz NIE MOŻE przedstawiać fizycznej książki, ebooka, makiety okładki ani żadnego obiektu, na którym nadrukowana jest grafika. Twoim celem jest opisanie WYŁĄCZNIE samej ilustracji jako pełnego, samodzielnego dzieła sztuki. Czysty obraz, bez ramek, bez kontekstu produktu.
-- Natural edge blending i borderless design
 
-PAMIĘTAJ: Efektem ma być CZYSTA GRAFIKA 1:1 BEZ JAKICHKOLWIEK ELEMENTÓW TEKSTOWYCH!
+STYL I JAKOŚĆ:
+- Szczegółowy opis kompozycji wypełniającej całą przestrzeń
+- Profesjonalna jakość wydawnicza
+- Marketingowa atrakcyjność
+- Gatunek-specyficzne elementy wizualne
+- Emocjonalny impact i storytelling
 
-Napisz TYLKO ultra-szczegółowy surowy prompt okładki (bez "Oto prompt:" czy innych komentarzy):`;
-    }
+PAMIĘTAJ: 
+- Efektem ma być PEŁNA GRAFIKA wypełniająca CAŁĄ przestrzeń 1024x1024
+- BEZ marginesów, BEZ przezroczystości, BEZ obiektów na tle
+- FULL FRAME, EDGE-TO-EDGE, ZERO MARGINS
+- To jest OKŁADKA KSIĄŻKI - pełna kompozycja, nie logo na tle!
+
+Napisz TYLKO surowy prompt okładki (bez komentarzy czy nagłówków):`;
 
     const requestBody: AnthropicRequest = {
       model: textModelToUse,
       max_tokens: finalConfig.recommendedTokens,
-      temperature: finalConfig.detailLevel === "simple" ? 0.3 : 0.2,
+      temperature: 0.2,
       messages: [{ role: 'user', content: prompt }]
     };
 
@@ -316,15 +262,20 @@ Napisz TYLKO ultra-szczegółowy surowy prompt okładki (bez "Oto prompt:" czy i
     console.log(`   - Max Tokens: ${finalConfig.recommendedTokens}`);
     console.log(`   - Temperature: ${requestBody.temperature}`);
 
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': anthropicApiKey,
-        'anthropic-version': '2023-06-01'
+    const response = await fetchWithRetry(
+      'https://api.anthropic.com/v1/messages',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': anthropicApiKey,
+          'anthropic-version': '2023-06-01'
+        },
+        body: JSON.stringify(requestBody)
       },
-      body: JSON.stringify(requestBody)
-    });
+      3,
+      30000
+    );
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -382,6 +333,16 @@ Napisz TYLKO ultra-szczegółowy surowy prompt okładki (bez "Oto prompt:" czy i
       coverPrompt += " CRITICAL: Absolutely no text, letters, words, numbers, symbols, signs, or any written elements whatsoever.";
     }
 
+    // Sprawdź czy prompt wymusza FULL FRAME
+    const hasFullFrame = coverPrompt.toLowerCase().includes('full frame') ||
+                        coverPrompt.toLowerCase().includes('edge-to-edge') ||
+                        coverPrompt.toLowerCase().includes('full bleed') ||
+                        coverPrompt.toLowerCase().includes('fills entire');
+
+    if (!hasFullFrame) {
+      coverPrompt += " Full frame composition filling entire 1024x1024 canvas edge-to-edge with zero margins.";
+    }
+
     // Sprawdź czy prompt wymusza format kwadratowy 1:1
     const hasSquareFormat = coverPrompt.includes('1024x1024') ||
                            coverPrompt.toLowerCase().includes('square format') ||
@@ -423,6 +384,10 @@ Napisz TYLKO ultra-szczegółowy surowy prompt okładki (bez "Oto prompt:" czy i
                             coverPrompt.toLowerCase().includes('no written') ||
                             coverPrompt.toLowerCase().includes('critical') ||
                             coverPrompt.toLowerCase().includes('forbidden'),
+      containsFullFrame: coverPrompt.toLowerCase().includes('full frame') ||
+                        coverPrompt.toLowerCase().includes('edge-to-edge') ||
+                        coverPrompt.toLowerCase().includes('full bleed') ||
+                        coverPrompt.toLowerCase().includes('fills entire'),
       containsSquareFormat: coverPrompt.includes('1024x1024') ||
                            coverPrompt.toLowerCase().includes('square') ||
                            coverPrompt.toLowerCase().includes('1:1'),
@@ -435,15 +400,16 @@ Napisz TYLKO ultra-szczegółowy surowy prompt okładki (bez "Oto prompt:" czy i
       overallQuality: 0
     };
 
-    // Oblicz ogólną jakość z priorytetem dla zakazu tekstu i formatu
+    // Oblicz ogólną jakość z priorytetem dla zakazu tekstu, full frame i formatu
     qualityMetrics.overallQuality = (
-      (qualityMetrics.containsStrongTextBan ? 0.30 : 0) +    // NAJWAŻNIEJSZE: Mocny zakaz tekstu = 30%
-      (qualityMetrics.containsSquareFormat ? 0.20 : 0) +     // Format 1:1 = 20%
-      (qualityMetrics.containsPureVisual ? 0.15 : 0) +       // Pure visual = 15%
-      (qualityMetrics.isOptimalLength ? 0.15 : 0) +          // Optymalna długość = 15%
-      (qualityMetrics.containsBookCover ? 0.10 : 0) +        // Book cover = 10%
-      (qualityMetrics.containsTitle ? 0.05 : 0) +            // Title ref = 5%
-      (qualityMetrics.containsProfessional ? 0.05 : 0)       // Professional = 5%
+      (qualityMetrics.containsStrongTextBan ? 0.25 : 0) +    // Mocny zakaz tekstu = 25%
+      (qualityMetrics.containsFullFrame ? 0.25 : 0) +        // FULL FRAME = 25%
+      (qualityMetrics.containsSquareFormat ? 0.15 : 0) +     // Format 1:1 = 15%
+      (qualityMetrics.containsPureVisual ? 0.10 : 0) +       // Pure visual = 10%
+      (qualityMetrics.isOptimalLength ? 0.10 : 0) +          // Optymalna długość = 10%
+      (qualityMetrics.containsBookCover ? 0.08 : 0) +        // Book cover = 8%
+      (qualityMetrics.containsTitle ? 0.04 : 0) +            // Title ref = 4%
+      (qualityMetrics.containsProfessional ? 0.03 : 0)       // Professional = 3%
     );
 
     console.log(`📊 === ADAPTIVE PROMPT QUALITY METRICS ===`);
@@ -455,6 +421,7 @@ Napisz TYLKO ultra-szczegółowy surowy prompt okładki (bez "Oto prompt:" czy i
     console.log(`   Text Model Used: ${textModelToUse}`);
     console.log(`   Key Source: ${keySource}`);
     console.log(`   🚫 STRONG Text Ban: ${qualityMetrics.containsStrongTextBan ? '✅ ENFORCED' : '❌ MISSING'}`);
+    console.log(`   🖼️ FULL FRAME: ${qualityMetrics.containsFullFrame ? '✅ ENFORCED' : '❌ MISSING'}`);
     console.log(`   📐 Square Format 1:1: ${qualityMetrics.containsSquareFormat ? '✅ ENFORCED' : '❌ MISSING'}`);
     console.log(`   🎨 Pure Visual: ${qualityMetrics.containsPureVisual ? '✅' : '❌'}`);
     console.log(`   📏 Optimal Length: ${qualityMetrics.isOptimalLength ? '✅' : '❌'}`);
@@ -468,7 +435,7 @@ Napisz TYLKO ultra-szczegółowy surowy prompt okładki (bez "Oto prompt:" czy i
       coverPrompt: coverPrompt,
       promptLength: coverPrompt.length,
       targetModel: imageModel,
-      format: "square-1024x1024-1:1-no-text",
+      format: "square-1024x1024-full-frame-no-margins",
       modelConfig: {
         provider: finalConfig.provider,
         maxLength: finalConfig.maxLength,
@@ -481,7 +448,7 @@ Napisz TYLKO ultra-szczegółowy surowy prompt okładki (bez "Oto prompt:" czy i
       textModelUsed: textModelToUse,
       keySource: keySource,
       userAiSettings: !isInternalRequest ? userAiSettings : null,
-      optimizedFor: `${imageModel}-${finalConfig.style}-cover-design-no-text-1:1`,
+      optimizedFor: `${imageModel}-${finalConfig.style}-full-frame-cover-design`,
       textBanEnforcement: {
         strongTextBan: qualityMetrics.containsStrongTextBan,
         pureVisualComposition: qualityMetrics.containsPureVisual,
@@ -490,9 +457,11 @@ Napisz TYLKO ultra-szczegółowy surowy prompt okładki (bez "Oto prompt:" czy i
       },
       formatEnforcement: {
         squareFormat: qualityMetrics.containsSquareFormat,
+        fullFrame: qualityMetrics.containsFullFrame,
         aspectRatio: "1:1",
         dimensions: "1024x1024",
-        guaranteedSquare: true
+        composition: "edge-to-edge",
+        margins: "zero"
       }
     });
 
@@ -507,32 +476,26 @@ Napisz TYLKO ultra-szczegółowy surowy prompt okładki (bez "Oto prompt:" czy i
 
 export async function GET() {
   return NextResponse.json({
-    message: 'Adaptive Cover Prompt Generator - Model-Specific Optimization',
-    version: "6.0-adaptive-model-optimization",
-    supportedImageModels: ['imagen-3', 'imagen-4', 'imagen-4-ultra', 'gemini-image', 'gpt-image-1', 'dall-e-3'],
+    message: 'Adaptive Cover Prompt Generator - Imagen-3 Full Frame',
+    version: "8.0-full-frame-composition",
+    supportedImageModels: ['imagen-3'],
     adaptiveFeatures: [
-      'Model-specific prompt length optimization',
-      'Detail level adjustment based on model capabilities',
-      'Provider-specific style adaptation',
-      'Automatic length scaling for different models',
-      'Complex instruction support detection',
-      'Raw prompt output without comments'
+      'Full frame edge-to-edge composition',
+      'Zero margins design',
+      'No transparency backgrounds',
+      'Automatic retry with exponential backoff',
+      'Clean prompt output without comments'
     ],
     modelConfigurations: {
-      'dall-e-3': { maxLength: 400, detailLevel: 'simple' },
-      'gemini-image': { maxLength: 4000, detailLevel: 'medium-high' },
-      'imagen-3': { maxLength: 4000, detailLevel: 'high' },
-      'imagen-4': { maxLength: 4000, detailLevel: 'ultra-high' },
-      'imagen-4-ultra': { maxLength: 4000, detailLevel: 'maximum' },
-      'gpt-image-1': { maxLength: 4000, detailLevel: 'ultra-high' }
+      'imagen-3': { maxLength: 4000, detailLevel: 'high', composition: 'full-frame' }
     },
     capabilities: [
-      'Automatic model detection from user settings',
-      'Length optimization per model limits',
-      'Detail scaling based on model sophistication',
-      'Clean prompt output without prefixes',
-      'User API key integration',
-      'Internal request support'
+      'Full canvas utilization',
+      'Edge-to-edge design enforcement',
+      'Zero margin composition',
+      'Retry logic with 3 attempts',
+      '30s timeout per attempt',
+      'User API key integration'
     ]
   }, { status: 405 });
 }

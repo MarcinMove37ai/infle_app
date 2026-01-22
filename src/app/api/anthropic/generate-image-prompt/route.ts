@@ -18,9 +18,47 @@ interface AnthropicRequest {
   temperature?: number;
 }
 
-// 🎯 ROZSZERZONA KONFIGURACJA DLA WSZYSTKICH PROVIDERÓW - GOOGLE + OPENAI
+// 🔄 FETCH WITH RETRY AND TIMEOUT
+async function fetchWithRetry(
+  url: string,
+  options: RequestInit,
+  maxRetries: number = 3,
+  timeout: number = 30000
+): Promise<Response> {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`🔄 Attempt ${attempt}/${maxRetries} to ${url}`);
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+      const response = await fetch(url, {
+        ...options,
+        signal: controller.signal
+      });
+
+      clearTimeout(timeoutId);
+      console.log(`✅ Fetch succeeded on attempt ${attempt}`);
+      return response;
+
+    } catch (error: any) {
+      console.error(`❌ Attempt ${attempt}/${maxRetries} failed:`, error.message);
+
+      if (attempt === maxRetries) {
+        throw new Error(`Failed after ${maxRetries} attempts: ${error.message}`);
+      }
+
+      const delay = 1000 * Math.pow(2, attempt - 1);
+      console.log(`⏳ Waiting ${delay}ms before retry...`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+
+  throw new Error('Unexpected retry loop exit');
+}
+
+// 🎯 PROMPT CONFIGURATION FOR IMAGEN-3
 const PROMPT_CONFIGS = {
-  // 🆕 GOOGLE MODELS - AI STUDIO COMPATIBLE
   "imagen-3": {
     maxLength: 4000,
     optimalLength: 1200,
@@ -31,51 +69,6 @@ const PROMPT_CONFIGS = {
     provider: "google",
     costEstimate: 0.03,
     enhancement_level: "standard_plus"
-  },
-  "imagen-4": {
-    maxLength: 4000,
-    optimalLength: 1500,
-    targetLength: 1400,
-    style: "premium-photorealistic",
-    supportsComplexInstructions: true,
-    qualityTarget: "premium_realism",
-    provider: "google",
-    costEstimate: 0.04,
-    enhancement_level: "premium"
-  },
-  "imagen-4-ultra": {
-    maxLength: 4000,
-    optimalLength: 2000,
-    targetLength: 1800,
-    style: "ultra-photorealistic",
-    supportsComplexInstructions: true,
-    qualityTarget: "maximum_realism",
-    provider: "google",
-    costEstimate: 0.06,
-    enhancement_level: "maximum"
-  },
-  // OPENAI MODELS - EXISTING
-  "gpt-image-1": {
-    maxLength: 4000,
-    optimalLength: 900,  // 🔥 OPTYMALNE: 800-1000 znaków dla maksymalnego realizmu
-    targetLength: 850,   // 🎯 SWEET SPOT dla photorealistic results
-    style: "photorealistic-professional",
-    supportsComplexInstructions: true,
-    qualityTarget: "maximum_realism",
-    provider: "openai",
-    costEstimate: 0.19,
-    enhancement_level: "optimal"
-  },
-  "dall-e-3": {
-    maxLength: 400,
-    optimalLength: 350,
-    targetLength: 350,
-    style: "concise-effective",
-    supportsComplexInstructions: false,
-    qualityTarget: "natural_style",
-    provider: "openai",
-    costEstimate: 0.08,
-    enhancement_level: "standard"
   }
 };
 
@@ -145,17 +138,16 @@ export async function POST(request: Request) {
       chapterTitle,
       chapterContent,
       allChapters,
-      targetModel = "gpt-image-1",
+      targetModel = "imagen-3",
       forceRegenerate = false,
       enableTransparency = true,
       maximumQuality = true
     } = body;
 
     // ✅ LOGIKA KLUCZY API
-    const BASIC_AI_MODEL = process.env.BASIC_AI_MODEL || 'claude-3-5-haiku-20241022';
-    const PREMIUM_AI_MODEL = process.env.PREMIUM_AI_MODEL || 'claude-sonnet-4-20250514';
+    const BASIC_AI_MODEL = process.env.BASIC_AI_MODEL || 'claude-haiku-4-5';
+    const PREMIUM_AI_MODEL = process.env.PREMIUM_AI_MODEL || 'claude-sonnet-4-5';
 
-    // ✅ LOGIKA KLUCZY API
     let anthropicApiKey: string | null = null;
     let keySource: 'user' | 'env' | 'none' = 'none';
     let userAiSettings: any = null;
@@ -192,35 +184,26 @@ export async function POST(request: Request) {
       );
     }
 
-    // 🔥 BEZPIECZNY DOSTĘP DO KONFIGURACJI Z FALLBACK
-    const config = PROMPT_CONFIGS[targetModel as keyof typeof PROMPT_CONFIGS] || {
-      maxLength: 4000,
-      optimalLength: 1000,
-      targetLength: 900,
-      style: "universal-fallback",
-      supportsComplexInstructions: true,
-      qualityTarget: "standard_quality",
-      provider: "unknown",
-      costEstimate: 0.00,
-      enhancement_level: "fallback"
-    };
+    // 🔥 KONFIGURACJA DLA IMAGEN-3
+    const config = PROMPT_CONFIGS[targetModel as keyof typeof PROMPT_CONFIGS];
 
-    // Logowanie informacji o konfiguracji
-    if (!PROMPT_CONFIGS[targetModel as keyof typeof PROMPT_CONFIGS]) {
-      console.warn(`⚠️ Unknown model: ${targetModel}, using fallback config`);
+    if (!config) {
+      console.warn(`⚠️ Unknown model: ${targetModel}, using Imagen-3 config`);
     }
+
+    const finalConfig = config || PROMPT_CONFIGS["imagen-3"];
 
     console.log(`🔥 === PHOTOREALISTIC OPTIMIZATION ANALYSIS ===`);
     console.log(`   - Title: "${title}"`);
     console.log(`   - Chapter: "${chapterTitle}"`);
     console.log(`   - Content length: ${chapterContent?.length || 0} chars`);
-    console.log(`   - Target model: ${targetModel} (${config.provider})`);
+    console.log(`   - Target model: ${targetModel} (${finalConfig.provider})`);
     console.log(`   - Force regenerate: ${forceRegenerate}`);
     console.log(`   - Enable transparency: ${enableTransparency}`);
     console.log(`   - Maximum quality: ${maximumQuality}`);
-    console.log(`   - Optimal prompt length: ${config.optimalLength} chars`);
-    console.log(`   - Enhancement level: ${config.enhancement_level}`);
-    console.log(`   - Cost estimate: $${config.costEstimate}`);
+    console.log(`   - Optimal prompt length: ${finalConfig.optimalLength} chars`);
+    console.log(`   - Enhancement level: ${finalConfig.enhancement_level}`);
+    console.log(`   - Cost estimate: $${finalConfig.costEstimate}`);
 
     if (!title || !chapterTitle || !chapterContent) {
       return NextResponse.json(
@@ -246,29 +229,8 @@ export async function POST(request: Request) {
       }
     }
 
-    // 🔥 DYNAMICZNY PROMPT DOSTOSOWANY DO PROVIDERA I MODELU
-    let providerSpecificInstructions = "";
-
-    if (config.provider === "google") {
-      providerSpecificInstructions = `
-OPTYMALIZACJE DLA GOOGLE ${targetModel.toUpperCase()}:
-- Wykorzystaj ${config.enhancement_level} level enhancement
-- Maksymalna długość: ${config.optimalLength} znaków dla optymalnej jakości
-- ${config.supportsComplexInstructions ? 'Używaj szczegółowych instrukcji technicznych' : 'Zachowaj prostotę opisu'}
-- Skupienie na ${config.qualityTarget}
-- Provider: Google AI Studio compatible`;
-    } else if (config.provider === "openai") {
-      providerSpecificInstructions = `
-OPTYMALIZACJE DLA OPENAI ${targetModel.toUpperCase()}:
-- Wykorzystaj ${config.enhancement_level} level enhancement
-- Maksymalna długość: ${config.optimalLength} znaków dla photorealistic results
-- ${config.supportsComplexInstructions ? 'Dodaj zaawansowane parametry fotograficzne' : 'Używaj zwięzłych opisów'}
-- Skupienie na ${config.qualityTarget}
-- Provider: OpenAI API compatible`;
-    }
-
-    // 🔥 UNIWERSALNY ZOPTYMALIZOWANY PROMPT
-    const prompt = `Jesteś ekspertem w tworzeniu PHOTOREALISTIC promptów dla systemów generowania obrazów AI. Twoim zadaniem jest stworzenie PRECYZYJNEGO promptu (${config.optimalLength} znaków) który wygeneruje ULTRA-REALISTYCZNĄ ilustrację ebooka.
+    // 🔥 PROMPT DLA IMAGEN-3
+    const prompt = `Jesteś ekspertem w tworzeniu PHOTOREALISTIC promptów dla systemów generowania obrazów AI. Twoim zadaniem jest stworzenie PRECYZYJNEGO promptu (${finalConfig.optimalLength} znaków) który wygeneruje ULTRA-REALISTYCZNĄ ilustrację ebooka.
 
 DANE EBOOKA:
 Tytuł: "${title}"${subtitle ? `\nPodtytuł: "${subtitle}"` : ''}
@@ -277,7 +239,12 @@ Rozdział: "${chapterTitle}"${contextInfo}
 TREŚĆ ROZDZIAŁU:
 ${chapterContent}
 
-${providerSpecificInstructions}
+OPTYMALIZACJE DLA GOOGLE IMAGEN-3:
+- Wykorzystaj ${finalConfig.enhancement_level} level enhancement
+- Maksymalna długość: ${finalConfig.optimalLength} znaków dla optymalnej jakości
+- Używaj szczegółowych instrukcji technicznych
+- Skupienie na ${finalConfig.qualityTarget}
+- Provider: Google AI Studio compatible
 
 🎯 KLUCZOWE WYMAGANIA PHOTOREALISTIC PROMPTU:
 
@@ -305,10 +272,8 @@ ${providerSpecificInstructions}
    - Zawsze dodaj "shallow depth of field" dla realizmu
 
 6. **WYMAGANIA TECHNICZNE (100-150 znaków):**
-   // <-- USUNIĘTO: Sprzeczna instrukcja o proporcjach 1:1 -->
    - "ABSOLUTELY NO TEXT anywhere in image"
    ${enableTransparency ? '- "transparent background, clean edges"' : ''}
-   // <-- DODANO: Wzmocniony zakaz dotyczący dzieci -->
    - "DO NOT include images of children, infants, or minors. Focus on symbolic or adult representations ONLY."
 
 ${forceRegenerate ? `
@@ -320,48 +285,51 @@ ${forceRegenerate ? `
 ` : ''}
 
 📝 WZORZEC IDEALNEGO PROMPTU:
-// <-- USUNIĘTO: "Square 1:1 composition for ebook" i DODANO zakaz dot. dzieci -->
 "Professional ebook illustration: [KONKRETNY OPIS GŁÓWNEJ SCENY z treści rozdziału]. Shot with [PARAMETRY APARATU], f/1.8, ISO 100. [KONKRETNE OŚWIETLENIE] with natural shadows and volumetric lighting. Photorealistic, hyperrealistic, 8K UHD resolution, professional photography, ultra-sharp focus${maximumQuality ? ', commercial quality, HDR' : ''}. [KOMPOZYCJA] with shallow depth of field. Perfect visual representation of "${chapterTitle}" chapter. ABSOLUTELY NO TEXT anywhere in image. Image must not contain children or minors."
 
 KRYTYCZNE INSTRUKCJE:
-- Prompt MUSI mieć ${config.optimalLength} znaków (OPTIMAL dla ${config.provider} ${targetModel})
+- Prompt MUSI mieć ${finalConfig.optimalLength} znaków (OPTIMAL dla ${finalConfig.provider} imagen-3)
 - ZAWSZE dodaj parametry aparatu i oświetlenie
 - ZAWSZE użyj "photorealistic, hyperrealistic, 8K UHD"
 - ZAWSZE dodaj "ABSOLUTELY NO TEXT anywhere"
-// <-- DODANO: Wzmocniony zakaz dotyczący dzieci -->
 - ZAWSZE przestrzegaj zakazu generowania obrazów dzieci: "DO NOT include images of children or minors"
 - Bazuj BEZPOŚREDNIO na treści rozdziału
 - ${forceRegenerate ? 'STWÓRZ KOMPLETNIE INNĄ wizualną interpretację' : ''}
 - ŻADNYCH komentarzy - tylko czysty prompt
 
-NAPISZ PHOTOREALISTIC PROMPT (${config.optimalLength} znaków):`;
+NAPISZ PHOTOREALISTIC PROMPT (${finalConfig.optimalLength} znaków):`;
 
     // Temperatura dla regeneracji
     const temperature = forceRegenerate ? 0.5 : 0.2;
 
     const requestBody: AnthropicRequest = {
       model: modelToUse,
-      max_tokens: 600,  // Krótsze dla precyzji
+      max_tokens: 600,
       temperature: temperature,
       messages: [{ role: 'user', content: prompt }]
     };
 
     console.log(`📸 === SENDING PHOTOREALISTIC REQUEST ===`);
-    console.log(`   - Provider: ${config.provider}`);
+    console.log(`   - Provider: ${finalConfig.provider}`);
     console.log(`   - Model: ${targetModel}`);
     console.log(`   - Temperature: ${temperature}`);
-    console.log(`   - Target length: ${config.optimalLength} chars`);
+    console.log(`   - Target length: ${finalConfig.optimalLength} chars`);
     console.log(`   - Photo elements: ${JSON.stringify(photoElements, null, 2)}`);
 
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': anthropicApiKey,
-        'anthropic-version': '2023-06-01'
+    const response = await fetchWithRetry(
+      'https://api.anthropic.com/v1/messages',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': anthropicApiKey,
+          'anthropic-version': '2023-06-01'
+        },
+        body: JSON.stringify(requestBody)
       },
-      body: JSON.stringify(requestBody)
-    });
+      3,
+      30000
+    );
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -372,9 +340,8 @@ NAPISZ PHOTOREALISTIC PROMPT (${config.optimalLength} znaków):`;
     const responseData = await response.json();
     let imagePrompt = responseData.content[0].text.trim();
 
-    // 🔥 NOWA WALIDACJA PHOTOREALISTIC ELEMENTS
+    // 🔥 WALIDACJA PHOTOREALISTIC ELEMENTS
     const photorealisticElements = {
-      // KRYTYCZNE ELEMENTY REALIZMU
       'camera_params': /(?:Canon|Sony|Nikon|DSLR).+?(?:mm|f\/)/i.test(imagePrompt),
       'aperture': /f\/[0-9.]+/i.test(imagePrompt),
       'photorealistic': /(?:photorealistic|hyperrealistic|ultra-realistic)/i.test(imagePrompt),
@@ -383,10 +350,7 @@ NAPISZ PHOTOREALISTIC PROMPT (${config.optimalLength} znaków):`;
       'lighting_specific': /(?:golden hour|studio|natural|soft|dramatic|cinematic|volumetric)/i.test(imagePrompt),
       'depth_of_field': /(?:shallow depth|bokeh|depth of field)/i.test(imagePrompt),
       'sharp_focus': /(?:sharp focus|ultra.sharp|crisp)/i.test(imagePrompt),
-
-      // WYMAGANIA TECHNICZNE
       'no_text': /(?:no text|absolutely no text)/i.test(imagePrompt),
-      'square_format': /(?:1:1|square)/i.test(imagePrompt),
       'ebook': /ebook/i.test(imagePrompt),
       'transparent_bg': enableTransparency ? /transparent/i.test(imagePrompt) : true,
       'chapter_ref': imagePrompt.toLowerCase().includes(chapterTitle.toLowerCase().substring(0, 10))
@@ -406,7 +370,6 @@ NAPISZ PHOTOREALISTIC PROMPT (${config.optimalLength} znaków):`;
 
       let correctedPrompt = imagePrompt;
 
-      // Dodaj krytyczne elementy
       if (!photorealisticElements['camera_params']) {
         correctedPrompt += ` Shot with ${photoElements.camera}, f/1.8, ISO 100.`;
         console.log(`🔧 Added CAMERA PARAMETERS`);
@@ -422,7 +385,6 @@ NAPISZ PHOTOREALISTIC PROMPT (${config.optimalLength} znaków):`;
         console.log(`🔧 Added NO TEXT clause`);
       }
 
-      // Dodaj ważne opcjonalne
       if (!photorealisticElements['lighting_specific']) {
         correctedPrompt += ` ${photoElements.lighting}.`;
         console.log(`🔧 Added LIGHTING`);
@@ -438,9 +400,8 @@ NAPISZ PHOTOREALISTIC PROMPT (${config.optimalLength} znaków):`;
         console.log(`🔧 Added TRANSPARENT BACKGROUND`);
       }
 
-      // Sprawdź limit długości i skróć jeśli potrzeba
-      if (correctedPrompt.length > config.maxLength) {
-        const excess = correctedPrompt.length - config.maxLength;
+      if (correctedPrompt.length > finalConfig.maxLength) {
+        const excess = correctedPrompt.length - finalConfig.maxLength;
         const originalTrimmed = imagePrompt.substring(0, imagePrompt.length - excess - 100);
 
         correctedPrompt = originalTrimmed;
@@ -456,7 +417,7 @@ NAPISZ PHOTOREALISTIC PROMPT (${config.optimalLength} znaków):`;
       imagePrompt = correctedPrompt;
     }
 
-    // 📊 METRYKI JAKOŚCI PHOTOREALISTIC - BEZPIECZNE
+    // 📊 METRYKI JAKOŚCI PHOTOREALISTIC
     const realismScore = (
       (photorealisticElements['camera_params'] ? 0.20 : 0) +
       (photorealisticElements['photorealistic'] ? 0.20 : 0) +
@@ -469,25 +430,24 @@ NAPISZ PHOTOREALISTIC PROMPT (${config.optimalLength} znaków):`;
     );
 
     const technicalScore = (
-      (photorealisticElements['square_format'] ? 0.25 : 0) +
-      (photorealisticElements['ebook'] ? 0.25 : 0) +
-      (photorealisticElements['transparent_bg'] ? 0.25 : 0) +
-      (photorealisticElements['chapter_ref'] ? 0.25 : 0)
+      (photorealisticElements['ebook'] ? 0.33 : 0) +
+      (photorealisticElements['transparent_bg'] ? 0.33 : 0) +
+      (photorealisticElements['chapter_ref'] ? 0.34 : 0)
     );
 
     const overallQuality = (realismScore * 0.7) + (technicalScore * 0.3);
-    const isOptimalLength = imagePrompt.length >= (config.optimalLength - 100) &&
-                           imagePrompt.length <= (config.optimalLength + 100);
+    const isOptimalLength = imagePrompt.length >= (finalConfig.optimalLength - 100) &&
+                           imagePrompt.length <= (finalConfig.optimalLength + 100);
 
     console.log(`📊 === PHOTOREALISTIC QUALITY METRICS ===`);
-    console.log(`   Target Model: ${targetModel} (${config.provider || 'unknown'})`);
-    console.log(`   Length: ${imagePrompt.length}/${config.maxLength} chars`);
-    console.log(`   Optimal Length: ${isOptimalLength ? '✅ PERFECT' : '⚠️'} (target: ${config.optimalLength}±100)`);
+    console.log(`   Target Model: ${targetModel} (${finalConfig.provider})`);
+    console.log(`   Length: ${imagePrompt.length}/${finalConfig.maxLength} chars`);
+    console.log(`   Optimal Length: ${isOptimalLength ? '✅ PERFECT' : '⚠️'} (target: ${finalConfig.optimalLength}±100)`);
     console.log(`   Realism Score: ${(realismScore * 100).toFixed(1)}% (Critical elements)`);
     console.log(`   Technical Score: ${(technicalScore * 100).toFixed(1)}% (Ebook requirements)`);
     console.log(`   Overall Quality: ${(overallQuality * 100).toFixed(1)}%`);
-    console.log(`   Enhancement Level: ${config.enhancement_level}`);
-    console.log(`   Cost Estimate: $${config.costEstimate}`);
+    console.log(`   Enhancement Level: ${finalConfig.enhancement_level}`);
+    console.log(`   Cost Estimate: $${finalConfig.costEstimate}`);
 
     console.log(`   === PHOTOREALISTIC ELEMENTS ===`);
     console.log(`   📷 Camera Parameters: ${photorealisticElements['camera_params'] ? '✅' : '❌ CRITICAL!'}`);
@@ -507,11 +467,11 @@ NAPISZ PHOTOREALISTIC PROMPT (${config.optimalLength} znaków):`;
       console.log(`   - Composition: ${photoElements.composition}`);
     }
 
-    const qualityThreshold = 0.85; // 85% dla photorealistic
+    const qualityThreshold = 0.85;
     if (overallQuality < qualityThreshold) {
       console.warn(`⚠️ QUALITY WARNING! Score: ${(overallQuality * 100).toFixed(1)}% (target: 85%+)`);
     } else {
-      console.log(`✅ EXCELLENT PHOTOREALISTIC PROMPT! Ready for ${config.provider} ${targetModel} generation`);
+      console.log(`✅ EXCELLENT PHOTOREALISTIC PROMPT! Ready for ${finalConfig.provider} ${targetModel} generation`);
     }
 
     console.log(`📝 Preview: ${imagePrompt.substring(0, 150)}...`);
@@ -533,39 +493,32 @@ NAPISZ PHOTOREALISTIC PROMPT (${config.optimalLength} znaków):`;
       maximumQualityApplied: maximumQuality,
       modelUsed: modelToUse,
       keySource: keySource,
-
-      // 🔥 BEZPIECZNE INFORMACJE O KONFIGURACJI
       modelConfig: {
-        provider: config.provider || 'unknown',
-        maxLength: config.maxLength,
-        optimalLength: config.optimalLength,
-        style: config.style,
-        enhancementLevel: config.enhancement_level,
-        costEstimate: config.costEstimate,
-        supportsComplexInstructions: config.supportsComplexInstructions
+        provider: finalConfig.provider,
+        maxLength: finalConfig.maxLength,
+        optimalLength: finalConfig.optimalLength,
+        style: finalConfig.style,
+        enhancementLevel: finalConfig.enhancement_level,
+        costEstimate: finalConfig.costEstimate,
+        supportsComplexInstructions: finalConfig.supportsComplexInstructions
       },
-
       qualityValidation: {
         criticalElementsMissing: missingCritical,
         optionalElementsMissing: missingOptional,
         autoCorrectionsApplied: missingCritical.length > 0 || missingOptional.length > 2,
         readyForGeneration: overallQuality >= qualityThreshold,
-        qualityThreshold: qualityThreshold,
-        modelSupported: !!PROMPT_CONFIGS[targetModel as keyof typeof PROMPT_CONFIGS]
+        qualityThreshold: qualityThreshold
       },
-
       optimizationNote: isOptimalLength ?
-        `✅ Prompt length OPTIMAL for ${config.provider} ${targetModel} generation` :
-        `⚠️ Prompt length outside optimal range for ${targetModel} (target: ${config.optimalLength}±100 chars)`,
-
-      // 🆕 INFORMACJE O PROVIDERZE
+        `✅ Prompt length OPTIMAL for ${finalConfig.provider} ${targetModel} generation` :
+        `⚠️ Prompt length outside optimal range for ${targetModel} (target: ${finalConfig.optimalLength}±100 chars)`,
       providerInfo: {
-        selected: config.provider || 'unknown',
-        enhancementLevel: config.enhancement_level,
-        costPerGeneration: `$${config.costEstimate}`,
+        selected: finalConfig.provider,
+        enhancementLevel: finalConfig.enhancement_level,
+        costPerGeneration: `$${finalConfig.costEstimate}`,
         supportsTransparency: enableTransparency,
-        complexInstructionsSupport: config.supportsComplexInstructions,
-        qualityTarget: config.qualityTarget
+        complexInstructionsSupport: finalConfig.supportsComplexInstructions,
+        qualityTarget: finalConfig.qualityTarget
       }
     });
 
@@ -580,29 +533,13 @@ NAPISZ PHOTOREALISTIC PROMPT (${config.optimalLength} znaków):`;
 
 export async function GET() {
   return NextResponse.json({
-    message: 'Multi-Provider Photorealistic Prompt Generator for Professional Ebook Illustrations',
-    version: "7.1-imagen3-optimized",
-    supportedProviders: {
-      google: ['imagen-3', 'imagen-4', 'imagen-4-ultra'],
-      openai: ['gpt-image-1', 'dall-e-3']
-    },
-    supportedModels: ['imagen-3', 'imagen-4', 'imagen-4-ultra', 'gpt-image-1', 'dall-e-3'],
-    defaultProvider: 'google',
+    message: 'Photorealistic Prompt Generator for Professional Ebook Illustrations - Imagen-3 Optimized',
+    version: "8.0-imagen3-only-with-retry",
+    supportedModels: ['imagen-3'],
     defaultModel: 'imagen-3',
-    costComparison: {
-      'imagen-3': '$0.03 (Standard Plus)',
-      'imagen-4': '$0.04 (Premium)',
-      'imagen-4-ultra': '$0.06 (Maximum)',
-      'dall-e-3': '$0.08 (OpenAI Standard)',
-      'gpt-image-1': '$0.19 (OpenAI Premium)'
-    },
-    optimalPromptLengths: {
-      'imagen-3': 1200,
-      'imagen-4': 1500,
-      'imagen-4-ultra': 2000,
-      'gpt-image-1': 900,
-      'dall-e-3': 350
-    },
+    provider: 'google',
+    costPerGeneration: '$0.03',
+    optimalPromptLength: 1200,
     focusAreas: {
       photorealisticElements: [
         'Camera parameters (Canon/Sony/Nikon + lens + aperture) - 20% weight',
@@ -615,7 +552,6 @@ export async function GET() {
         'No text enforcement - 10% weight'
       ],
       technicalRequirements: [
-        'Square 1:1 format for ebook readers',
         'Transparent background support (when enabled)',
         'Chapter content relevance',
         'Professional ebook illustration standards'
@@ -631,11 +567,10 @@ export async function GET() {
       optionalThreshold: 2,
       smartTrimming: 'Preserves essential photorealistic elements'
     },
-    bestPractices: {
-      promptStructure: 'Direct scene description + Camera params + Lighting + Quality terms + Composition + Technical requirements',
-      realismApproach: 'Professional photography simulation with specific equipment and techniques',
-      providerOptimization: 'Dynamic prompt adaptation based on target provider capabilities',
-      diversityGeneration: 'Randomized professional photography elements for unique results'
+    retryLogic: {
+      maxAttempts: 3,
+      timeoutPerAttempt: '30s',
+      exponentialBackoff: true
     }
   }, { status: 405 });
 }

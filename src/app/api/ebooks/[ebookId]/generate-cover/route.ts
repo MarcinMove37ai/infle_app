@@ -35,7 +35,7 @@ const COVER_MODEL_CONFIGS = {
     supports_text_rendering: true,
     always_returns_base64: true,
     requires_user_key: true,
-    api_model: "gemini-2.5-flash-image-preview",
+    api_model: "gemini-2.5-flash-image",
     api_method: "generateContent",
     max_images: 4,
     cover_optimized: true
