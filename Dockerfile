@@ -35,25 +35,21 @@ COPY . .
 # aby umieścić je na stałe w kodzie JavaScript przeglądarki.
 ENV NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=$NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
 ENV NEXT_PUBLIC_FB_PIXEL_ID=$NEXT_PUBLIC_FB_PIXEL_ID
-
-# 🔥 DODANE: Zmienne potrzebne podczas build (aby Next.js mógł zainicjalizować moduły)
-ENV DATABASE_URL=$DATABASE_URL
-ENV STRIPE_SECRET_KEY=$STRIPE_SECRET_KEY
-ENV STRIPE_WEBHOOK_SECRET=$STRIPE_WEBHOOK_SECRET
-ENV STRIPE_ROOKIE_PRICE_ID_PLN=$STRIPE_ROOKIE_PRICE_ID_PLN
-ENV STRIPE_ROOKIE_PRICE_ID_USD=$STRIPE_ROOKIE_PRICE_ID_USD
-ENV STRIPE_ROOKIE_PRICE_ID_BLIK=$STRIPE_ROOKIE_PRICE_ID_BLIK
-ENV RESEND_API_KEY=$RESEND_API_KEY
-ENV NEXTAUTH_SECRET=$NEXTAUTH_SECRET
-ENV NEXTAUTH_URL=$NEXTAUTH_URL
-ENV ENCRYPTION_KEY=$ENCRYPTION_KEY
-
-# Wyłączenie telemetrii i budowanie aplikacji
 ENV NEXT_TELEMETRY_DISABLED=1
-ENV DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy"
-ENV STRIPE_SECRET_KEY="sk_test_dummy_key_for_build"
-ENV NEXTAUTH_URL="http://localhost:3000"
-RUN npm run build
+
+# 🔥 NAPRAWIONE: Zmienne przekazywane inline do RUN - nie zostają w obrazie.
+# Składnia ${VAR:-default}: użyj wartości z Railway jeśli podana, fallback na dummy lokalnie.
+RUN DATABASE_URL="${DATABASE_URL:-postgresql://dummy:dummy@localhost:5432/dummy}" \
+    STRIPE_SECRET_KEY="${STRIPE_SECRET_KEY:-sk_test_dummy}" \
+    STRIPE_WEBHOOK_SECRET="${STRIPE_WEBHOOK_SECRET:-whsec_dummy}" \
+    STRIPE_ROOKIE_PRICE_ID_PLN="${STRIPE_ROOKIE_PRICE_ID_PLN:-price_dummy}" \
+    STRIPE_ROOKIE_PRICE_ID_USD="${STRIPE_ROOKIE_PRICE_ID_USD:-price_dummy}" \
+    STRIPE_ROOKIE_PRICE_ID_BLIK="${STRIPE_ROOKIE_PRICE_ID_BLIK:-price_dummy}" \
+    RESEND_API_KEY="${RESEND_API_KEY:-dummy}" \
+    NEXTAUTH_SECRET="${NEXTAUTH_SECRET:-dummy_secret_32_chars_xxxxxxxxxx}" \
+    NEXTAUTH_URL="${NEXTAUTH_URL:-http://localhost:3000}" \
+    ENCRYPTION_KEY="${ENCRYPTION_KEY:-dummy_32_chars_encryption_key_xx}" \
+    npm run build
 
 # Etap 2: Uruchomienie produkcyjne (runner)
 FROM node:18-slim
