@@ -398,7 +398,7 @@ function generateHTMLContent(
       </style>
     </head>
     <body>
-      ${generateCoverPage(title, subtitle, coverImageUrl, authorLogoUrl)}
+      ${generateCoverPage(coverImageUrl!, title, subtitle)}
       ${chapterPageMapping ? generateTableOfContents(chapters, chapterPageMapping, introPageNumber) : ''}
       ${hasIntro ? generateIntroductionPage(introText!) : ''}
       ${generateChaptersContent(chapters)}
@@ -455,6 +455,7 @@ function generateAdvancedCSS(ebookTitle: string, ebookSubtitle: string | null, a
 
     @page cover {
       margin: 0;
+      padding: 0;
       @bottom-left { content: none; }
       @bottom-right { content: none; }
     }
@@ -606,7 +607,8 @@ function generateAdvancedCSS(ebookTitle: string, ebookSubtitle: string | null, a
     .text-block { margin-bottom: 1.5rem; }
     .text-block:last-child { margin-bottom: 0; }
     .paragraph { margin-bottom: 20px; text-align: justify; line-height: 1.8; }
-    .cover-page { page: cover; page-break-after: always; page-break-inside: avoid; height: 100vh; width: 100vw; display: flex; flex-direction: column; justify-content: center; align-items: center; position: relative; background: white; margin: 0; padding: 0; }
+    .cover-page { page: cover; page-break-after: always; page-break-inside: avoid; position: relative; width: 210mm; height: 297mm; margin: 0; padding: 0; overflow: hidden; }
+    .cover-page > img.cover-image { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
     .cover-logo { position: absolute; top: 2%; left: 50%; transform: translateX(-50%); width: auto; height: 40px; z-index: 25; }
     .cover-title-section { position: absolute; top: 4%; left: 11; right: 5; text-align: center; z-index: 20; width: 97%; background: linear-gradient(to bottom, rgba(255, 255, 255, 1) 0%, rgba(255, 255, 255, 1) 70%, rgba(255, 255, 255, 0.95) 85%, rgba(255, 255, 255, 0) 100%); height: 230px; padding: 1rem 2rem 1rem 2rem; display: flex; align-items: center; justify-content: center; }
     .cover-subtitle-section { position: absolute; bottom: 0; left: 11; right: 5; text-align: center; z-index: 20; width: 97%; background: linear-gradient(to top, rgba(255, 255, 255, 1) 0%, rgba(255, 255, 255, 1) 70%, rgba(255, 255, 255, 0.95) 85%, rgba(255, 255, 255, 0) 100%); height: 180px; padding: 0 2rem; display: flex; align-items: center; justify-content: center; }
@@ -619,7 +621,7 @@ function generateAdvancedCSS(ebookTitle: string, ebookSubtitle: string | null, a
     .cover-subtitle::before { top: 0; }
     .cover-subtitle::after { bottom: 0; }
     .cover-image-container { position: absolute; top: 54%; left: 50%; transform: translateX(-50%) translateY(-50%); width: 95.5%; aspect-ratio: 1024 / 1024; z-index: 5; }
-    .cover-image { width: 100%; height: 100%; object-fit: contain; object-position: center; display: block; position: relative; z-index: 0; }
+    .cover-image { width: 100%; height: 100%; object-fit: cover; display: block; }
     .cover-fallback { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 85%; aspect-ratio: 1024 / 1536; background: linear-gradient(145deg, #4a5568 0%, #2d3748 50%, #1a202c 100%); color: white; border-radius: 20px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4), 0 0 100px rgba(0, 0, 0, 0.2); display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; padding: 3rem; z-index: 5; position: relative; overflow: hidden; }
     .cover-fallback::before { content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%; background: radial-gradient(circle at 20% 30%, rgba(255, 255, 255, 0.03) 0%, transparent 50%); transform: rotate(45deg); }
     .cover-fallback .cover-header, .cover-fallback .cover-title, .cover-fallback .cover-subtitle { position: relative; z-index: 1; }
@@ -637,26 +639,12 @@ function generateAdvancedCSS(ebookTitle: string, ebookSubtitle: string | null, a
   `;
 }
 
-function generateCoverPage(title: string, subtitle: string | null, coverImageUrl?: string | null, authorLogoUrl?: string | null): string {
-  const titleClass = title.length > 60 ? 'cover-title very-long' : 'cover-title';
-  if (coverImageUrl && coverImageUrl.trim()) {
-    return `
-      <div class="cover-page">
-        ${authorLogoUrl ? `<img src="${authorLogoUrl}" alt="Logo Autora" class="cover-logo" />` : ''}
-        <div class="cover-title-section"><h1 class="${titleClass}">${escapeHtml(title)}</h1></div>
-        <div class="cover-image-container"><img src="${coverImageUrl}" alt="Okładka ebooka" class="cover-image" loading="eager" onerror="this.parentElement.style.display='none'; document.querySelector('.cover-fallback').style.display='flex';" /></div>
-        <div class="cover-subtitle-section">${subtitle && subtitle.trim() ? `<h2 class="cover-subtitle">${escapeHtml(subtitle)}</h2>` : ''}</div>
-        <div class="cover-fallback" style="display: none;"><h1 class="${titleClass}">${escapeHtml(title)}</h1>${subtitle && subtitle.trim() ? `<h2 class="cover-subtitle">${escapeHtml(subtitle)}</h2>` : ''}</div>
-      </div>
-    `;
-  } else {
-    return `
-      <div class="cover-page">
-        ${authorLogoUrl ? `<img src="${authorLogoUrl}" alt="Logo Autora" class="cover-logo" />` : ''}
-        <div class="cover-fallback" style="display: flex;"><h1 class="${titleClass}">${escapeHtml(title)}</h1>${subtitle && subtitle.trim() ? `<h2 class="cover-subtitle">${escapeHtml(subtitle)}</h2>` : ''}</div>
-      </div>
-    `;
-  }
+function generateCoverPage(coverImageUrl: string): string {
+  return `
+    <div class="cover-page">
+      <img src="${coverImageUrl}" alt="Okładka" class="cover-image" />
+    </div>
+  `;
 }
 
 function generateTableOfContents(chapters: Chapter[], chapterPageMapping: ChapterPageMapping, introPageNumber?: number): string {

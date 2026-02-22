@@ -76,7 +76,7 @@ export async function POST(
     });
 
     // Ścieżki
-    const uploadsDir = path.resolve(process.env.UPLOADS_DIR || '/data/uploads/uploads');
+    const uploadsDir = path.resolve(path.join(process.env.UPLOADS_DIR || '/data/uploads', 'uploads'));
     await fs.promises.mkdir(uploadsDir, { recursive: true });
 
     const rawMockupFileName = `${session.user.id}_EB${ebookIdNum}_rawMOCK.webp`;
@@ -87,13 +87,13 @@ export async function POST(
 
     // Przygotuj final mockup
     const framePath = path.resolve('./public/templates/raw_mokup.png');
-    const resizedCoverBuffer = await sharp(rawCoverBuffer)
+    const coverFilePath = path.join(uploadsDir, `${session.user.id}_EB${ebookIdNum}_COVER.webp`);
+    const resizedCoverBuffer = await sharp(coverFilePath)
       .resize({ width: 600, height: 840, fit: 'cover' })
       .toBuffer();
 
     // Zapisz oba mockupy równolegle
     await Promise.all([
-      fs.promises.writeFile(rawMockupPath, rawCoverBuffer),
       sharp(framePath)
         .composite([{
           input: resizedCoverBuffer,
@@ -111,7 +111,7 @@ export async function POST(
     await prisma.ebooks.update({
       where: { id: ebookIdNum },
       data: {
-        cover_image_webp_url: rawMockupUrl,
+        cover_image_webp_url: `/uploads/${session.user.id}_EB${ebookIdNum}_COVER.webp`,
         final_mockup_url: finalMockupUrl,
       }
     });

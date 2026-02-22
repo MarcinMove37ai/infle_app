@@ -97,12 +97,10 @@ export const Step4Graphics: React.FC<Step4GraphicsProps> = ({
               <FileText size={16} className="mr-2 text-blue-500" />
               Graphics ({tocItems.filter(item => item.image_url).length + (coverData?.cover_url ? 1 : 0)}/{tocItems.length + 1})
             </div>
-
             <div className="bg-blue-50 px-3 py-1 rounded-full text-xs text-blue-700">
               {Math.round(((tocItems.filter(item => item.image_url).length + (coverData?.cover_url ? 1 : 0)) / (tocItems.length + 1)) * 100)}% completed
             </div>
           </div>
-
           <div className="w-full bg-gray-200 rounded-full h-2 mb-2">
             <div
               className="bg-blue-600 h-2 rounded-full transition-all duration-500"
@@ -112,67 +110,56 @@ export const Step4Graphics: React.FC<Step4GraphicsProps> = ({
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-          {/* COVER AS THE FIRST ELEMENT WITH HIGHLIGHT */}
+
+          {/* COVER */}
           <div className="border-2 border-dashed border-gray-400 rounded-lg shadow-sm bg-gray-100 overflow-hidden h-full flex flex-col">
-            <div className="bg-gray-200 p-3 border-b border-gray-300 flex flex-col">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium">
-                  📖 COVER
-                </span>
-
-                <span className={`text-xs px-2 py-0.5 rounded-full ${
-                  coverData?.cover_url
-                    ? 'bg-green-100 text-green-700'
-                    : 'bg-gray-300 text-gray-700'
-                }`}>
-                  {coverData?.cover_url
-                    ? 'Ready ✓'
-                    : 'No cover'}
-                </span>
-              </div>
-
-              <div className="border-t border-gray-300 mb-2"></div>
-
-              <div className="flex items-baseline">
-                <div className="mr-2 min-w-6 h-6 w-6 bg-gray-600 rounded-full flex items-center justify-center text-white font-semibold shadow-sm text-xs flex-shrink-0" style={{transform: 'translateY(-1px)'}}>
-                  📖
-                </div>
-                <h3 className="font-medium text-gray-800 text-sm break-words">Ebook cover</h3>
-              </div>
+            <div className="bg-gray-200 px-3 py-2 border-b border-gray-300 flex items-center justify-between">
+              <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium">
+                📖 COVER
+              </span>
+              <span className={`text-xs px-2 py-0.5 rounded-full ${
+                coverData?.cover_url
+                  ? 'bg-green-100 text-green-700'
+                  : 'bg-gray-300 text-gray-700'
+              }`}>
+                {coverData?.cover_url ? 'Ready ✓' : 'No cover'}
+              </span>
             </div>
 
             <div className="p-3 flex-grow flex flex-col bg-gray-50">
-              <div className="w-full aspect-square bg-gray-200 rounded-lg flex items-center justify-center mb-3 border border-dashed border-gray-400 overflow-hidden">
+              {/* Cover image — aspect-square container, 3:4 image letterboxed, rounded */}
+              <div className="w-full flex-1 min-h-0 bg-gray-100 rounded-lg flex items-center justify-center mb-3 overflow-hidden">
                 {coverData?.cover_url && coverData.cover_url.trim() ? (
                   <img
                     key={`cover-${imageRefreshTimestamp}`}
                     src={coverData.cover_url}
                     alt="Ebook cover"
-                    className="object-cover w-full h-full cursor-pointer hover:opacity-90 transition-opacity"
+                    className="object-contain h-full rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
                     onClick={() => handleImagePreview(
                       coverData.cover_url,
                       `Okładka - ${title}`,
                       `okladka_${title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.jpg`
                     )}
                     onLoad={() => console.log('✅ Cover loaded successfully:', coverData.cover_url)}
-                    onError={(e) => {
+                    onError={() => {
                       console.error('❌ Error loading cover:', coverData.cover_url);
                       setTimeout(() => fetchCoverStatus(), 2000);
                     }}
                   />
                 ) : (
-                  <div className="flex flex-col items-center justify-center text-gray-500 text-sm p-4 text-center">
+                  <div className="flex flex-col items-center justify-center text-gray-500 text-sm p-4 text-center w-full h-full bg-gray-200">
                     <Palette size={32} className="text-gray-400 mb-2" />
                     <p>No cover</p>
                   </div>
                 )}
               </div>
 
-              <div className="flex flex-col gap-2 mt-auto">
+              {/* Buttons: Generate left, Upload right */}
+              <div className="flex flex-col sm:flex-row gap-2 mt-auto">
                 <button
                   onClick={() => generateCover(true, false)}
                   disabled={isGeneratingCover || isGeneratingAllImages || uploadingCoverImage}
-                  className={`px-3 py-2 rounded-lg transition-colors flex items-center justify-center text-sm ${
+                  className={`flex-1 px-3 py-2 rounded-lg transition-colors flex items-center justify-center text-sm ${
                     isGeneratingCover || isGeneratingAllImages || uploadingCoverImage
                       ? 'bg-gray-400 text-white cursor-not-allowed'
                       : 'bg-blue-600 text-white hover:bg-blue-700 cursor-pointer'
@@ -194,7 +181,7 @@ export const Step4Graphics: React.FC<Step4GraphicsProps> = ({
                 <button
                   onClick={handleOpenCoverFileDialog}
                   disabled={isGeneratingCover || isGeneratingAllImages || uploadingCoverImage}
-                  className={`px-3 py-2 border border-gray-300 rounded-lg transition-colors flex items-center justify-center text-sm ${
+                  className={`flex-1 px-3 py-2 border border-gray-300 rounded-lg transition-colors flex items-center justify-center text-sm ${
                     isGeneratingCover || isGeneratingAllImages || uploadingCoverImage
                       ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
                       : 'text-gray-700 hover:bg-gray-50 cursor-pointer'
@@ -208,7 +195,7 @@ export const Step4Graphics: React.FC<Step4GraphicsProps> = ({
                   ) : (
                     <>
                       <Upload size={14} className="mr-1.5 flex-shrink-0" />
-                      <span className="truncate">{coverData?.cover_url ? 'Change' : 'Add from disk'}</span>
+                      <span className="truncate">Upload</span>
                     </>
                   )}
                 </button>
@@ -239,15 +226,12 @@ export const Step4Graphics: React.FC<Step4GraphicsProps> = ({
                         No content
                       </span>
                     )}
-
                     <span className={`text-xs px-2 py-0.5 rounded-full ${
                       item.image_url
                         ? 'bg-green-100 text-green-700'
                         : 'bg-gray-200 text-gray-700'
                     }`}>
-                      {item.image_url
-                        ? 'Graphic ✓'
-                        : 'No graphic'}
+                      {item.image_url ? 'Graphic ✓' : 'No graphic'}
                     </span>
                   </div>
 
@@ -275,7 +259,7 @@ export const Step4Graphics: React.FC<Step4GraphicsProps> = ({
                           `rozdzial_${index + 1}_${item.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.jpg`
                         )}
                         onLoad={() => console.log(`✅ Image loaded: ${item.title}`)}
-                        onError={(e) => {
+                        onError={() => {
                           console.error(`❌ Error loading image for ${item.title}:`, item.image_url);
                           setTimeout(() => refreshImagesStatus(), 2000);
                         }}
@@ -288,10 +272,37 @@ export const Step4Graphics: React.FC<Step4GraphicsProps> = ({
                     )}
                   </div>
 
+                  {/* Buttons: Generate left, Upload right */}
                   <div className="flex flex-col sm:flex-row gap-2 mt-auto">
                     <button
+                      onClick={() => handleGenerateAIImage(item.id, !!item.image_url)}
+                      disabled={
+                        !((completedChapterIds.includes(item.id) || (item.content && item.content.trim().length > 0)))
+                        || isSaving || generatingAIImageForChapter === item.id || isGeneratingAllImages || uploadingCoverImage
+                      }
+                      className={`flex-1 px-3 py-2 rounded-lg transition-colors flex items-center justify-center text-sm ${
+                        !((completedChapterIds.includes(item.id) || (item.content && item.content.trim().length > 0)))
+                        || isSaving || generatingAIImageForChapter === item.id || isGeneratingAllImages || uploadingCoverImage
+                          ? 'bg-gray-400 text-white cursor-not-allowed'
+                          : 'bg-blue-600 text-white hover:bg-blue-700 cursor-pointer'
+                      }`}
+                    >
+                      {generatingAIImageForChapter === item.id ? (
+                        <>
+                          <Loader size={14} className="animate-spin mr-1.5 flex-shrink-0" />
+                          <span className="truncate">Generating...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles size={14} className="mr-1.5 flex-shrink-0" />
+                          <span className="truncate">{item.image_url ? 'Regenerate' : 'Generate with AI'}</span>
+                        </>
+                      )}
+                    </button>
+
+                    <button
                       onClick={() => handleOpenFileDialog(item.id)}
-                      className="px-3 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors flex items-center justify-center text-sm cursor-pointer"
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors flex items-center justify-center text-sm cursor-pointer"
                       disabled={(isSaving && uploadingImageForChapter === item.id) || isGeneratingAllImages || uploadingCoverImage}
                     >
                       {isSaving && uploadingImageForChapter === item.id ? (
@@ -302,48 +313,20 @@ export const Step4Graphics: React.FC<Step4GraphicsProps> = ({
                       ) : (
                         <>
                           <Upload size={14} className="mr-1.5 flex-shrink-0" />
-                          <span className="truncate">{item.image_url ? 'Change' : 'Add'}</span>
+                          <span className="truncate">Upload</span>
                         </>
                       )}
-                    </button>
-
-                    <button
-                      onClick={() => handleGenerateAIImage(item.id, !!item.image_url)}
-                      disabled={
-                        !((completedChapterIds.includes(item.id) || (item.content && item.content.trim().length > 0)))
-                        || isSaving || generatingAIImageForChapter === item.id || isGeneratingAllImages || uploadingCoverImage
-                      }
-                      className={`px-3 py-2 rounded-lg transition-colors flex items-center justify-center text-sm ${
-                        !((completedChapterIds.includes(item.id) || (item.content && item.content.trim().length > 0)))
-                        || isSaving || generatingAIImageForChapter === item.id || isGeneratingAllImages || uploadingCoverImage
-                          ? 'bg-gray-400 text-white cursor-not-allowed'
-                          : 'bg-blue-600 text-white hover:bg-blue-700 cursor-pointer'
-                      }`}
-                    >
-                        {generatingAIImageForChapter === item.id ? (
-                          <>
-                            <Loader size={14} className="animate-spin mr-1.5 flex-shrink-0" />
-                            <span className="truncate">Generating...</span>
-                          </>
-                        ) : (
-                          <>
-                            <Sparkles size={14} className="mr-1.5 flex-shrink-0" />
-                            <span className="truncate">Generate with AI</span>
-                          </>
-                        )}
                     </button>
                   </div>
 
                   {aiImageGenerationError && generatingAIImageForChapter === item.id && (
                     <div className="mt-2 text-xs text-red-600 bg-red-50 p-1.5 rounded-md">
-                      <AlertCircle size={12} className="inline-block mr-1" />
                       <span className="line-clamp-2">{aiImageGenerationError}</span>
                     </div>
                   )}
 
                   {!((completedChapterIds.includes(item.id) || (item.content && item.content.trim().length > 0))) && (
                     <div className="mt-2 text-xs text-amber-600 bg-amber-50 p-1.5 rounded-md">
-                      <AlertCircle size={12} className="inline-block mr-1" />
                       <span className="line-clamp-2">First, add chapter content</span>
                     </div>
                   )}
@@ -353,34 +336,32 @@ export const Step4Graphics: React.FC<Step4GraphicsProps> = ({
           )}
         </div>
 
-          {isGeneratingAllImages && (
-            <div className="mt-2 mb-6 bg-blue-50 p-4 rounded-lg border border-blue-200 animate-fadeIn">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="font-medium text-blue-800 flex items-center">
-                  <Loader size={16} className="mr-2 animate-spin text-blue-600" />
-                  Generating graphics
-                </h3>
-                <span className="text-sm text-blue-600 font-medium">
-                  {generatedImagesCount}/{totalImagesToGenerate}
-                </span>
-              </div>
-
-              <div className="w-full bg-white rounded-full h-2">
-                <div
-                  className="bg-blue-600 h-2 rounded-full transition-all duration-500"
-                  style={{ width: `${(generatedImagesCount / totalImagesToGenerate) * 100}%` }}
-                ></div>
-              </div>
-
-              <p className="text-xs text-blue-700 mt-2 truncate">
-                {generatingAIImageForChapter &&
-                  `Currently generating: graphic for chapter "${
-                    tocItems.find(item => item.id === generatingAIImageForChapter)?.title || 'unknown'
-                  }"`
-                }
-              </p>
+        {isGeneratingAllImages && (
+          <div className="mt-2 mb-6 bg-blue-50 p-4 rounded-lg border border-blue-200 animate-fadeIn">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-medium text-blue-800 flex items-center">
+                <Loader size={16} className="mr-2 animate-spin text-blue-600" />
+                Generating graphics
+              </h3>
+              <span className="text-sm text-blue-600 font-medium">
+                {generatedImagesCount}/{totalImagesToGenerate}
+              </span>
             </div>
-          )}
+            <div className="w-full bg-white rounded-full h-2">
+              <div
+                className="bg-blue-600 h-2 rounded-full transition-all duration-500"
+                style={{ width: `${(generatedImagesCount / totalImagesToGenerate) * 100}%` }}
+              ></div>
+            </div>
+            <p className="text-xs text-blue-700 mt-2 truncate">
+              {generatingAIImageForChapter &&
+                `Currently generating: graphic for chapter "${
+                  tocItems.find(item => item.id === generatingAIImageForChapter)?.title || 'unknown'
+                }"`
+              }
+            </p>
+          </div>
+        )}
 
         <div className="mt-6 border-t border-gray-200 pt-4 px-4 sm:px-6 pb-4 flex flex-col sm:flex-row justify-between items-center gap-3 sm:gap-0">
           <button

@@ -10,6 +10,7 @@ export interface CoverParams {
   positionX: number;
   positionY: number;
   seed: number | null;
+  markerEnabled?: boolean;
 }
 
 export interface ReelModalState {
@@ -71,9 +72,15 @@ export function clearReelSession(pageId: string) {
 
 export function useReelSessionState(pageId: string | null) {
   const [state, setState] = useState<ReelModalState>(DEFAULT_STATE);
+  const stateRef = useRef<ReelModalState>(DEFAULT_STATE); // ← zawsze aktualny stan
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const initialized = useRef(false);
+
+  // ── Ref synchronizowany przy każdej zmianie stanu ──
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
 
   // ── 1. Inicjalizacja: session → DB fallback ──
   useEffect(() => {
@@ -170,6 +177,8 @@ export function useReelSessionState(pageId: string | null) {
       if (!pageId) return false;
       setIsSaving(true);
 
+      const currentState = stateRef.current; // ← czyta ref, nie closure
+
       try {
         // Sprawdź czy reel istnieje
         const checkRes = await fetch(`/api/reel/${pageId}`);
@@ -179,13 +188,14 @@ export function useReelSessionState(pageId: string | null) {
           method,
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            reelHeader: state.reelHeader || null,
-            reelCTA: state.reelCTA === "comment" && state.CTAtext
-              ? `comment;${state.CTAtext}`
-              : state.reelCTA || null,
-            CTAtext: state.CTAtext || null,
-            audioGender: state.audioGender || "MALE",
-            coverParams: state.coverParams,
+            reelHeader: currentState.reelHeader || null,
+            reelIntro: currentState.reelIntro || null,
+            reelCTA: currentState.reelCTA === "comment" && currentState.CTAtext
+              ? `comment;${currentState.CTAtext}`
+              : currentState.reelCTA || null,
+            CTAtext: currentState.CTAtext || null,
+            audioGender: currentState.audioGender || "MALE",
+            coverParams: currentState.coverParams,
           }),
         });
 
@@ -203,7 +213,7 @@ export function useReelSessionState(pageId: string | null) {
         setIsSaving(false);
       }
     },
-    [pageId, state]
+    [pageId] // ← state usunięty z deps, ref nie wymaga listowania
   );
 
   // ── 6. Reset ──

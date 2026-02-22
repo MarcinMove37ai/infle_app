@@ -300,6 +300,7 @@ export async function POST(request: Request, context: RouteContext) {
       header: { text: reel.reelHeader || "Ebook, którego potrzebujesz" },
       cta: { text: ctaDisplayText },
       marker: {
+        enabled: coverParams.markerEnabled ?? true,
         seed: coverParams.seed ?? 42,
         renderScale: coverParams.scale ?? 1.0,
         renderOffsetY: coverParams.positionY ?? 0.0,

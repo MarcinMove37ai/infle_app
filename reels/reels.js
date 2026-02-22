@@ -1185,6 +1185,7 @@ if (configOverridePath) {
       const overrides = JSON.parse(fs.readFileSync(absPath, 'utf-8'));
       if (overrides.header?.text) CONFIG.header.text = overrides.header.text;
       if (overrides.cta?.text) CONFIG.cta.text = overrides.cta.text;
+      if (overrides.marker?.enabled !== undefined) CONFIG.marker.enabled = overrides.marker.enabled;
       if (overrides.marker?.seed !== undefined) CONFIG.marker.seed = overrides.marker.seed;
       if (overrides.marker?.renderScale !== undefined) CONFIG.marker.renderScale = overrides.marker.renderScale;
       if (overrides.marker?.renderOffsetY !== undefined) CONFIG.marker.renderOffsetY = overrides.marker.renderOffsetY;

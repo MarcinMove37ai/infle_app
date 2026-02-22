@@ -7,6 +7,7 @@ import { FileText, Search, Plus, Eye, Edit, Trash2, Clock, Check, AlertTriangle,
 import { QRCodeSVG } from 'qrcode.react';
 import { useAuth } from '@/hooks/useAuth';
 import { useReelSessionState, clearReelSession } from '@/hooks/useReelSessionState';
+import { ReelModal } from './ReelModal';
 
 // Interfaces
 interface PageItem {
@@ -46,276 +47,6 @@ interface PageStats {
 interface PagesApiResponse {
   pages: PageItem[];
   stats: PageStats;
-}
-
-// ─── Reel Preview: Marker SVG generator (seeded, dense Catmull-Rom, per-segment pressure) ───
-
-function generateMarkerSegments(width: number, height: number, seed: number = 42) {
-  const marker = { centerX: 0.50, centerY: 0.72, radiusX: 0.42, radiusY: 0.12 };
-  let s = seed;
-  const rng = () => { s = (s * 16807 + 0) % 2147483647; return (s - 1) / 2147483646; };
-
-  const cx = width * marker.centerX;
-  const cy = height * marker.centerY;
-  const rx = width * marker.radiusX;
-  const ry = height * marker.radiusY;
-
-  const N = 10;
-  const arcSpan = Math.PI * 2 * (0.88 + rng() * 0.06);
-  const startAngle = -Math.PI * 0.75;
-  const tilt = (rng() - 0.5) * 0.2;
-
-  const controlPoints: { x: number; y: number; pressure: number }[] = [];
-  for (let i = 0; i <= N; i++) {
-    const t = startAngle - (i / N) * arcSpan;
-    const radiusNoise = 1 + (rng() - 0.5) * 0.12;
-    const angleNoise = (rng() - 0.5) * 0.12;
-    const x = cx + Math.cos(t + tilt + angleNoise) * rx * radiusNoise;
-    const y = cy + Math.sin(t + tilt + angleNoise) * ry * radiusNoise;
-    const drawRatio = i / N;
-    const pressureBase = 0.7 + 0.3 * Math.cos(drawRatio * Math.PI * 1.5);
-    const pressureNoise = 1 + (rng() - 0.5) * 0.45;
-    const startBoost = i < 2 ? 1.3 : 1.0;
-    const endTaper = i > N - 3 ? 0.2 + 0.8 * ((N - i) / 3) : 1.0;
-    controlPoints.push({ x, y, pressure: pressureBase * pressureNoise * startBoost * endTaper });
-  }
-
-  const dense: { x: number; y: number; pressure: number }[] = [];
-  const interpPerSeg = 30;
-
-  for (let i = 0; i < controlPoints.length - 1; i++) {
-    const p0 = controlPoints[Math.max(0, i - 1)];
-    const p1 = controlPoints[i];
-    const p2 = controlPoints[i + 1];
-    const p3 = controlPoints[Math.min(controlPoints.length - 1, i + 2)];
-
-    for (let j = 0; j < interpPerSeg; j++) {
-      const t = j / interpPerSeg;
-      const t2 = t * t, t3 = t2 * t;
-      const h = 0.5;
-      const x = h * ((-p0.x + 3*p1.x - 3*p2.x + p3.x)*t3 + (2*p0.x - 5*p1.x + 4*p2.x - p3.x)*t2 + (-p0.x + p2.x)*t + 2*p1.x);
-      const y = h * ((-p0.y + 3*p1.y - 3*p2.y + p3.y)*t3 + (2*p0.y - 5*p1.y + 4*p2.y - p3.y)*t2 + (-p0.y + p2.y)*t + 2*p1.y);
-      const pressure = p1.pressure + (p2.pressure - p1.pressure) * t;
-      dense.push({ x, y, pressure });
-    }
-  }
-  dense.push(controlPoints[controlPoints.length - 1]);
-
-  const segments: { x1: number; y1: number; x2: number; y2: number; pressure: number }[] = [];
-  for (let i = 0; i < dense.length - 1; i++) {
-    segments.push({
-      x1: dense[i].x, y1: dense[i].y,
-      x2: dense[i + 1].x, y2: dense[i + 1].y,
-      pressure: (dense[i].pressure + dense[i + 1].pressure) / 2,
-    });
-  }
-
-  return segments;
-}
-
-// ─── Reel layout ratios (from video generator config 1080×1920) ──────────────
-
-const RL = {
-  header: { yRatio: 0.035, borderColor: '#5b21b6', borderWidth: 2.5, color: '#7c3aed' },
-  cover: { topRatio: 0.07, bottomRatio: 0.72, scale: 0.93 },
-  marker: { strokeWidth: 22, color: '#dc2626', highlight: '#ef4444' },
-  cta: { yRatio: 0.88, widthRatio: 0.78, heightRatio: 0.0625, borderRadius: 8, from: '#9333ea', to: '#4f46e5', shadow: '0 8px 24px rgba(79,70,229,0.4)' },
-  captions: {
-    yRatio: 0.76,
-    lineSpacing: 1.35,
-    maxCharsPerLine: 22,
-    activeColor: '#6d28d9',
-    inactiveColor: 'rgba(0, 0, 0, 0.25)',
-    fontWeightNormal: 500,
-    fontWeightActive: 700,
-    highlightWordIndex: 1,
-  },
-};
-
-// ─── Caption segment builder (same algorithm as video generator) ─────────────
-
-function buildFirstCaptionSegment(text: string): { line1: string[]; line2: string[] } | null {
-  if (!text || !text.trim()) return null;
-  const words = text.trim().split(/\s+/).map(w => w.replace(/^["„"]+|["„"]+$/g, '').replace(/["""]/g, ''));
-  if (words.length === 0) return null;
-
-  const maxTotal = RL.captions.maxCharsPerLine * 2 + 4;
-  const segWords: string[] = [];
-  let totalChars = 0;
-
-  for (let i = 0; i < words.length && totalChars + words[i].length + 1 <= maxTotal; i++) {
-    segWords.push(words[i]);
-    totalChars += words[i].length + 1;
-    if (segWords.length >= 3 && /[.!?]$/.test(words[i])) break;
-  }
-  if (segWords.length === 0) { segWords.push(words[0]); }
-
-  let bestSplit = Math.ceil(segWords.length / 2);
-  let bestDiff = Infinity;
-  for (let s = 1; s < segWords.length; s++) {
-    const l1 = segWords.slice(0, s).join(' ').length;
-    const l2 = segWords.slice(s).join(' ').length;
-    const diff = Math.abs(l1 - l2);
-    if (diff < bestDiff) { bestDiff = diff; bestSplit = s; }
-  }
-
-  return { line1: segWords.slice(0, bestSplit), line2: segWords.slice(bestSplit) };
-}
-
-// ─── Inline Reel Preview component ──────────────────────────────────────────
-
-function ReelPreviewInline({ headerText, ctaText, coverUrl, placeholderHeader, placeholderCta, markerScale = 1.0, markerOffsetY = 0.0, markerSeed = 42, introText, placeholderIntro }: {
-  headerText: string;
-  ctaText: string;
-  coverUrl?: string;
-  placeholderHeader?: string;
-  placeholderCta?: string;
-  markerScale?: number;
-  markerOffsetY?: number;
-  markerSeed?: number;
-  introText?: string;
-  placeholderIntro?: string;
-}) {
-  const markerSegments = useMemo(() => {
-    const cW = 1080 * RL.cover.scale;
-    const cH = 1920 * (RL.cover.bottomRatio - RL.cover.topRatio) * RL.cover.scale;
-    return generateMarkerSegments(cW, cH, markerSeed);
-  }, [markerSeed]);
-
-  const captionSource = introText || placeholderIntro || '';
-  const isPlaceholderCaption = !introText && !!placeholderIntro;
-  const captionSegment = useMemo(() => buildFirstCaptionSegment(captionSource), [captionSource]);
-
-  const showHeader = headerText || placeholderHeader || '';
-  const showCta = ctaText || placeholderCta || '';
-  const svgW = 1080 * RL.cover.scale;
-  const svgH = 1920 * (RL.cover.bottomRatio - RL.cover.topRatio) * RL.cover.scale;
-
-  return (
-    <div className="relative h-full" style={{ aspectRatio: '9 / 16' }}>
-      <div className="absolute inset-0 bg-white rounded-xl overflow-hidden shadow-2xl" style={{ containerType: 'size' as any }}>
-
-        {/* ═══ HEADER ═══ */}
-        <div className="absolute left-0 right-0 flex justify-center" style={{ top: `${RL.header.yRatio * 100}%` }}>
-          <div
-            className="whitespace-nowrap text-center leading-none transition-colors duration-200"
-            style={{
-              padding: '1.4% 4.8%',
-              border: `${RL.header.borderWidth}px solid ${headerText ? RL.header.borderColor : 'rgba(91,33,182,0.25)'}`,
-              color: headerText ? RL.header.color : 'rgba(124,58,237,0.3)',
-              fontWeight: 700,
-              fontSize: 'clamp(8px, 3.4cqh, 26px)',
-              fontFamily: "'Inter', sans-serif",
-            }}
-          >
-            {showHeader}
-          </div>
-        </div>
-
-        {/* ═══ COVER IMAGE ═══ */}
-        <div
-          className="absolute left-1/2 -translate-x-1/2 flex items-center justify-center"
-          style={{
-            top: `${RL.cover.topRatio * 100}%`,
-            bottom: `${(1 - RL.cover.bottomRatio) * 100}%`,
-            width: `${RL.cover.scale * 100}%`,
-          }}
-        >
-          <div className="relative w-full h-full flex items-center justify-center">
-            {coverUrl ? (
-              <img src={coverUrl} alt="Cover" className="max-w-full max-h-full object-contain" draggable={false} />
-            ) : (
-              <div className="w-4/5 h-4/5 flex flex-col items-center justify-center bg-gray-50 rounded-lg border-2 border-dashed border-gray-200">
-                <ImageIcon className="text-gray-300 mb-1" style={{ width: '15%', height: '15%' }} />
-                <span className="text-gray-400" style={{ fontSize: 'clamp(6px, 1.4cqh, 12px)' }}>Mockup</span>
-              </div>
-            )}
-
-            {/* ═══ MARKER SVG ═══ */}
-            <svg
-              className="absolute inset-0 w-full h-full pointer-events-none"
-              viewBox={`0 0 ${svgW} ${svgH}`}
-              preserveAspectRatio="xMidYMid meet"
-              fill="none"
-            >
-              <g transform={`translate(${svgW * 0.5}, ${svgH * 0.72 + markerOffsetY * svgH}) scale(${markerScale}) translate(${-svgW * 0.5}, ${-svgH * 0.72})`}>
-                {markerSegments.map((seg, i) => (
-                  <line key={`s${i}`} x1={seg.x1} y1={seg.y1} x2={seg.x2} y2={seg.y2}
-                    stroke={RL.marker.color} strokeWidth={RL.marker.strokeWidth * seg.pressure}
-                    strokeLinecap="round" opacity={0.35} />
-                ))}
-                {markerSegments.map((seg, i) => (
-                  <line key={`h${i}`} x1={seg.x1 + 0.3} y1={seg.y1 + 0.3} x2={seg.x2 + 0.3} y2={seg.y2 + 0.3}
-                    stroke={RL.marker.highlight} strokeWidth={RL.marker.strokeWidth * seg.pressure * 0.5}
-                    strokeLinecap="round" opacity={0.5} />
-                ))}
-              </g>
-            </svg>
-          </div>
-        </div>
-
-        {/* ═══ CAPTIONS ═══ */}
-        {captionSegment && (
-          <div
-            className="absolute left-0 right-0 flex flex-col items-center pointer-events-none"
-            style={{
-              top: `${RL.captions.yRatio * 100}%`,
-              transform: 'translateY(-50%)',
-              gap: '1.24cqh',
-              opacity: isPlaceholderCaption ? 0.45 : 1,
-            }}
-          >
-            {[captionSegment.line1, captionSegment.line2].map((lineWords, lineIdx) => {
-              if (!lineWords.length) return null;
-              const lineStartIdx = lineIdx === 0 ? 0 : captionSegment.line1.length;
-              return (
-                <div key={lineIdx} className="text-center whitespace-nowrap" style={{ fontSize: 'clamp(7px, 3.54cqh, 24px)', fontFamily: "'Inter', sans-serif", lineHeight: 1 }}>
-                  {lineWords.map((word, wi) => {
-                    const globalIdx = lineStartIdx + wi;
-                    const isActive = globalIdx === RL.captions.highlightWordIndex;
-                    return (
-                      <React.Fragment key={wi}>
-                        {wi > 0 && ' '}
-                        <span style={{
-                          color: isActive ? RL.captions.activeColor : RL.captions.inactiveColor,
-                          fontWeight: isActive ? RL.captions.fontWeightActive : RL.captions.fontWeightNormal,
-                        }}>
-                          {word}
-                        </span>
-                      </React.Fragment>
-                    );
-                  })}
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-        {/* ═══ CTA BUTTON ═══ */}
-        <div
-          className="absolute left-1/2 flex items-center justify-center text-white text-center transition-opacity duration-200"
-          style={{
-            top: `${RL.cta.yRatio * 100}%`,
-            transform: 'translate(-50%, -50%)',
-            width: `${RL.cta.widthRatio * 100}%`,
-            height: `${RL.cta.heightRatio * 100}%`,
-            borderRadius: RL.cta.borderRadius,
-            background: ctaText
-              ? `linear-gradient(to right, ${RL.cta.from}, ${RL.cta.to})`
-              : 'linear-gradient(to right, rgba(147,51,234,0.25), rgba(79,70,229,0.25))',
-            boxShadow: ctaText ? RL.cta.shadow : 'none',
-            fontWeight: 600,
-            fontSize: 'clamp(7px, 2.2cqh, 20px)',
-            fontFamily: "'Inter', sans-serif",
-            opacity: ctaText ? 1 : 0.5,
-            padding: '0 4%',
-          }}
-        >
-          {showCta}
-        </div>
-      </div>
-    </div>
-  );
 }
 
 // ─── Translations ────────────────────────────────────────────────────────────
@@ -553,11 +284,15 @@ const PagesView = () => {
   const setReelMarkerScale = (v: number) => reel.updateCoverParams({ scale: v });
   const setReelMarkerOffsetY = (v: number) => reel.updateCoverParams({ positionY: v });
   const setReelMarkerSeed = (v: number) => reel.updateCoverParams({ seed: v });
+  const reelMarkerEnabled = reel.state.coverParams.markerEnabled ?? true;
+  const setReelMarkerEnabled = (v: boolean) => reel.updateCoverParams({ markerEnabled: v });
   const setReelIntroText = (v: string) => reel.updateField('reelIntro', v);
 
   // ── CTA Options state (z kolumny CTAoptions w tabeli reels) ──
   const [reelCtaOptions, setReelCtaOptions] = useState<Record<string, string>>({});
   const [selectedCtaKey, setSelectedCtaKey] = useState<string>('');
+  const [reelEbookTitle, setReelEbookTitle] = useState<string | undefined>();
+  const [reelEbookSubtitle, setReelEbookSubtitle] = useState<string | undefined>();
 
   const [currentLang, setCurrentLang] = useState<'pl' | 'en'>('pl');
 
@@ -777,10 +512,11 @@ const PagesView = () => {
   };
 
   // Pobierz CTAoptions gdy modal się otwiera (jeśli nie załadowano wcześniej)
+  // Pobierz CTAoptions gdy modal się otwiera (jeśli nie załadowano wcześniej)
   useEffect(() => {
     if (!reelModalOpen || !reelPageId) return;
     if (Object.keys(reelCtaOptions).length > 0) return; // już załadowane
-    const fetchOpts = async () => {
+    const fetchCtaOpts = async () => {
       try {
         const res = await fetch(`/api/reel/${reelPageId}`);
         if (res.ok) {
@@ -790,7 +526,29 @@ const PagesView = () => {
         }
       } catch {}
     };
-    fetchOpts();
+    fetchCtaOpts();
+  }, [reelModalOpen, reelPageId]);
+
+  // Pobierz tytuł/podtytuł e-booka przy każdym otwarciu modala
+  useEffect(() => {
+    if (!reelModalOpen || !reelPageId) return;
+    const fetchEbook = async () => {
+      try {
+        const res = await fetch(`/api/reel/${reelPageId}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.ebookId) {
+            const ebookRes = await fetch(`/api/ebooks/${data.ebookId}`);
+            if (ebookRes.ok) {
+              const ebook = await ebookRes.json();
+              setReelEbookTitle(ebook.title ?? undefined);
+              setReelEbookSubtitle(ebook.subtitle ?? undefined);
+            }
+          }
+        }
+      } catch {}
+    };
+    fetchEbook();
   }, [reelModalOpen, reelPageId]);
 
   const closeReelModal = async () => {
@@ -800,6 +558,8 @@ const PagesView = () => {
     setReelModalOpen(false);
     setReelPageId(null);
     setReelCtaOptions({});
+    setReelEbookTitle(undefined);
+    setReelEbookSubtitle(undefined);
     setSelectedCtaKey('');
   };
 
@@ -1188,246 +948,46 @@ const PagesView = () => {
           REEL MODAL — editable preview + config form
           ═══════════════════════════════════════════════════════════ */}
       {reelModalOpen && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[70] backdrop-blur-sm p-4 sm:py-3">
-          <div ref={reelModalRef} className={`relative w-full flex flex-col bg-gray-900 rounded-2xl animate-fadeIn overflow-hidden transition-all duration-500 ease-in-out ${reelReadyUrl ? 'max-w-[400px] h-auto max-h-[95vh]' : 'max-w-[340px] sm:max-w-6xl h-[95vh] max-h-[95vh] sm:h-[95vh] sm:max-h-[95vh]'}`}>
-            {/* ── Header ── */}
-            <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/10 flex-shrink-0">
-              <div className="flex items-center gap-2 min-w-0"><Film className="h-4 w-4 text-purple-400 flex-shrink-0" /><h3 className="text-white font-semibold text-sm truncate">{t.reelGenerator}</h3></div>
-              <button onClick={closeReelModal} className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 transition-colors flex-shrink-0 cursor-pointer"><X size={18} /></button>
-            </div>
-
-            {/* ── Body ── */}
-            <div className="flex-1 overflow-hidden min-h-0">
-              {reelReadyUrl ? (
-                /* ═══ PLAYER VIEW (po wygenerowaniu) ═══ */
-                <div className="flex flex-col items-center h-full p-3 animate-fadeIn">
-                  <div className="relative w-full rounded-xl overflow-hidden" style={{ aspectRatio: '9 / 16' }}>
-                    <video
-                      src={reelReadyUrl}
-                      controls
-                      autoPlay
-                      playsInline
-                      className="absolute inset-0 w-full h-full object-contain bg-black"
-                    />
-                  </div>
-                  <a
-                    href={reelReadyUrl}
-                    download
-                    className="w-full flex items-center justify-center gap-2 py-3 mt-3 rounded-xl font-semibold text-sm bg-gradient-to-r from-purple-600 to-pink-600 text-white hover:from-purple-500 hover:to-pink-500 shadow-lg shadow-purple-900/30 active:scale-[0.98] transition-all cursor-pointer"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                    {currentLang === 'pl' ? 'Pobierz rolkę' : 'Download reel'}
-                  </a>
-                </div>
-              ) : (
-              <div className="flex flex-col sm:flex-row min-h-full">
-
-                {/* ── Preview — live editable reel layout ── */}
-                <div className="relative flex items-center justify-center py-3 sm:py-0 bg-black/30 sm:bg-black/40 sm:w-[500px] sm:border-r sm:border-white/10 flex-shrink-0 px-3 sm:p-4">
-                  {(reel.isSaving || reelGenerating) && (
-                    <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/60 backdrop-blur-md rounded-l-2xl">
-                      <div className="flex flex-col items-center gap-3">
-                        <div className="h-10 w-10 border-[3px] border-purple-400 border-t-transparent rounded-full animate-spin" />
-                        <span className="text-white/80 text-sm font-medium">{reelGenerating ? t.generating : 'Saving...'}</span>
-                      </div>
-                    </div>
-                  )}
-                  <div className="relative flex items-center justify-center h-[calc(95vh-380px)] sm:h-[calc(95vh-100px)]">
-                    <ReelPreviewInline
-                      headerText={reelHeader}
-                      ctaText={reelCtaDisplayText}
-                      coverUrl={reelCoverUrl}
-                      placeholderHeader={t.reelHeaderPlaceholder}
-                      placeholderCta={t.reelCTA + '...'}
-                      markerScale={reelMarkerScale}
-                      markerOffsetY={reelMarkerOffsetY}
-                      markerSeed={reelMarkerSeed}
-                      introText={reelIntroText}
-                      placeholderIntro={t.reelIntroPlaceholder}
-                    />
-                    <div className="sm:hidden absolute top-1.5 left-1/2 -translate-x-1/2 bg-black/60 text-white/70 px-2 py-0.5 rounded-full text-[9px] font-medium tracking-wide uppercase whitespace-nowrap z-10">
-                      {t.reelPreview}
-                    </div>
-                  </div>
-                </div>
-
-                {/* ── Configuration Form ── */}
-                <div className={`flex-1 flex flex-col min-w-0 transition-opacity duration-300 ${reel.isSaving || reelGenerating ? 'opacity-30 pointer-events-none select-none' : ''}`}>
-                  <div className="hidden sm:block px-5 pt-5 pb-1">
-                    <h4 className="font-semibold text-white/90 flex items-center text-xs uppercase tracking-wider"><Sparkles size={14} className="mr-2 text-purple-400"/>{t.reelConfig}</h4>
-                  </div>
-
-                  {/* ── Mobile form (placeholder — do optymalizacji później) ── */}
-                  <div className="sm:hidden px-4 pt-3 pb-2 space-y-3">
-                    <div>
-                      <label className="block text-[11px] font-medium text-gray-400 mb-1">{t.reelHeader}</label>
-                      <input type="text" value={reelHeader} onChange={(e) => setReelHeader(e.target.value)} placeholder={t.reelHeaderPlaceholder} className="w-full px-3 py-2 text-sm bg-white/5 border border-white/15 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500/30 transition-all" />
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-[11px] font-medium text-gray-400 mb-1 text-center">{t.reelCTA}</label>
-                        <div className="flex items-center bg-white/5 rounded-lg p-0.5 border border-white/10">
-                          <button onClick={() => setReelCTA('download')} className={`flex-1 text-center py-1.5 rounded-md text-[11px] font-medium transition-all cursor-pointer ${reelCTA === 'download' ? 'bg-purple-600 text-white' : 'text-gray-400'}`}>{t.ctaDownload}</button>
-                          <button onClick={() => setReelCTA('comment')} className={`flex-1 text-center py-1.5 rounded-md text-[11px] font-medium transition-all cursor-pointer ${reelCTA === 'comment' ? 'bg-purple-600 text-white' : 'text-gray-400'}`}>{t.ctaCommentShort}</button>
-                        </div>
-                      </div>
-                      <div>
-                        <label className="block text-[11px] font-medium text-gray-400 mb-1 text-center">{t.voice}</label>
-                        <div className="flex items-center bg-white/5 rounded-lg p-0.5 border border-white/10">
-                          <button onClick={() => setReelVoice('male')} className={`flex-1 text-center py-1.5 rounded-md text-[11px] font-medium transition-all cursor-pointer ${reelVoice === 'male' ? 'bg-blue-600 text-white' : 'text-gray-400'}`}>{t.voiceMale}</button>
-                          <button onClick={() => setReelVoice('female')} className={`flex-1 text-center py-1.5 rounded-md text-[11px] font-medium transition-all cursor-pointer ${reelVoice === 'female' ? 'bg-pink-600 text-white' : 'text-gray-400'}`}>{t.voiceFemale}</button>
-                        </div>
-                      </div>
-                    </div>
-                    {reelCTA === 'comment' && (
-                      <div className="animate-fadeIn">
-                        <label className="block text-[11px] font-medium text-gray-400 mb-1">{t.ctaPassword}</label>
-                        <input type="text" value={reelCTAPassword} onChange={(e) => setReelCTAPassword(e.target.value.toUpperCase())} placeholder={t.ctaPasswordPlaceholder} className="w-full px-3 py-2 text-sm bg-white/5 border border-white/15 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500/30 transition-all" />
-                      </div>
-                    )}
-                    {/* TODO: mobile CTA option select + preview — optymalizacja później */}
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-[11px] font-medium text-gray-400 mb-1">{t.markerScale} <span className="text-purple-400">{reelMarkerScale.toFixed(2)}</span></label>
-                        <input type="range" min="0.3" max="2.0" step="0.05" value={reelMarkerScale} onChange={(e) => setReelMarkerScale(parseFloat(e.target.value))} className="w-full h-1.5 bg-white/10 rounded-full appearance-none cursor-pointer accent-purple-500" />
-                      </div>
-                      <div>
-                        <label className="block text-[11px] font-medium text-gray-400 mb-1">{t.markerPosition} <span className="text-purple-400">{reelMarkerOffsetY > 0 ? '+' : ''}{reelMarkerOffsetY.toFixed(2)}</span></label>
-                        <input type="range" min="-0.3" max="0.3" step="0.01" value={reelMarkerOffsetY} onChange={(e) => setReelMarkerOffsetY(parseFloat(e.target.value))} className="w-full h-1.5 bg-white/10 rounded-full appearance-none cursor-pointer accent-purple-500" />
-                      </div>
-                      <div className="col-span-2">
-                        <label className="block text-[11px] font-medium text-gray-400 mb-1">{t.markerSeed} <span className="text-purple-400">#{reelMarkerSeed}</span></label>
-                        <input type="range" min="1" max="100" step="1" value={reelMarkerSeed} onChange={(e) => setReelMarkerSeed(parseInt(e.target.value))} className="w-full h-1.5 bg-white/10 rounded-full appearance-none cursor-pointer accent-purple-500" />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* ═══ DESKTOP FORM ═══ */}
-                  <div className="hidden sm:flex sm:flex-col px-5 py-3 space-y-3 flex-1">
-                    {/* ── Nagłówek rolki ── */}
-                    <div>
-                      <label className="block text-xs font-medium text-gray-300 mb-1.5">{t.reelHeader}</label>
-                      <input type="text" value={reelHeader} onChange={(e) => setReelHeader(e.target.value)} placeholder={t.reelHeaderPlaceholder} className="w-full px-3 py-2.5 text-sm bg-white/5 border border-white/15 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500/30 transition-all" />
-                    </div>
-                    {/* ── Głos ── */}
-                    <div>
-                      <label className="block text-xs font-medium text-gray-300 mb-1.5">{t.voice}</label>
-                      <div className="flex items-center gap-1 bg-white/5 rounded-xl p-1 border border-white/10">
-                        <button onClick={() => setReelVoice('male')} className={`flex-1 text-center py-2 rounded-lg text-sm font-medium transition-all cursor-pointer ${reelVoice === 'male' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-400 hover:text-gray-200'}`}>{t.voiceMale}</button>
-                        <button onClick={() => setReelVoice('female')} className={`flex-1 text-center py-2 rounded-lg text-sm font-medium transition-all cursor-pointer ${reelVoice === 'female' ? 'bg-pink-600 text-white shadow-sm' : 'text-gray-400 hover:text-gray-200'}`}>{t.voiceFemale}</button>
-                      </div>
-                    </div>
-                    {/* ── Przycisk CTA ── */}
-                    <div>
-                      <label className="block text-xs font-medium text-gray-300 mb-1.5">{t.reelCTA}</label>
-                      <div className="flex items-center gap-1 bg-white/5 rounded-xl p-1 border border-white/10">
-                        <button onClick={() => setReelCTA('download')} className={`flex-1 text-center py-2 rounded-lg text-sm font-medium transition-all cursor-pointer ${reelCTA === 'download' ? 'bg-purple-600 text-white shadow-sm' : 'text-gray-400 hover:text-gray-200'}`}>{t.ctaDownload}</button>
-                        <button onClick={() => setReelCTA('comment')} className={`flex-1 text-center py-2 rounded-lg text-sm font-medium transition-all cursor-pointer ${reelCTA === 'comment' ? 'bg-purple-600 text-white shadow-sm' : 'text-gray-400 hover:text-gray-200'}`}>{t.ctaComment}</button>
-                      </div>
-                    </div>
-                    {/* ── Hasło CTA (tylko tryb comment) ── */}
-                    {reelCTA === 'comment' && (
-                      <div className="animate-fadeIn">
-                        <label className="block text-xs font-medium text-gray-300 mb-1.5">{t.ctaPassword}</label>
-                        <input type="text" value={reelCTAPassword} onChange={(e) => setReelCTAPassword(e.target.value.toUpperCase())} placeholder={t.ctaPasswordPlaceholder} className="w-full px-3 py-2.5 text-sm bg-white/5 border border-white/15 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500/30 transition-all" />
-                      </div>
-                    )}
-
-                    {/* ════ NOWE: Wariant zakończenia (select z CTAoptions) ════ */}
-                    {ctaOptionKeys.length > 0 && (
-                      <div>
-                        <label className="block text-xs font-medium text-gray-300 mb-1.5">{t.ctaOption}</label>
-                        <div className="relative">
-                          <select
-                            value={selectedCtaKey}
-                            onChange={(e) => setSelectedCtaKey(e.target.value)}
-                            className="w-full px-3 py-2.5 text-sm bg-white/5 border border-white/15 rounded-xl text-white appearance-none cursor-pointer focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500/30 transition-all pr-10"
-                            style={{ backgroundImage: 'none' }}
-                          >
-                            {ctaOptionKeys.map((key, idx) => (
-                              <option key={key} value={key} className="bg-gray-800 text-white">
-                                (...) {reelCtaOptions[key]}
-                              </option>
-                            ))}
-                          </select>
-                          <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              <polyline points="6 9 12 15 18 9" />
-                            </svg>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {ctaOptionKeys.length === 0 && reelPage && (
-                      <div className="flex items-center gap-2 px-3 py-2.5 bg-amber-500/10 border border-amber-500/20 rounded-xl">
-                        <AlertTriangle size={14} className="text-amber-400 flex-shrink-0" />
-                        <span className="text-xs text-amber-300">{t.noCtaOptions}</span>
-                      </div>
-                    )}
-
-                    {/* ════ NOWE: Podgląd tekstu CTA ════ */}
-                    {ctaPreviewText && (
-                      <div className="animate-fadeIn">
-                        <label className="block text-xs font-medium text-gray-300 mb-1.5">{t.ctaTextPreview}</label>
-                        <div className="relative px-3 py-2.5 text-sm bg-purple-500/10 border border-purple-500/20 rounded-xl text-purple-200 leading-relaxed min-h-[44px]">
-                          <div className="absolute -top-px -right-px">
-                            <div className="w-2 h-2 bg-purple-500 rounded-full animate-pulse" />
-                          </div>
-                          {ctaPreviewText}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* ── Parametry markera ── */}
-                    <div className="border-t border-white/5 pt-3">
-                      <div>
-                        <div className="flex items-center justify-between mb-1.5">
-                          <label className="text-xs font-medium text-gray-300">{t.markerScale}</label>
-                          <span className="text-xs font-mono text-purple-400 bg-white/5 px-2 py-0.5 rounded">{reelMarkerScale.toFixed(2)}</span>
-                        </div>
-                        <input type="range" min="0.3" max="2.0" step="0.05" value={reelMarkerScale} onChange={(e) => setReelMarkerScale(parseFloat(e.target.value))} className="w-full h-2 bg-white/10 rounded-full appearance-none cursor-pointer accent-purple-500" />
-                      </div>
-                      <div className="mt-2">
-                        <div className="flex items-center justify-between mb-1.5">
-                          <label className="text-xs font-medium text-gray-300">{t.markerPosition}</label>
-                          <span className="text-xs font-mono text-purple-400 bg-white/5 px-2 py-0.5 rounded">{reelMarkerOffsetY > 0 ? '+' : ''}{reelMarkerOffsetY.toFixed(2)}</span>
-                        </div>
-                        <input type="range" min="-0.3" max="0.3" step="0.01" value={reelMarkerOffsetY} onChange={(e) => setReelMarkerOffsetY(parseFloat(e.target.value))} className="w-full h-2 bg-white/10 rounded-full appearance-none cursor-pointer accent-purple-500" />
-                      </div>
-                      <div className="mt-2">
-                        <div className="flex items-center justify-between mb-1.5">
-                          <label className="text-xs font-medium text-gray-300">{t.markerSeed}</label>
-                          <span className="text-xs font-mono text-purple-400 bg-white/5 px-2 py-0.5 rounded">#{reelMarkerSeed}</span>
-                        </div>
-                        <input type="range" min="1" max="100" step="1" value={reelMarkerSeed} onChange={(e) => setReelMarkerSeed(parseInt(e.target.value))} className="w-full h-2 bg-white/10 rounded-full appearance-none cursor-pointer accent-purple-500" />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* ── Generate Button ── */}
-                  <div className="px-4 sm:px-5 border-t border-white/10 flex-shrink-0 flex items-center justify-center sm:block sm:py-3">
-                    <button onClick={handleGenerateReel} disabled={!isReelFormValid() || reelGenerating} className={`w-full py-2.5 sm:py-3 rounded-xl font-semibold text-sm transition-all cursor-pointer ${isReelFormValid() && !reelGenerating ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white hover:from-purple-500 hover:to-pink-500 shadow-lg shadow-purple-900/30 active:scale-[0.98]' : 'bg-white/5 text-gray-500 cursor-not-allowed border border-white/5'}`}>
-                      {reelGenerating ? (
-                        <span className="flex items-center justify-center gap-2">
-                          <span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                          {t.generating}
-                        </span>
-                      ) : t.generate}
-                    </button>
-                    {reelGenerating && (
-                      <p className="text-purple-300/80 text-xs text-center mt-3 leading-relaxed px-2">{t.generatingMessage}</p>
-                    )}
-                    {reelGenerateError && (
-                      <p className="text-red-400 text-xs text-center mt-2">{reelGenerateError}</p>
-                    )}
-                  </div>
-                </div>
-              </div>
-              )}
-            </div>
-          </div>
-        </div>
+          <ReelModal
+            reelModalRef={reelModalRef}
+            closeReelModal={closeReelModal}
+            currentLang={currentLang}
+            t={t}
+            reelIsSaving={reel.isSaving}
+            reelGenerating={reelGenerating}
+            reelGenerateError={reelGenerateError}
+            reelReadyUrl={reelReadyUrl}
+            reelHeader={reelHeader}
+            setReelHeader={setReelHeader}
+            reelCTA={reelCTA}
+            setReelCTA={setReelCTA}
+            reelCTAPassword={reelCTAPassword}
+            setReelCTAPassword={setReelCTAPassword}
+            reelVoice={reelVoice}
+            setReelVoice={setReelVoice}
+            reelMarkerEnabled={reelMarkerEnabled}
+            setReelMarkerEnabled={setReelMarkerEnabled}
+            reelMarkerScale={reelMarkerScale}
+            setReelMarkerScale={setReelMarkerScale}
+            reelMarkerOffsetY={reelMarkerOffsetY}
+            setReelMarkerOffsetY={setReelMarkerOffsetY}
+            reelMarkerSeed={reelMarkerSeed}
+            setReelMarkerSeed={setReelMarkerSeed}
+            reelIntroText={reelIntroText}
+            setReelIntroText={setReelIntroText}
+            ebookTitle={reelPage?.title}
+            ebookSubtitle={reelPage?.subtitle}
+            reelCtaDisplayText={reelCtaDisplayText}
+            reelCoverUrl={reelCoverUrl}
+            ctaOptionKeys={ctaOptionKeys}
+            reelCtaOptions={reelCtaOptions}
+            selectedCtaKey={selectedCtaKey}
+            setSelectedCtaKey={setSelectedCtaKey}
+            ctaPreviewText={ctaPreviewText}
+            hasReelPage={!!reelPage}
+            isReelFormValid={isReelFormValid}
+            handleGenerateReel={handleGenerateReel}
+          />
       )}
 
 

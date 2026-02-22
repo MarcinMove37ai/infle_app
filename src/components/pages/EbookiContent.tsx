@@ -768,7 +768,7 @@ export default function EbookiContent() {
                                 <img
                                   src={`/api/assets/${ebook.cover_image_webp_url}`}
                                   alt={`Cover: ${ebook.title}`}
-                                  className="w-full h-auto object-cover rounded-md bg-gray-200 cursor-pointer aspect-square"
+                                  className="w-full h-auto object-contain rounded-md bg-gray-200 cursor-pointer"
                                   loading="lazy"
                                   onClick={() => handlePreviewEbook(ebook)}
                                 />
