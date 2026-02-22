@@ -101,6 +101,7 @@ RUN node -e "require('@sparticuz/chromium')"
 # Kopiowanie zbudowanej aplikacji (.next) i plików publicznych
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
+COPY --from=builder /app/reels ./reels/
 
 # Utworzenie dedykowanego użytkownika i grupy dla bezpieczeństwa
 RUN addgroup --system --gid 1001 nodejs
