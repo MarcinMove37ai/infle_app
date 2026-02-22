@@ -31,7 +31,7 @@ export async function GET(request: Request) {
     const ebookId = searchParams.get('id');
 
     if (ebookId) {
-      // === SCENARIUSZ 1: POBIERANIE SZCZEGÓŁÓW JEDNEGO E-BOOKA (BEZ ZMIAN) ===
+      // === SCENARIUSZ 1: POBIERANIE SZCZEGÓŁÓW JEDNEGO E-BOOKA ===
       const ebook = await prisma.ebooks.findFirst({
         where: { id: parseInt(ebookId), userId: userId },
         include: { ebook_chapters: { orderBy: { position: 'asc' } } },
@@ -46,6 +46,7 @@ export async function GET(request: Request) {
         title: ebook.title,
         subtitle: ebook.subtitle,
         description: ebook.description,
+        intro: ebook.intro,  // ✅ DODANE
         chapters: ebook.ebook_chapters.map(chapter => ({
           id: chapter.id.toString(),
           title: chapter.title,

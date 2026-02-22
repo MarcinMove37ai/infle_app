@@ -56,9 +56,12 @@ model User {
   linkedinAnalyses      LinkedInCreatorAnalysis[]
   page_contents         page_content[]
   pages                 pages[]
+  reels                 reels[]
   apiKeys               UserApiKey[]
   instagramProfile      InstagramProfileCheck?       @relation(fields: [instagramProfileId], references: [id])
   linkedinProfile       LinkedInProfileCheck?        @relation(fields: [linkedinProfileId], references: [id])
+  user_exp_profile      String?
+  client_needs_profile  String?
 
   @@map("users")
 }
@@ -254,6 +257,8 @@ model ebooks {
   short_desc                      String?
   subtitle                        String?
   description                     String?
+  intro                           String?
+  raw_intro                       String?
   cover_image_url                 String?
   cover_image_prompt              String?
   userId                          String?
@@ -314,6 +319,7 @@ model pages {
   ebookId          Int?
   color            String?       @db.VarChar(50)
   leads            leads[]
+  reels            reels[]
   content          page_content?
   ebook            ebooks?       @relation(fields: [ebookId], references: [id], onDelete: Cascade, map: "fk_ebook")
   user             User?         @relation(fields: [userId], references: [id], map: "fk_user")
@@ -369,6 +375,34 @@ model page_content {
   @@map("page_contents")
 }
 
+model reels {
+  id           String       @id @default(cuid())
+  pageId       String
+  userId       String
+  ebookId      Int?
+  reelIntro    String?
+  reelCover    String?
+  reelHeader   String?
+  reelCTA      String?
+  CTAtext      String?
+  CTAoptions   Json?
+  coverParams  Json?
+  audioGender  AudioGender?
+  audioURL     String?
+  timestampURL String?
+  reelURL      String?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  page         pages        @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([pageId])
+  @@index([pageId])
+  @@index([userId])
+  @@index([ebookId])
+  @@map("reels")
+}
+
 model leads {
   id             Int       @id @default(autoincrement()) @map("lead_id")
   pageId         String?   @map("page_id")
@@ -414,4 +448,9 @@ enum SocialProfileType {
   LINKEDIN_ONLY
   BOTH
   NONE
+}
+
+enum AudioGender {
+  MALE
+  FEMALE
 }

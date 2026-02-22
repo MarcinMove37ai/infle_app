@@ -4,9 +4,9 @@ import { prisma } from '@/lib/prisma';
 import puppeteer from 'puppeteer-core';
 import chromium from '@sparticuz/chromium';
 import fs from 'fs';
-import sharp from 'sharp'; // Import biblioteki sharp
+import sharp from 'sharp';
 
-// --- NOWA FUNKCJA POMOCNICZA DO OPTYMALIZACJI GRAFIK ---
+// --- FUNKCJA POMOCNICZA DO OPTYMALIZACJI GRAFIK ---
 async function optimizeAndEncodeImages(chapters: Chapter[], baseUrl: string): Promise<any[]> {
   const optimizedChapters = await Promise.all(
     chapters.map(async (chapter) => {
@@ -45,7 +45,6 @@ async function optimizeAndEncodeImages(chapters: Chapter[], baseUrl: string): Pr
   );
   return optimizedChapters;
 }
-// --- KONIEC NOWEJ FUNKCJI ---
 
 // Interfejsy i typy
 interface Chapter {
@@ -54,7 +53,6 @@ interface Chapter {
   content: string | null;
   image_url: string | null;
   position: number;
-  // Dodajemy opcjonalne pole na zoptymalizowany obraz
   optimizedImageBase64?: string;
 }
 
@@ -65,6 +63,7 @@ interface EbookData {
   cover_image_url: string | null;
   authorDisplayName: string | null;
   authorLogoUrl: string | null;
+  intro: string | null;
   ebook_chapters: Chapter[];
 }
 
@@ -73,15 +72,189 @@ interface PdfGeneratorResult {
   ebook: EbookData;
 }
 
+interface ChapterPageMapping {
+  [chapterId: number]: number;
+}
+
+interface PageDetectionResult {
+  chapterPageMapping: ChapterPageMapping;
+  introPageNumber: number;
+}
+
+// --- FUNKCJE POMOCNICZE ---
+
+async function prepareCoverBackground(page: any): Promise<string> {
+  await page.evaluate(() => {
+    const titleEl = document.querySelector('.cover-title');
+    const subtitleEl = document.querySelector('.cover-subtitle');
+    if (titleEl) (titleEl as HTMLElement).style.visibility = 'hidden';
+    if (subtitleEl) (subtitleEl as HTMLElement).style.visibility = 'hidden';
+  });
+
+  const coverTemplateBuffer = await page.screenshot({ type: 'webp', quality: 95 });
+  const coverTemplateDataUrl = `data:image/webp;base64,${(coverTemplateBuffer as Buffer).toString('base64')}`;
+
+  await page.evaluate((dataUrl: string) => {
+    const coverPage = document.querySelector('.cover-page') as HTMLElement | null;
+    if (!coverPage) return;
+
+    ['.cover-logo', '.cover-image-container', '.cover-fallback'].forEach(selector => {
+      const el = coverPage.querySelector(selector) as HTMLElement | null;
+      if (el) el.style.display = 'none';
+    });
+
+    coverPage.style.backgroundImage = `url(${dataUrl})`;
+    coverPage.style.backgroundSize = '100% 100%';
+    coverPage.style.backgroundPosition = 'center';
+    coverPage.style.backgroundRepeat = 'no-repeat';
+
+    const titleSection = coverPage.querySelector('.cover-title-section') as HTMLElement | null;
+    const subtitleSection = coverPage.querySelector('.cover-subtitle-section') as HTMLElement | null;
+    if (titleSection) titleSection.style.background = 'none';
+    if (subtitleSection) subtitleSection.style.background = 'none';
+
+    const titleEl = coverPage.querySelector('.cover-title') as HTMLElement | null;
+    const subtitleEl = coverPage.querySelector('.cover-subtitle') as HTMLElement | null;
+    if (titleEl) titleEl.style.visibility = 'visible';
+    if (subtitleEl) subtitleEl.style.visibility = 'visible';
+  }, coverTemplateDataUrl);
+
+  return coverTemplateDataUrl;
+}
+
+function applyCoverBackground(page: any, coverDataUrl: string): Promise<void> {
+  return page.evaluate((dataUrl: string) => {
+    const coverPage = document.querySelector('.cover-page') as HTMLElement | null;
+    if (!coverPage) return;
+
+    ['.cover-logo', '.cover-image-container', '.cover-fallback'].forEach(selector => {
+      const el = coverPage.querySelector(selector) as HTMLElement | null;
+      if (el) el.style.display = 'none';
+    });
+
+    coverPage.style.backgroundImage = `url(${dataUrl})`;
+    coverPage.style.backgroundSize = '100% 100%';
+    coverPage.style.backgroundPosition = 'center';
+    coverPage.style.backgroundRepeat = 'no-repeat';
+
+    const titleSection = coverPage.querySelector('.cover-title-section') as HTMLElement | null;
+    const subtitleSection = coverPage.querySelector('.cover-subtitle-section') as HTMLElement | null;
+    if (titleSection) titleSection.style.background = 'none';
+    if (subtitleSection) subtitleSection.style.background = 'none';
+  }, coverDataUrl);
+}
+
+const PDF_OPTIONS = {
+  format: 'A4' as const,
+  margin: { top: '20mm', right: '20mm', bottom: '25mm', left: '20mm' },
+  printBackground: true,
+  displayHeaderFooter: false,
+  preferCSSPageSize: true,
+  timeout: 60000,
+};
+
+async function generatePdfFromPage(page: any): Promise<Buffer> {
+  return await page.pdf(PDF_OPTIONS) as Buffer;
+}
+
+async function countPdfPages(pdfBuffer: Buffer): Promise<number> {
+  const { PDFDocument } = await import('pdf-lib');
+  const doc = await PDFDocument.load(pdfBuffer, { updateMetadata: false });
+  return doc.getPageCount();
+}
+
+// =====================================================================
+//  PRECYZYJNE WYKRYWANIE STRON ROZDZIAŁÓW + INTRODUCTION
+//  Metoda: ukryj rozdziały i intro → generuj mini-PDF → licz strony.
+//  Żadnego parsowania tekstu. Żadnych markerów. Żadnych szacunków.
+//  pdf-lib liczy strony z wygenerowanych PDF — 100% precyzja.
+// =====================================================================
+
+async function detectChapterPages(
+  page: any,
+  chapters: Chapter[],
+  hasIntro: boolean
+): Promise<PageDetectionResult> {
+  const chapterPageMapping: ChapterPageMapping = {};
+  let introPageNumber = 0;
+
+  // KROK 1: Ukryj WSZYSTKIE rozdziały i Introduction → PDF = okładka + spis treści
+  console.log('📏 Pomiar: okładka + spis treści...');
+  await page.evaluate(() => {
+    document.querySelectorAll('.chapter').forEach(el => {
+      (el as HTMLElement).style.display = 'none';
+    });
+    const introEl = document.querySelector('.introduction-page');
+    if (introEl) (introEl as HTMLElement).style.display = 'none';
+  });
+
+  const basePdf = await generatePdfFromPage(page);
+  const basePages = await countPdfPages(basePdf);
+  console.log(`   Okładka + spis treści = ${basePages} stron`);
+
+  let previousTotal = basePages;
+
+  // KROK 2: Pokaż Introduction (jeśli istnieje)
+  if (hasIntro) {
+    console.log('📏 Pomiar: Introduction...');
+    await page.evaluate(() => {
+      const introEl = document.querySelector('.introduction-page');
+      if (introEl) (introEl as HTMLElement).style.display = '';
+    });
+
+    const introPdf = await generatePdfFromPage(page);
+    const introTotal = await countPdfPages(introPdf);
+    introPageNumber = previousTotal + 1;
+    const introPages = introTotal - previousTotal;
+
+    console.log(`   ✅ Introduction → strona ${introPageNumber} (zajmuje ${introPages} str.)`);
+    previousTotal = introTotal;
+  }
+
+  // KROK 3: Pokazuj rozdziały jeden po drugim, za każdym razem
+  //         generuj PDF i licz strony. Różnica = strony tego rozdziału.
+  for (let i = 0; i < chapters.length; i++) {
+    await page.evaluate((idx: number) => {
+      const ch = document.getElementById(`chapter-${idx + 1}`);
+      if (ch) ch.style.display = '';
+    }, i);
+
+    const pdf = await generatePdfFromPage(page);
+    const currentTotal = await countPdfPages(pdf);
+
+    const chapterStartPage = previousTotal + 1;
+    const chapterPages = currentTotal - previousTotal;
+
+    chapterPageMapping[chapters[i].id] = chapterStartPage;
+    console.log(`   ✅ Rozdział ${i + 1}: "${chapters[i].title}" → strona ${chapterStartPage} (zajmuje ${chapterPages} str.)`);
+
+    previousTotal = currentTotal;
+  }
+
+  // KROK 4: Przywróć widoczność wszystkich elementów
+  await page.evaluate(() => {
+    document.querySelectorAll('.chapter').forEach(el => {
+      (el as HTMLElement).style.display = '';
+    });
+    const introEl = document.querySelector('.introduction-page');
+    if (introEl) (introEl as HTMLElement).style.display = '';
+  });
+
+  return { chapterPageMapping, introPageNumber };
+}
+
+// =====================================================================
+//  GŁÓWNA FUNKCJA
+// =====================================================================
+
 export async function generateEbookPdf(ebookId: number): Promise<PdfGeneratorResult> {
   let browser;
   try {
+    // 1. POBRANIE DANYCH
     const ebook = await prisma.ebooks.findUnique({
       where: { id: ebookId },
       include: {
-        ebook_chapters: {
-          orderBy: { position: 'asc' },
-        },
+        ebook_chapters: { orderBy: { position: 'asc' } },
       },
     });
 
@@ -89,22 +262,20 @@ export async function generateEbookPdf(ebookId: number): Promise<PdfGeneratorRes
       throw new Error(`Ebook o ID ${ebookId} nie został znaleziony.`);
     }
 
-    const { title, subtitle, cover_image_url, ebook_chapters: chapters, authorDisplayName, authorLogoUrl } = ebook;
+    const { title, subtitle, cover_image_url, ebook_chapters: chapters, authorDisplayName, authorLogoUrl, intro } = ebook;
 
-    // --- KROK 1: Uruchomienie optymalizacji grafik przed generowaniem HTML ---
+    // 2. OPTYMALIZACJA OBRAZÓW
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
     const chaptersWithOptimizedImages = await optimizeAndEncodeImages(chapters, baseUrl);
-    // --- KONIEC KROKU 1 ---
 
-    const htmlContent = generateHTMLContent(title, subtitle, chaptersWithOptimizedImages, cover_image_url, authorDisplayName, authorLogoUrl);
-
+    // 3. URUCHOMIENIE PRZEGLĄDARKI
     const isProduction = process.env.NODE_ENV === 'production';
     let executablePath: string;
 
     if (isProduction) {
       executablePath = await chromium.executablePath();
     } else {
-       const localPaths = [
+      const localPaths = [
         'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
         'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
         '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
@@ -123,56 +294,67 @@ export async function generateEbookPdf(ebookId: number): Promise<PdfGeneratorRes
       headless: true,
     });
 
-    const page = await browser.newPage();
-    await page.setViewport({ width: 795, height: 1125 });
-    await page.setContent(htmlContent, { waitUntil: 'networkidle0', timeout: 60000 });
+    const hasIntro = !!(intro && intro.trim());
 
-    await page.evaluate(() => {
-      const titleEl = document.querySelector('.cover-title');
-      const subtitleEl = document.querySelector('.cover-subtitle');
-      if (titleEl) (titleEl as HTMLElement).style.visibility = 'hidden';
-      if (subtitleEl) (subtitleEl as HTMLElement).style.visibility = 'hidden';
-    });
+    // ================================================================
+    //  PIERWSZY PRZEBIEG: Renderuj HTML ze spisem treści (strony = 0)
+    // ================================================================
+    console.log('📊 PIERWSZY PRZEBIEG: Renderowanie HTML ze spisem treści...');
 
-    const coverTemplateBuffer = await page.screenshot({ type: 'webp', quality: 95 });
-    const coverTemplateDataUrl = `data:image/webp;base64,${(coverTemplateBuffer as Buffer).toString('base64')}`;
+    const placeholderMapping: ChapterPageMapping = {};
+    for (const chapter of chaptersWithOptimizedImages) {
+      placeholderMapping[chapter.id] = 0;
+    }
 
-    await page.evaluate((dataUrl) => {
-      const coverPage = document.querySelector('.cover-page') as HTMLElement | null;
-      if (!coverPage) return;
+    const htmlContent = generateHTMLContent(
+      title, subtitle, chaptersWithOptimizedImages,
+      cover_image_url, authorDisplayName, authorLogoUrl,
+      placeholderMapping, intro, 0
+    );
 
-      const elementsToHide = ['.cover-logo', '.cover-image-container', '.cover-fallback'];
-      elementsToHide.forEach(selector => {
-        const el = coverPage.querySelector(selector) as HTMLElement | null;
-        if (el) el.style.display = 'none';
-      });
+    const page1 = await browser.newPage();
+    await page1.setViewport({ width: 795, height: 1125 });
+    await page1.setContent(htmlContent, { waitUntil: 'networkidle0', timeout: 60000 });
 
-      coverPage.style.backgroundImage = `url(${dataUrl})`;
-      coverPage.style.backgroundSize = '100% 100%';
-      coverPage.style.backgroundPosition = 'center';
-      coverPage.style.backgroundRepeat = 'no-repeat';
+    // Screenshot okładki
+    const coverDataUrl = await prepareCoverBackground(page1);
 
-      const titleSection = coverPage.querySelector('.cover-title-section') as HTMLElement | null;
-      const subtitleSection = coverPage.querySelector('.cover-subtitle-section') as HTMLElement | null;
-      if (titleSection) titleSection.style.background = 'none';
-      if (subtitleSection) subtitleSection.style.background = 'none';
+    // ================================================================
+    //  WYKRYWANIE STRON: Ukryj/pokaż rozdziały + intro, licz strony PDF
+    // ================================================================
+    console.log('🔍 Precyzyjne wykrywanie numerów stron...');
 
-      const titleEl = coverPage.querySelector('.cover-title') as HTMLElement | null;
-      const subtitleEl = coverPage.querySelector('.cover-subtitle') as HTMLElement | null;
-      if (titleEl) titleEl.style.visibility = 'visible';
-      if (subtitleEl) subtitleEl.style.visibility = 'visible';
-    }, coverTemplateDataUrl);
+    const { chapterPageMapping, introPageNumber } = await detectChapterPages(
+      page1, chaptersWithOptimizedImages, hasIntro
+    );
 
-    const pdfBuffer = await page.pdf({
-      format: 'A4',
-      margin: { top: '20mm', right: '20mm', bottom: '25mm', left: '20mm' },
-      printBackground: true,
-      displayHeaderFooter: false,
-      preferCSSPageSize: true,
-      timeout: 60000,
-    });
+    console.log('✅ Wykrywanie stron zakończone:', { chapterPageMapping, introPageNumber });
 
-    return { pdfBuffer: pdfBuffer as Buffer, ebook: ebook as EbookData };
+    await page1.close();
+
+    // ================================================================
+    //  DRUGI PRZEBIEG: Finalny PDF z poprawnymi numerami stron
+    // ================================================================
+    console.log('📊 DRUGI PRZEBIEG: Generowanie finalnego PDF...');
+
+    const finalHtml = generateHTMLContent(
+      title, subtitle, chaptersWithOptimizedImages,
+      cover_image_url, authorDisplayName, authorLogoUrl,
+      chapterPageMapping, intro, introPageNumber
+    );
+
+    const page2 = await browser.newPage();
+    await page2.setViewport({ width: 795, height: 1125 });
+    await page2.setContent(finalHtml, { waitUntil: 'networkidle0', timeout: 60000 });
+
+    await applyCoverBackground(page2, coverDataUrl);
+
+    const finalPdfBuffer = await generatePdfFromPage(page2);
+    await page2.close();
+
+    console.log('✅ Finalny PDF wygenerowany pomyślnie!');
+
+    return { pdfBuffer: finalPdfBuffer, ebook: ebook as EbookData };
 
   } catch (error) {
     console.error(`Błąd podczas generowania PDF dla ebooka ${ebookId}:`, error);
@@ -184,14 +366,23 @@ export async function generateEbookPdf(ebookId: number): Promise<PdfGeneratorRes
   }
 }
 
+// =====================================================================
+//  GENEROWANIE HTML
+// =====================================================================
+
 function generateHTMLContent(
   title: string,
   subtitle: string | null,
   chapters: Chapter[],
   coverImageUrl?: string | null,
   authorDisplayName?: string | null,
-  authorLogoUrl?: string | null
+  authorLogoUrl?: string | null,
+  chapterPageMapping?: ChapterPageMapping | null,
+  introText?: string | null,
+  introPageNumber?: number
 ): string {
+  const hasIntro = !!(introText && introText.trim());
+
   return `
     <!DOCTYPE html>
     <html lang="pl">
@@ -201,13 +392,15 @@ function generateHTMLContent(
       <title>${escapeHtml(title)}</title>
       <link rel="preconnect" href="https://fonts.googleapis.com">
       <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-      <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;700&display=swap" rel="stylesheet">
+      <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;700&display=swap" rel="stylesheet">
       <style>
         ${generateAdvancedCSS(title, subtitle, authorDisplayName)}
       </style>
     </head>
     <body>
       ${generateCoverPage(title, subtitle, coverImageUrl, authorLogoUrl)}
+      ${chapterPageMapping ? generateTableOfContents(chapters, chapterPageMapping, introPageNumber) : ''}
+      ${hasIntro ? generateIntroductionPage(introText!) : ''}
       ${generateChaptersContent(chapters)}
     </body>
     </html>
@@ -218,7 +411,7 @@ function generateAdvancedCSS(ebookTitle: string, ebookSubtitle: string | null, a
   const authorPart = authorDisplayName ? authorDisplayName.replace(/"/g, '\\"') : 'Health Pro System';
   let fullTitle = ebookTitle;
   if (ebookSubtitle) {
-      fullTitle += ` ${ebookSubtitle}`;
+    fullTitle += ` ${ebookSubtitle}`;
   }
   const displayFullTitle = fullTitle.length > 80
     ? fullTitle.substring(0, 80) + '...'
@@ -227,11 +420,181 @@ function generateAdvancedCSS(ebookTitle: string, ebookSubtitle: string | null, a
   return `
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: 'Poppins', sans-serif; font-size: 18px; line-height: 1.6; color: #000; background: white; }
-    @page { margin: 20mm; counter-increment: page; size: A4; @bottom-left { content: "${authorPart} | ${displayFullTitle.replace(/"/g, '\\"')}"; font-family: 'Poppins', sans-serif; font-size: 9px; color: rgb(136, 136, 136); font-weight: 300; letter-spacing: 0.3px; margin-top: 12px; padding-top: 4px; background-image: linear-gradient(to right, rgb(136, 136, 136) 0%, rgb(136, 136, 136) 100%); background-size: 100% 1px; background-repeat: no-repeat; background-position: top; } @bottom-right { content: counter(page); font-family: 'Poppins', sans-serif; font-size: 9px; color: rgb(136, 136, 136); font-weight: 400; margin-top: 12px; padding-top: 4px; background-image: linear-gradient(to right, rgb(136, 136, 136) 0%, rgb(136, 136, 136) 100%); background-size: 100% 1px; background-repeat: no-repeat; background-position: top; } }
-    @page cover { margin: 0; counter-reset: page 0; @bottom-left { content: none; } @bottom-right { content: none; } }
-    @page first { margin: 20mm; counter-reset: page 1; @bottom-left { content: none; } @bottom-right { content: none; } }
+
+    @page {
+      margin: 20mm;
+      size: A4;
+      @bottom-left {
+        content: "${authorPart} | ${displayFullTitle.replace(/"/g, '\\"')}";
+        font-family: 'Poppins', sans-serif;
+        font-size: 9px;
+        color: rgb(136, 136, 136);
+        font-weight: 300;
+        letter-spacing: 0.3px;
+        margin-top: 12px;
+        padding-top: 4px;
+        background-image: linear-gradient(to right, rgb(136, 136, 136) 0%, rgb(136, 136, 136) 100%);
+        background-size: 100% 1px;
+        background-repeat: no-repeat;
+        background-position: top;
+      }
+      @bottom-right {
+        content: counter(page);
+        font-family: 'Poppins', sans-serif;
+        font-size: 9px;
+        color: rgb(136, 136, 136);
+        font-weight: 400;
+        margin-top: 12px;
+        padding-top: 4px;
+        background-image: linear-gradient(to right, rgb(136, 136, 136) 0%, rgb(136, 136, 136) 100%);
+        background-size: 100% 1px;
+        background-repeat: no-repeat;
+        background-position: top;
+      }
+    }
+
+    @page cover {
+      margin: 0;
+      @bottom-left { content: none; }
+      @bottom-right { content: none; }
+    }
+
+    @page toc {
+      margin: 20mm;
+    }
+
+    @page intro {
+      margin: 20mm;
+    }
+
+    @page first {
+      margin: 20mm;
+      counter-reset: page 1;
+    }
+
+    .toc-page {
+      page: toc;
+      page-break-after: always;
+      page-break-inside: avoid;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      min-height: calc(100vh - 40mm);
+      padding: 0;
+    }
+
+    .toc-title {
+      font-size: 22px;
+      font-weight: 700;
+      color: #000;
+      line-height: 1.5;
+      margin: 0 0 7rem 0;
+      text-align: left;
+      padding-bottom: 0.6rem;
+      border-bottom: 1.5px solid #000;
+    }
+
+    .toc-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+
+    .toc-item {
+      margin-bottom: 1rem;
+      page-break-inside: avoid;
+    }
+
+    .toc-chapter-label {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      color: #000;
+      margin-bottom: 0.15rem;
+      line-height: 1.4;
+    }
+
+    .toc-item-body {
+      display: block;
+      position: relative;
+      padding-right: 8rem;
+      line-height: 1.6;
+    }
+
+    .toc-item-body::before {
+      content: "";
+      position: absolute;
+      bottom: 0.45em;
+      left: 0;
+      right: 0;
+      border-bottom: 1.5px dotted #999;
+    }
+
+    .toc-chapter-title {
+      font-size: 13px;
+      font-weight: 400;
+      color: #000;
+      background: white;
+      position: relative;
+      z-index: 1;
+      padding-right: 3px;
+    }
+
+    .toc-page-number {
+      position: absolute;
+      right: 0;
+      bottom: 0;
+      font-size: 13px;
+      font-weight: 500;
+      color: #000;
+      background: white;
+      z-index: 1;
+      padding-left: 3px;
+      line-height: 1.6;
+    }
+
+    /* --- INTRODUCTION PAGE --- */
+    .introduction-page {
+      page: intro;
+      page-break-before: always;
+      page-break-after: always;
+      padding: 1rem 0;
+    }
+
+    .introduction-title {
+      font-size: 22px;
+      font-weight: 700;
+      color: #000;
+      line-height: 1.5;
+      margin: 0 0 1.8rem 0;
+      text-align: left;
+      padding-bottom: 0.6rem;
+      border-bottom: 1.5px solid #000;
+    }
+
+    .introduction-content {
+      margin-top: 1rem;
+    }
+
+    .introduction-content .paragraph {
+      margin-bottom: 20px;
+      text-align: justify;
+      line-height: 1.8;
+    }
+
+    .introduction-content .drop-cap::first-letter {
+      float: left;
+      font-size: 4em;
+      line-height: 0.8;
+      padding-right: 8px;
+      padding-top: 4px;
+      font-weight: 700;
+      color: #333;
+      text-shadow: 1px 1px 2px rgba(0,0,0,0.1);
+    }
+
     .chapter { padding: 1rem 0; margin-bottom: 2rem; position: relative; }
-    .chapter:first-of-type { page: first; page-break-before: avoid; }
+    .chapter:first-of-type { page: first; page-break-before: always; }
     .chapter:not(:first-of-type) { page-break-before: always; margin-top: 0; }
     .chapter-content { position: relative; }
     .chapter-content:empty { display: none; }
@@ -296,12 +659,87 @@ function generateCoverPage(title: string, subtitle: string | null, coverImageUrl
   }
 }
 
+function generateTableOfContents(chapters: Chapter[], chapterPageMapping: ChapterPageMapping, introPageNumber?: number): string {
+  if (!Array.isArray(chapters) || chapters.length === 0) {
+    return '';
+  }
+
+  // Introduction jako pierwszy wpis w TOC
+  const introItem = introPageNumber && introPageNumber > 0 ? `
+    <li class="toc-item">
+      <span class="toc-item-body">
+        <span class="toc-chapter-title">Introduction</span>
+        <span class="toc-page-number">s.${introPageNumber}</span>
+      </span>
+    </li>
+  ` : '';
+
+  const tocItems = chapters.map((chapter, index) => {
+    const pageNumber = chapterPageMapping[chapter.id] || 0;
+    const pageDisplay = pageNumber > 0 ? `s.${pageNumber}` : 's.0';
+
+    return `
+      <li class="toc-item">
+        <span class="toc-chapter-label">Chapter ${index + 1}.</span>
+        <span class="toc-item-body">
+          <span class="toc-chapter-title">${escapeHtml(chapter.title || '')}</span>
+          <span class="toc-page-number">${pageDisplay}</span>
+        </span>
+      </li>
+    `;
+  }).join('');
+
+  return `
+    <div class="toc-page">
+      <h2 class="toc-title">Table of content:</h2>
+      <ul class="toc-list">
+        ${introItem}
+        ${tocItems}
+      </ul>
+    </div>
+  `;
+}
+
+// =====================================================================
+//  GENEROWANIE STRONY INTRODUCTION
+// =====================================================================
+
+function generateIntroductionPage(introText: string): string {
+  const paragraphs = introText.split('\n\n').filter(p => p.trim());
+
+  let htmlContent = '';
+  let firstContentParagraph = true;
+
+  for (const paragraph of paragraphs) {
+    const trimmed = paragraph.trim();
+    if (!trimmed) continue;
+
+    if (isSectionHeader(trimmed)) {
+      htmlContent += `<h3 class="section-header">${escapeHtml(trimmed)}</h3>`;
+      firstContentParagraph = true;
+    } else {
+      const paragraphClass = firstContentParagraph ? 'paragraph drop-cap' : 'paragraph';
+      htmlContent += `<p class="${paragraphClass}">${escapeHtml(trimmed).replace(/\n/g, '<br>')}</p>`;
+      firstContentParagraph = false;
+    }
+  }
+
+  return `
+    <div class="introduction-page">
+      <h2 class="introduction-title">Introduction</h2>
+      <div class="introduction-content">
+        ${htmlContent}
+      </div>
+    </div>
+  `;
+}
+
 function generateChaptersContent(chapters: Chapter[]): string {
   if (!Array.isArray(chapters) || chapters.length === 0) {
     return '<div class="no-content">Brak rozdziałów do wyświetlenia.</div>';
   }
   return chapters.map((chapter, index) => `
-      <div class="chapter">
+      <div class="chapter" id="chapter-${index + 1}">
         <div class="chapter-header">
           <div class="chapter-number">Rozdział ${index + 1}.</div>
           <h2 class="chapter-title">${escapeHtml(chapter.title || '')}</h2>
@@ -313,14 +751,11 @@ function generateChaptersContent(chapters: Chapter[]): string {
     `).join('');
 }
 
-
 function generateChapterContent(content: string, imageUrl: string | null, chapter: any, chapterIndex: number): string {
   if (!content.trim()) {
     return '<p class="no-content">Brak treści dla tego rozdziału.</p>';
   }
 
-  // --- KROK 2: Użycie zoptymalizowanych grafik ---
-  // Sprawdzamy, czy istnieje zoptymalizowany obraz Base64. Jeśli nie, używamy oryginalnego.
   const finalImageUrl = chapter.optimizedImageBase64 || imageUrl;
 
   const paragraphs = content.split('\n\n').filter((p) => p.trim());
@@ -354,7 +789,6 @@ function generateChapterContent(content: string, imageUrl: string | null, chapte
   }
   return htmlContent;
 }
-
 
 function isSectionHeader(text: string): boolean {
   const trimmedText = text.trim();

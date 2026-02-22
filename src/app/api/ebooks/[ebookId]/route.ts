@@ -80,10 +80,14 @@ export async function PUT(
 
     // 3. Pobranie danych z żądania
     const body = await request.json();
-    // ✅ POPRAWKA: Odczytaj również pole 'description'
-    const { title, subtitle, description } = body;
 
-    if (!title || title.trim() === '') {
+    // ✅ ZMIANA 1: Pobieramy również pole 'intro' (oraz status dla kompletności)
+    const { title, subtitle, description, intro, status } = body;
+
+    // ✅ ZMIANA 2: Walidacja warunkowa.
+    // Sprawdzamy tytuł TYLKO JEŚLI został przesłany w żądaniu.
+    // Jeśli wysyłasz tylko 'intro', title będzie undefined i błąd nie zostanie rzucony.
+    if (title !== undefined && title.trim() === '') {
       return NextResponse.json({ error: 'Tytuł jest wymagany' }, { status: 400 });
     }
 
@@ -101,17 +105,25 @@ export async function PUT(
     }
 
     // 5. Wykonaj aktualizację
+    // ✅ ZMIANA 3: Budujemy obiekt danych dynamicznie (Partial Update)
+    // Dzięki temu aktualizujemy tylko to, co przyszło w żądaniu.
+    const updateData: any = {
+      updated_at: new Date(),
+    };
+
+    if (title !== undefined) updateData.title = title.trim();
+    if (subtitle !== undefined) updateData.subtitle = subtitle || null;
+    if (description !== undefined) updateData.description = description || null;
+
+    // Tutaj obsługujemy zapis wstępu:
+    if (intro !== undefined) updateData.intro = intro;
+    if (status !== undefined) updateData.status = status;
+
     const updatedEbook = await prisma.ebooks.update({
       where: {
         id: ebookIdNum,
       },
-      data: {
-        title: title.trim(),
-        subtitle: subtitle || null,
-        // ✅ POPRAWKA: Dodaj 'description' do aktualizowanych danych
-        description: description || null,
-        updated_at: new Date(),
-      },
+      data: updateData,
     });
 
     // Ta część jest kluczowa dla odświeżania listy w czasie rzeczywistym
