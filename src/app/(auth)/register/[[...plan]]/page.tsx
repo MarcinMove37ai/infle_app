@@ -79,8 +79,8 @@ export default function RegisterPage({
   // ✅ POPRAWKA: Tworzymy dynamiczny link do logowania, który zachowuje parametr 'lang'
   const loginHref = lang ? `/login?lang=${lang}` : '/login';
 
-  const termsHref = lang ? `/terms?lang=${lang}` : '/terms';
-  const privacyHref = lang ? `/privacy?lang=${lang}` : '/privacy';
+  const termsHref = lang === 'pl' ? 'https://inflee.app/pl/terms' : 'https://inflee.app/terms';
+  const privacyHref = lang === 'pl' ? 'https://inflee.app/pl/privacy' : 'https://inflee.app/privacy';
   const logoHref = lang === 'en' ? 'https://inflee.app/en' : (lang === 'pl' ? 'https://inflee.app/pl' : 'https://inflee.app');
 
   const heroContainerVariants = {
