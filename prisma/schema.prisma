@@ -9,7 +9,6 @@ datasource db {
 }
 
 model User {
-<<<<<<< Updated upstream
   id                    String                       @id @default(cuid())
   email                 String                       @unique
   firstName             String
@@ -48,6 +47,8 @@ model User {
   taxId                 String?
   taxIdType             String?
   billingPreference     String?
+  user_exp_profile      String?
+  client_needs_profile  String?
   ebookSources          EbookSource[]
   ebooks                ebooks[]
   instagramAIAnalyses   InstagramCreatorAIAnalysis[]
@@ -61,63 +62,6 @@ model User {
   apiKeys               UserApiKey[]
   instagramProfile      InstagramProfileCheck?       @relation(fields: [instagramProfileId], references: [id])
   linkedinProfile       LinkedInProfileCheck?        @relation(fields: [linkedinProfileId], references: [id])
-  user_exp_profile      String?
-  client_needs_profile  String?
-=======
-  id                   String                       @id @default(cuid())
-  email                String                       @unique
-  firstName            String
-  lastName             String
-  phone                String?
-  socialLink           String?
-  password             String
-  emailVerified        DateTime?
-  createdAt            DateTime                     @default(now())
-  updatedAt            DateTime                     @updatedAt
-  verificationToken    String?
-  resetToken           String?
-  resetTokenExpiry     DateTime?
-  profilePicture       String?
-  instagramProfileId   String?
-  linkedinProfileId    String?
-  socialProfileType    SocialProfileType            @default(NONE)
-  instagramUsername    String?
-  authorDisplayName    String?
-  authorLogoUrl        String?
-  imageAiModel         String?                      @default("imagen-3")
-  imageAiProvider      String?                      @default("google")
-  textAiModel          String?                      @default("claude-3-haiku")
-  textAiProvider       String?                      @default("anthropic")
-  role                 Role                         @default(free)
-  stripeCustomerId     String?                      @unique
-  stripeSubscriptionId String?                      @unique
-  subscriptionStatus   String?
-  paymentVerifiedAt    DateTime?
-  nextBillingDate      DateTime?
-  billingName          String?
-  billingAddress       Json?
-  cardLast4            String?
-  cardBrand            String?
-  companyName          String?
-  taxId                String?
-  taxIdType            String?
-  billingPreference    String?
-  user_exp_profile     String?
-  client_needs_profile String?
-  ebookSources         EbookSource[]
-  ebooks               ebooks[]
-  instagramAIAnalyses  InstagramCreatorAIAnalysis[]
-  instagramAnalyses    InstagramCreatorAnalysis[]
-  leads                leads[]
-  linkedinAIAnalyses   LinkedInCreatorAIAnalysis[]
-  linkedinAnalyses     LinkedInCreatorAnalysis[]
-  page_contents        page_content[]
-  pages                pages[]
-  reels                reels[]
-  apiKeys              UserApiKey[]
-  instagramProfile     InstagramProfileCheck?       @relation(fields: [instagramProfileId], references: [id])
-  linkedinProfile      LinkedInProfileCheck?        @relation(fields: [linkedinProfileId], references: [id])
->>>>>>> Stashed changes
 
   @@map("users")
 }
@@ -314,10 +258,7 @@ model ebooks {
   subtitle                        String?
   description                     String?
   intro                           String?
-<<<<<<< Updated upstream
   raw_intro                       String?
-=======
->>>>>>> Stashed changes
   cover_image_url                 String?
   cover_image_prompt              String?
   userId                          String?
@@ -330,7 +271,6 @@ model ebooks {
   authorLogoUrl                   String?          @db.VarChar(1024)
   cover_image_webp_url            String?
   final_mockup_url                String?
-  raw_intro                       String?
   ebook_chapters                  ebook_chapters[]
   sources                         EbookSource[]
   user                            User?            @relation(fields: [userId], references: [id])
@@ -379,7 +319,6 @@ model pages {
   ebookId          Int?
   color            String?       @db.VarChar(50)
   leads            leads[]
-  reels            reels[]
   content          page_content?
   ebook            ebooks?       @relation(fields: [ebookId], references: [id], onDelete: Cascade, map: "fk_ebook")
   user             User?         @relation(fields: [userId], references: [id], map: "fk_user")
@@ -438,7 +377,7 @@ model page_content {
 
 model reels {
   id           String       @id @default(cuid())
-  pageId       String
+  pageId       String       @unique
   userId       String
   ebookId      Int?
   reelIntro    String?
@@ -457,7 +396,6 @@ model reels {
   page         pages        @relation(fields: [pageId], references: [id], onDelete: Cascade)
   user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([pageId])
   @@index([pageId])
   @@index([userId])
   @@index([ebookId])
@@ -484,32 +422,6 @@ model leads {
   user           User?     @relation(fields: [userId], references: [id])
 
   @@map("leads")
-}
-
-model reels {
-  id           String       @id
-  pageId       String       @unique
-  userId       String
-  ebookId      Int?
-  reelIntro    String?
-  reelCover    String?
-  reelHeader   String?
-  reelCTA      String?
-  CTAtext      String?
-  coverParams  Json?
-  audioGender  AudioGender?
-  audioURL     String?
-  timestampURL String?
-  reelURL      String?
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime
-  CTAoptions   Json?
-  pages        pages        @relation(fields: [pageId], references: [id], onDelete: Cascade)
-  users        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([ebookId])
-  @@index([pageId])
-  @@index([userId])
 }
 
 enum Role {
