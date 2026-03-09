@@ -1,9 +1,10 @@
 import { NextAuthOptions } from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
+import GoogleProvider from 'next-auth/providers/google';
 import { prisma } from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
 
-// Rozszerzenie typów NextAuth - DODANO pole 'role'
+// Rozszerzenie typów NextAuth
 declare module 'next-auth' {
   interface User {
     id: string;
@@ -11,13 +12,13 @@ declare module 'next-auth' {
     name?: string | null;
     emailVerified?: Date | null;
     profilePicture?: string | null;
-    role?: string | null; // <-- DODANA ROLA
-    // Istniejące pola social media
+    role?: string | null;
     instagramProfileId?: string | null;
     instagramUsername?: string | null;
     linkedinProfileId?: string | null;
     linkedinUsername?: string | null;
     socialProfileType?: string | null;
+    authProvider?: string | null;
   }
 
   interface Session {
@@ -27,13 +28,13 @@ declare module 'next-auth' {
       name?: string | null;
       emailVerified?: Date | null;
       profilePicture?: string | null;
-      role?: string | null; // <-- DODANA ROLA
-      // Istniejące pola social media
+      role?: string | null;
       instagramProfileId?: string | null;
       instagramUsername?: string | null;
       linkedinProfileId?: string | null;
       linkedinUsername?: string | null;
       socialProfileType?: string | null;
+      authProvider?: string | null;
     }
   }
 }
@@ -43,13 +44,13 @@ declare module 'next-auth/jwt' {
     id: string;
     emailVerified?: Date | null;
     profilePicture?: string | null;
-    role?: string | null; // <-- DODANA ROLA
-    // Istniejące pola social media
+    role?: string | null;
     instagramProfileId?: string | null;
     instagramUsername?: string | null;
     linkedinProfileId?: string | null;
     linkedinUsername?: string | null;
     socialProfileType?: string | null;
+    authProvider?: string | null;
   }
 }
 
@@ -67,7 +68,6 @@ export const authOptions: NextAuthOptions = {
           throw new Error('Brak emaila lub hasła');
         }
 
-        // Znajdź usera w bazie - DODANO pole 'role'
         const user = await prisma.user.findUnique({
           where: { email: credentials.email.toLowerCase() },
           select: {
@@ -78,8 +78,8 @@ export const authOptions: NextAuthOptions = {
             password: true,
             emailVerified: true,
             profilePicture: true,
-            role: true, // <-- POBIERZ ROLĘ
-            // Istniejące pola social media
+            role: true,
+            authProvider: true,
             instagramProfileId: true,
             linkedinProfileId: true,
             socialProfileType: true,
@@ -88,6 +88,11 @@ export const authOptions: NextAuthOptions = {
 
         if (!user) {
           throw new Error('Błędny email lub hasło');
+        }
+
+        // Blokuj credentials login dla Google-only users
+        if (!user.password) {
+          throw new Error('To konto używa logowania Google. Użyj przycisku Google.');
         }
 
         const passwordMatch = await bcrypt.compare(credentials.password, user.password);
@@ -118,15 +123,14 @@ export const authOptions: NextAuthOptions = {
           linkedinUsername = linkedinProfile?.linkedinUrl || null;
         }
 
-        // Zwróć użytkownika z wszystkimi polami, w tym z rolą
         return {
           id: user.id,
           email: user.email,
           name: `${user.firstName} ${user.lastName}`,
           emailVerified: user.emailVerified,
           profilePicture: user.profilePicture,
-          role: user.role, // <-- ZWRÓĆ ROLĘ
-          // Istniejące pola social media
+          role: user.role,
+          authProvider: user.authProvider,
           instagramProfileId: user.instagramProfileId,
           instagramUsername: instagramUsername,
           linkedinProfileId: user.linkedinProfileId,
@@ -134,7 +138,11 @@ export const authOptions: NextAuthOptions = {
           socialProfileType: user.socialProfileType,
         };
       }
-    })
+    }),
+    GoogleProvider({
+      clientId: process.env.GOOGLE_CLIENT_ID!,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+    }),
   ],
   session: {
     strategy: 'jwt'
@@ -143,20 +151,124 @@ export const authOptions: NextAuthOptions = {
     signIn: '/login',
   },
   callbacks: {
-    async jwt({ token, user, trigger, session }) {
-      if (user) {
-        token.id = user.id;
-        token.emailVerified = user.emailVerified;
-        token.profilePicture = user.profilePicture;
-        token.role = user.role; // <-- DODAJ ROLĘ DO TOKENU
-        // Istniejące pola social media
-        token.instagramProfileId = user.instagramProfileId;
-        token.instagramUsername = user.instagramUsername;
-        token.linkedinProfileId = user.linkedinProfileId;
-        token.linkedinUsername = user.linkedinUsername;
-        token.socialProfileType = user.socialProfileType;
+    // ───────────────────────────────────────────────
+    // signIn — obsługa Google OAuth (auto-rejestracja / łączenie kont)
+    // ───────────────────────────────────────────────
+    async signIn({ user, account }) {
+      if (account?.provider === 'google') {
+        try {
+          const email = user.email!.toLowerCase();
+          const googleId = account.providerAccountId;
+
+          // 1. Szukaj po googleId (najszybsza ścieżka — user już się logował Google)
+          let dbUser = await prisma.user.findUnique({
+            where: { googleId },
+          });
+
+          if (dbUser) {
+            return true;
+          }
+
+          // 2. Szukaj po email (łączenie kont lub auto-rejestracja)
+          dbUser = await prisma.user.findUnique({
+            where: { email },
+          });
+
+          if (dbUser) {
+            // Istniejący user credentials → łącz konta
+            await prisma.user.update({
+              where: { email },
+              data: {
+                googleId,
+                authProvider: dbUser.authProvider === 'credentials' ? 'both' : dbUser.authProvider,
+                emailVerified: dbUser.emailVerified || new Date(),
+                profilePicture: dbUser.profilePicture || user.image || null,
+              },
+            });
+            return true;
+          }
+
+          // 3. Nowy user → auto-rejestracja
+          const nameParts = (user.name || '').split(' ');
+          const firstName = nameParts[0] || 'User';
+          const lastName = nameParts.slice(1).join(' ') || '';
+
+          await prisma.user.create({
+            data: {
+              email,
+              firstName,
+              lastName,
+              password: null,
+              googleId,
+              authProvider: 'google',
+              emailVerified: new Date(),
+              profilePicture: user.image || null,
+              role: 'free',
+            },
+          });
+
+          return true;
+        } catch (error) {
+          console.error('❌ Google signIn callback error:', error);
+          return false;
+        }
       }
 
+      // Credentials provider → przepuść normalnie
+      return true;
+    },
+
+    // ───────────────────────────────────────────────
+    // jwt — budowanie tokenu z danych z bazy (jeden punkt prawdy)
+    // ───────────────────────────────────────────────
+    async jwt({ token, user, account, trigger, session }) {
+      if (user) {
+        // Pobierz dane z bazy — działa identycznie dla Google i Credentials
+        const email = user.email?.toLowerCase() || token.email?.toLowerCase();
+        if (email) {
+          const dbUser = await prisma.user.findUnique({
+            where: { email },
+            select: {
+              id: true,
+              emailVerified: true,
+              profilePicture: true,
+              role: true,
+              authProvider: true,
+              instagramProfileId: true,
+              linkedinProfileId: true,
+              socialProfileType: true,
+            },
+          });
+
+          if (dbUser) {
+            token.id = dbUser.id;
+            token.emailVerified = dbUser.emailVerified;
+            token.profilePicture = dbUser.profilePicture;
+            token.role = dbUser.role;
+            token.authProvider = dbUser.authProvider;
+            token.instagramProfileId = dbUser.instagramProfileId;
+            token.linkedinProfileId = dbUser.linkedinProfileId;
+            token.socialProfileType = dbUser.socialProfileType;
+
+            if (dbUser.instagramProfileId) {
+              const igProfile = await prisma.instagramProfileCheck.findUnique({
+                where: { id: dbUser.instagramProfileId },
+                select: { username: true },
+              });
+              token.instagramUsername = igProfile?.username || null;
+            }
+            if (dbUser.linkedinProfileId) {
+              const liProfile = await prisma.linkedInProfileCheck.findUnique({
+                where: { id: dbUser.linkedinProfileId },
+                select: { linkedinUrl: true },
+              });
+              token.linkedinUsername = liProfile?.linkedinUrl || null;
+            }
+          }
+        }
+      }
+
+      // Obsługa session update (np. po zmianie profilu w ustawieniach)
       if (trigger === 'update') {
         console.log('🔄 JWT Callback - Update triggered, refreshing data from database');
 
@@ -170,7 +282,8 @@ export const authOptions: NextAuthOptions = {
               lastName: true,
               emailVerified: true,
               profilePicture: true,
-              role: true, // <-- POBIERZ ZAKTUALIZOWANĄ ROLĘ
+              role: true,
+              authProvider: true,
               instagramProfileId: true,
               linkedinProfileId: true,
               socialProfileType: true,
@@ -196,10 +309,10 @@ export const authOptions: NextAuthOptions = {
               linkedinUsername = linkedinProfile?.linkedinUrl || null;
             }
 
-            // Zaktualizuj token z najnowszymi danymi
             token.emailVerified = updatedUser.emailVerified;
             token.profilePicture = updatedUser.profilePicture;
-            token.role = updatedUser.role; // <-- ZAKTUALIZUJ ROLĘ
+            token.role = updatedUser.role;
+            token.authProvider = updatedUser.authProvider;
             token.instagramProfileId = updatedUser.instagramProfileId;
             token.instagramUsername = instagramUsername;
             token.linkedinProfileId = updatedUser.linkedinProfileId;
@@ -208,6 +321,7 @@ export const authOptions: NextAuthOptions = {
 
             console.log('✅ JWT Token updated with fresh data:', {
               role: updatedUser.role,
+              authProvider: updatedUser.authProvider,
               instagramProfileId: updatedUser.instagramProfileId,
               instagramUsername: instagramUsername,
               linkedinProfileId: updatedUser.linkedinProfileId,
@@ -221,13 +335,17 @@ export const authOptions: NextAuthOptions = {
 
       return token;
     },
+
+    // ───────────────────────────────────────────────
+    // session — mapowanie tokenu na sesję (bez zmian w logice)
+    // ───────────────────────────────────────────────
     async session({ session, token }) {
       if (token) {
         session.user.id = token.id;
         session.user.emailVerified = token.emailVerified;
         session.user.profilePicture = token.profilePicture;
-        session.user.role = token.role; // <-- DODAJ ROLĘ DO SESJI
-        // Istniejące pola social media
+        session.user.role = token.role;
+        session.user.authProvider = token.authProvider;
         session.user.instagramProfileId = token.instagramProfileId;
         session.user.instagramUsername = token.instagramUsername;
         session.user.linkedinProfileId = token.linkedinProfileId;

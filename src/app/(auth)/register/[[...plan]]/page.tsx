@@ -8,6 +8,7 @@ import Image from 'next/image';
 import { Check, Sparkles } from 'lucide-react';
 import { LazyMotion, domAnimation, m as motion } from "framer-motion";
 import { trackHybridEvent } from '@/lib/fbPixel';
+import { signIn } from 'next-auth/react';
 
 interface InstagramProfileResponse {
   profilepic_url: string | null;
@@ -271,7 +272,8 @@ const heroItemVariants = {
   };
 
   const handleGoogleSignUp = () => {
-    alert(lang === 'en' ? 'Sign up with Google - feature in preparation' : 'Rejestracja przez Google - funkcja w przygotowaniu');
+    localStorage.setItem('appLanguage', lang || 'en');
+    signIn('google', { callbackUrl: `/ebooks?lang=${lang || 'en'}` });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -579,7 +581,7 @@ const heroItemVariants = {
                         <button
                           onClick={handleGoogleSignUp}
                           type="button"
-                          className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-white hover:bg-gray-50 text-gray-700 font-medium rounded-xl transition-all duration-200 shadow-md hover:shadow-lg mb-4"
+                          className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-white hover:bg-gray-50 text-gray-700 font-medium rounded-xl transition-all duration-200 shadow-md hover:shadow-lg mb-4 disabled:opacity-70 cursor-pointer disabled:cursor-not-allowed"
                         >
                           <svg className="w-4 h-4" viewBox="0 0 24 24">
                             <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>

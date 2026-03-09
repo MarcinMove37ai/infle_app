@@ -38,7 +38,8 @@ export async function POST(request: NextRequest) {
       data: {
         password: hashedPassword,
         resetToken: null,
-        resetTokenExpiry: null
+        resetTokenExpiry: null,
+        authProvider: user.authProvider === 'google' ? 'both' : user.authProvider,
       }
     });
 

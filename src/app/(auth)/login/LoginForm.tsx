@@ -78,7 +78,8 @@ export default function LoginForm() {
 
   // ✅ Logika logowania przez Google
   const handleGoogleSignIn = () => {
-    alert(lang === 'en' ? 'Sign in with Google - feature in preparation' : 'Logowanie przez Google - funkcja w przygotowaniu');
+    localStorage.setItem('appLanguage', lang || 'en');
+    signIn('google', { callbackUrl: `/ebooks?lang=${lang || 'en'}` });
   };
 
   // ✅ Logika logowania przez email/hasło
