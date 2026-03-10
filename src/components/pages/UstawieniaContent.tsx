@@ -1343,7 +1343,7 @@ export default function SettingsContent() {
   const [message, setMessage] = useState<{type: 'success' | 'error', text: string} | null>(null);
   const [isDiskExplorerOpen, setIsDiskExplorerOpen] = useState(false);
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
-
+  const [isActivatingPlan, setIsActivatingPlan] = useState(false);
   // Stan dla modala weryfikacji (PL)
   const [isVerificationModalOpen, setIsVerificationModalOpen] = useState(false);
   // Zmiana: null oznacza brak akcji, 'card' lub 'blik' oznacza przetwarzanie konkretnej opcji
@@ -1365,23 +1365,41 @@ export default function SettingsContent() {
     }
   }, [user?.id]);
 
-  // --- Fix 1: Płynna obsługa powrotu ze Stripe (bez reload) ---
-  useEffect(() => {
-    if (window.location.search.includes('success=true')) {
-      // 1. Wyczyść URL bez przeładowania strony
-      const newUrl = window.location.pathname;
-      window.history.replaceState({}, '', newUrl);
+  // --- Fix 1: Płynna obsługa powrotu ze Stripe z pollingiem ---
+    useEffect(() => {
+      if (!window.location.search.includes('success=true')) return;
 
-      // 2. Pokaż loader (ukrywa formularz, eliminuje mignięcie starego stanu)
+      setIsActivatingPlan(true);
+      window.history.replaceState({}, '', window.location.pathname);
       setIsSubscriptionLoading(true);
 
-      // 3. Pobierz świeże dane "po cichu"
-      fetchSubscriptionStatus().then(() => {
-         // Opcjonalnie: Pokaż sukces (jeśli masz system powiadomień)
-         console.log('Dane odświeżone po płatności');
-      });
-    }
-  }, [fetchSubscriptionStatus]);
+      const previousRole = subscriptionData?.role;
+      let attempts = 0;
+      const maxAttempts = 8;
+
+      const poll = async () => {
+        attempts++;
+        try {
+          const response = await fetch('/api/subscription/status');
+          if (response.ok) {
+            const data = await response.json();
+            if (data.role !== previousRole || data.subscriptionStatus) {
+              setSubscriptionData(data);
+              setIsSubscriptionLoading(false);
+              return;
+            }
+          }
+        } catch (e) {}
+
+        if (attempts < maxAttempts) {
+          setTimeout(poll, 1500);
+        } else {
+          fetchSubscriptionStatus();
+        }
+      };
+
+      setTimeout(poll, 1000);
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // --- Logika Blocking Modal (Wymuszenie wyboru) ---
   const showBillingChoiceModal = useMemo(() => {
@@ -2417,12 +2435,16 @@ export default function SettingsContent() {
   // Blokada renderowania: Dopóki ładujemy dane subskrypcji (start lub powrót ze Stripe),
   // pokazujemy tylko spinner. Dzięki temu Modal Właściciela pojawi się na czystym tle.
   if (isSubscriptionLoading) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-4">
-        <Loader2 className="w-12 h-12 animate-spin text-blue-600" />
-        <p className="text-gray-500 font-medium">{t.processing || 'Ładowanie...'}</p>
-      </div>
-    );
+      return (
+        <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-4">
+          <Loader2 className="w-12 h-12 animate-spin text-blue-600" />
+          <p className="text-gray-500 font-medium">
+            {isActivatingPlan
+              ? (currentLang === 'pl' ? 'Aktywowanie planu...' : 'Activating plan...')
+              : (t.processing || 'Ładowanie...')}
+          </p>
+        </div>
+      );
   }
 
   return (
