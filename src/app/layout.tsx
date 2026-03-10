@@ -7,8 +7,12 @@ import { ClientAuthProvider } from '@/components/providers/ClientAuthProvider'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'inflee.app - Dashboard',
-  description: 'Edukuj | Rośnij | Zarabiaj',
+  title: 'inflee.app',
+  description: 'Knowledge | Leads | Sales',
+  robots: {
+    index: false,
+    follow: false,
+  },
 }
 
 export default function RootLayout({
