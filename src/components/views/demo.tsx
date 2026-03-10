@@ -1251,7 +1251,7 @@ const DemoView: React.FC<DemoViewProps> = ({
       <footer className="py-6 sm:py-8 border-t border-gray-200" style={{ backgroundColor: "#FFFFFF" }}>
         <div className="container mx-auto px-4 text-center">
           <p className="text-xs sm:text-sm text-gray-600 mb-2">
-            © 2025 Omega Zdrowie. Wszelkie prawa zastrzeżone.
+            © 2025 Inflee. Wszelkie prawa zastrzeżone.
           </p>
           <div className="flex flex-wrap justify-center gap-3 sm:gap-0 sm:space-x-4">
             <a href="#" className="text-xs sm:text-sm text-gray-600 hover:text-gray-800 transition-colors">

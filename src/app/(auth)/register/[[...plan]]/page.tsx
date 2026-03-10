@@ -438,7 +438,7 @@ const heroItemVariants = {
                     inflee.app
                   </h1>
                   <p className="mt-0.5 sm:mt-1 text-[11px] sm:text-xs text-slate-400 tracking-wide uppercase leading-tight group-hover:text-slate-300 transition-colors duration-300">
-                    {lang === 'en' ? 'Educate | Grow | Earn' : 'Edukuj | Rośnij | Zarabiaj'}
+                    {lang === 'en' ? 'Knowledge | Leads | Sales' : 'Wiedza | Leady | Sprzedaż'}
                   </p>
               </div>
             </Link>
