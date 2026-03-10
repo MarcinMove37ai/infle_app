@@ -304,7 +304,11 @@ const heroItemVariants = {
       setLoading(false);
       return;
     }
-
+    if (!formData.termsAccepted) {
+      setError(lang === 'en' ? 'You must accept the Terms of Service and Privacy Policy to continue.' : 'Musisz zaakceptować regulamin i politykę prywatności, aby kontynuować.');
+      setLoading(false);
+      return;
+    }
     try {
       const response = await fetch('/api/auth/register', {
         method: 'POST',
@@ -780,7 +784,6 @@ const heroItemVariants = {
                                   id="termsAccepted"
                                   name="termsAccepted"
                                   type="checkbox"
-                                  required
                                   checked={formData.termsAccepted}
                                   onChange={handleChange}
                                   className="focus:ring-indigo-500 h-3.5 w-3.5 text-indigo-600 bg-slate-900 border-slate-600 rounded cursor-pointer"
@@ -812,7 +815,7 @@ const heroItemVariants = {
                               </div>
                               <div className="ml-2 text-xs">
                                 <label htmlFor="marketingConsent" className="text-slate-400">
-                                  {lang === 'en' ? 'I agree to receive marketing communications no more than once a month.' : 'Wyrażam zgodę na kontakt w celach marketingowych nie częściej niż raz w miesiącu.'}
+                                  {lang === 'en' ? 'I consent to the processing of my personal data for the purpose of receiving marketing communications about the inflee.app product, including notifications about app availability, updates, and special offers. This consent may be withdrawn at any time.' : 'Wyrażam zgodę na przetwarzanie danych osobowych w celu otrzymywania informacji marketingowych o produkcie inflee.app, w tym powiadomień o dostępności aplikacji, aktualizacjach i ofertach specjalnych. Zgodę można wycofać w każdej chwili.'}
                                 </label>
                               </div>
                             </div>
