@@ -11,6 +11,7 @@ import {
 import { useAuth } from '@/hooks/useAuth';
 import Link from 'next/link';
 import UpgradeModal from '@/components/ui/UpgradeModal';
+import { signOut } from 'next-auth/react';
 
 interface Model {
   id: string;
@@ -1342,13 +1343,35 @@ export default function SettingsContent() {
 
   const [message, setMessage] = useState<{type: 'success' | 'error', text: string} | null>(null);
   const [isDiskExplorerOpen, setIsDiskExplorerOpen] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
   const [isActivatingPlan, setIsActivatingPlan] = useState(false);
   // Stan dla modala weryfikacji (PL)
   const [isVerificationModalOpen, setIsVerificationModalOpen] = useState(false);
   // Zmiana: null oznacza brak akcji, 'card' lub 'blik' oznacza przetwarzanie konkretnej opcji
   const [processingType, setProcessingType] = useState<'card' | 'blik' | null>(null);
-    // 1. Definiujemy funkcję pobierania danych jako useCallback
+    const handleDeleteAccount = async () => {
+    if (deleteConfirmText !== 'delete my inflee.app account') return;
+    setIsDeletingAccount(true);
+    try {
+      const res = await fetch('/api/user/delete-account', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ confirmationPhrase: deleteConfirmText }),
+      });
+      if (!res.ok) throw new Error();
+      await signOut({ callbackUrl: '/' });
+    } catch {
+      setIsDeletingAccount(false);
+      setMessage({ type: 'error', text: currentLang === 'pl'
+        ? 'Nie udało się usunąć konta. Spróbuj ponownie.'
+        : 'Failed to delete account. Please try again.' });
+    }
+  };
+
+  // 1. Definiujemy funkcję pobierania danych jako useCallback
   const fetchSubscriptionStatus = useCallback(async () => {
     if (!user?.id) return;
 
@@ -2873,6 +2896,16 @@ export default function SettingsContent() {
         )}
       </div>
 
+      {/* Danger Zone */}
+      <div className="mt-8 pt-6 border-t border-gray-100 flex justify-end">
+        <button
+          onClick={() => setIsDeleteModalOpen(true)}
+          className="text-xs text-gray-400 hover:text-red-500 transition-colors cursor-pointer"
+        >
+          {currentLang === 'pl' ? 'Usuń konto' : 'Delete account'}
+        </button>
+      </div>
+
       {/* Disk Explorer Modal */}
       {isDiskExplorerOpen && (
         <DiskExplorerModal
@@ -2881,10 +2914,71 @@ export default function SettingsContent() {
         />
       )}
 
+      {/* Delete Account Modal */}
+      {isDeleteModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div
+            className="absolute inset-0 bg-black/50 backdrop-blur cursor-pointer"
+            onClick={() => { setIsDeleteModalOpen(false); setDeleteConfirmText(''); }}
+          />
+          <div className="relative bg-gray-50 rounded-xl shadow-2xl p-6 max-w-md w-full mx-4">
+            <div className="text-center mb-6">
+              <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 mb-4">
+                <AlertTriangle className="h-6 w-6 text-red-600" />
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                {currentLang === 'pl' ? 'Usuń konto' : 'Delete account'}
+              </h3>
+              <p className="text-sm text-gray-500">
+                {currentLang === 'pl'
+                  ? 'Ta operacja jest nieodwracalna. Zostaną usunięte wszystkie Twoje dane, pliki i subskrypcja.'
+                  : 'This action is irreversible. All your data, files and subscription will be permanently deleted.'}
+              </p>
+            </div>
+
+            <div className="mb-6">
+              <label className="block text-xs text-gray-500 mb-2">
+                {currentLang === 'pl' ? 'Wpisz aby potwierdzić:' : 'Type to confirm:'}
+                <span className="block mt-1 font-mono font-medium text-gray-700 select-all">
+                  delete my inflee.app account
+                </span>
+              </label>
+              <input
+                type="text"
+                value={deleteConfirmText}
+                onChange={(e) => setDeleteConfirmText(e.target.value)}
+                placeholder="delete my inflee.app account"
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-all"
+                autoComplete="off"
+              />
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => { setIsDeleteModalOpen(false); setDeleteConfirmText(''); }}
+                className="flex-1 px-4 py-2 text-sm font-medium text-gray-700 bg-gray-50 border border-gray-300 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
+              >
+                {currentLang === 'pl' ? 'Anuluj' : 'Cancel'}
+              </button>
+              <button
+                onClick={handleDeleteAccount}
+                disabled={deleteConfirmText !== 'delete my inflee.app account' || isDeletingAccount}
+                className="flex-1 px-4 py-2 text-sm font-medium text-gray-50 bg-red-600 rounded-lg hover:bg-red-700 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {isDeletingAccount
+                  ? <><Loader2 className="w-4 h-4 animate-spin" />{currentLang === 'pl' ? 'Usuwanie...' : 'Deleting...'}</>
+                  : (currentLang === 'pl' ? 'Usuń konto' : 'Delete account')
+                }
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Confirmation Modal */}
       {confirmModal.isOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/50 backdrop-blur cursor-pointer" onClick={closeConfirmModal} />
+          <div className="absolute inset-0 bg-gray-950/50 backdrop-blur-sm cursor-pointer" onClick={closeConfirmModal} />
           <div className="relative bg-white rounded-xl shadow-2xl p-6 max-w-md w-full mx-4 cursor-default">
             <div className="text-center">
               <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 mb-4">
