@@ -408,7 +408,7 @@ function generateHTMLContent(
 }
 
 function generateAdvancedCSS(ebookTitle: string, ebookSubtitle: string | null, authorDisplayName?: string | null): string {
-  const authorPart = authorDisplayName ? authorDisplayName.replace(/"/g, '\\"') : 'Health Pro System';
+  const authorPart = authorDisplayName ? authorDisplayName.replace(/"/g, '\\"') : 'Inflee.app';
   let fullTitle = ebookTitle;
   if (ebookSubtitle) {
     fullTitle += ` ${ebookSubtitle}`;
