@@ -358,6 +358,14 @@ const DemoView: React.FC<DemoViewProps> = ({
   // Używamy przekazanego schematu kolorystycznego
   const colors = colorSchemes[colorSchemeName];
 
+  // Przetwarzanie URL logo - tak samo jak mockup
+  const logoUrl = (() => {
+    const raw = pageData?.author_logo_url;
+    if (!raw) return '/api/assets/uploads/logo_inflee.webp';
+    if (raw.startsWith('/uploads/')) return `/api/assets/${raw.slice('/uploads/'.length)}`;
+    return raw;
+  })();
+
   // Przygotowanie rozszerzonych statystyk z uwzględnieniem liczby odwiedzin
   const statsWithVisitors = [
     ...pageContent.hero.stats,
@@ -538,7 +546,7 @@ const DemoView: React.FC<DemoViewProps> = ({
       <div className="flex items-center">
         <div className="h-8 md:h-12 w-auto">
           <Image
-            src={pageData.author_logo_url}
+            src={logoUrl}
             alt="Logo aplikacji"
             width={120}
             height={48}

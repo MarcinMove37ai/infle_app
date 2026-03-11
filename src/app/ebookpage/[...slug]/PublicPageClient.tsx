@@ -57,7 +57,7 @@ const buildAssetUrl = (path?: string | null): string => {
   }
   // Sprawdź, czy to nasza lokalna ścieżka do uploadu
   if (path.startsWith('/uploads/')) {
-    return `/api/assets${path}`;
+    return `/api/assets/${path.slice('/uploads/'.length)}`;
   }
   // Jeśli to już jest pełny URL (np. z innego serwera), zwróć go bez zmian
   if (path.startsWith('http://') || path.startsWith('https://')) {
