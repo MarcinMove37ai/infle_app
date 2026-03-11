@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
+import { prisma } from '@/lib/prisma';
 import fs from 'fs/promises';
 import path from 'path';
 import { stat } from 'fs/promises';
@@ -15,8 +16,6 @@ interface FileInfo {
   extension?: string;
 }
 
-// 🔥 GOD_MODE User ID
-const GOD_MODE_USER_ID = 'cme8bstib0001vmvojrxhcvlo';
 
 export async function GET(request: NextRequest) {
   try {
@@ -25,6 +24,11 @@ export async function GET(request: NextRequest) {
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Brak autoryzacji' }, { status: 401 });
     }
+
+    const userRecord = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { role: true }
+    });
 
     const { searchParams } = new URL(request.url);
     const requestedPath = searchParams.get('path') || '';
@@ -89,14 +93,22 @@ export async function GET(request: NextRequest) {
 
     console.log(`✅ Znaleziono ${fileInfos.length} elementów w: ${safePath}`);
 
+    const isGod = userRecord?.role === 'GOD';
+    const filteredInfos = isGod
+      ? fileInfos
+      : fileInfos.filter(f =>
+          f.type === 'directory' ||
+          f.path.includes(session.user.id)
+        );
+
     return NextResponse.json({
       success: true,
       currentPath: requestedPath,
       basePath: baseDir,
-      items: fileInfos,
-      totalItems: fileInfos.length,
-      directories: fileInfos.filter(f => f.type === 'directory').length,
-      files: fileInfos.filter(f => f.type === 'file').length
+      items: filteredInfos,
+      totalItems: filteredInfos.length,
+      directories: filteredInfos.filter(f => f.type === 'directory').length,
+      files: filteredInfos.filter(f => f.type === 'file').length
     });
 
   } catch (error) {
@@ -117,12 +129,17 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'Brak autoryzacji' }, { status: 401 });
     }
 
-    // 🔥 Sprawdź czy użytkownik ma uprawnienia GOD_MODE
-    if (session.user.id !== GOD_MODE_USER_ID) {
-      console.warn(`🚫 Próba usunięcia pliku przez nieuprawnionego użytkownika: ${session.user.id}`);
+    // 🔥 Sprawdź czy użytkownik ma rolę GOD
+    const userRecord = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { role: true }
+    });
+
+    if (userRecord?.role !== 'GOD') {
+      console.warn(`🚫 Próba usunięcia pliku przez nieuprawnionego użytkownika: ${session.user.id}, rola: ${userRecord?.role}`);
       return NextResponse.json({
         error: 'Brak uprawnień do usuwania plików',
-        details: 'Tylko GOD_MODE może usuwać pliki'
+        details: 'Tylko GOD może usuwać pliki'
       }, { status: 403 });
     }
 

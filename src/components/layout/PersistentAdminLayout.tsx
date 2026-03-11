@@ -18,7 +18,8 @@ import {
   TrendingUp,
   BarChart3,
   FileSignature,
-  Settings
+  Settings,
+  HardDrive
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { UserRole } from '@/types/types';
@@ -90,6 +91,7 @@ const translations = {
     landingPages: 'Strony Pobierania',
     leads: 'Kontakty',
     statistics: 'Statystyki',
+    files: 'Pliki',
     settings: 'Ustawienia',
     tagline: 'Wiedza | Leady | Sprzedaż',
     logout: 'Wyloguj się',
@@ -106,6 +108,7 @@ const translations = {
     landingPages: 'Landing Pages',
     leads: 'Leads',
     statistics: 'Statistics',
+    files: 'Files',
     settings: 'Settings',
     tagline: 'Knowledge | Leads | Sales',
     logout: 'Log out',
@@ -706,6 +709,13 @@ const getMenuItems = (lang: 'pl' | 'en'): MenuItem[] => [
     label: translations[lang].statistics,
     path: '/statystyki',
     roles: ['ADMIN', 'USER', 'GOD'],
+    requiredStatus: ['active']
+  },
+  {
+    IconComponent: HardDrive,
+    label: translations[lang].files,
+    path: '/asset-explorer',
+    roles: ['ADMIN', 'USER', 'GOD', 'free', 'rookie', 'creator', 'unlimited', 'free_ver', 'demo'],
     requiredStatus: ['active']
   },
   {

@@ -23,7 +23,12 @@ const FILE_STORAGE_PATH = process.env.FILE_STORAGE_PATH || './.uploads';
 function extractFilePath(url: string | null | undefined): string | null {
   if (!url) return null;
   if (url.startsWith('http://') || url.startsWith('https://')) return null;
-  // Usuń leading slash jeśli istnieje
+
+  const API_ASSETS_PREFIX = '/api/assets/';
+  if (url.startsWith(API_ASSETS_PREFIX)) {
+    return url.slice(API_ASSETS_PREFIX.length);
+  }
+
   return url.startsWith('/') ? url.slice(1) : url;
 }
 
