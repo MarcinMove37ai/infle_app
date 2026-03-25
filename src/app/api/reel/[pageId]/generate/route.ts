@@ -322,7 +322,7 @@ export async function POST(request: Request, context: RouteContext) {
       "node",
       [reelsScript, paths.audio.filePath, paths.timestamps.filePath, paths.rawText.filePath, paths.config.filePath],
       {
-        timeout: 240_000,
+        timeout: 420_000,
         maxBuffer: 10 * 1024 * 1024,
         cwd: join(process.cwd(), "reels"),
       }
