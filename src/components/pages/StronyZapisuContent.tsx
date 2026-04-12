@@ -85,6 +85,7 @@ const translations = {
     awaitingPublication: 'Oczekuje na publikację',
     noCover: 'Brak okładki',
     edit: 'Edytuj',
+    editAndPublish: 'Edytuj i opublikuj',
     preview: 'Podgląd',
     delete: 'Usuń',
     generateReel: 'Utwórz rolkę',
@@ -176,6 +177,7 @@ const translations = {
     awaitingPublication: 'Awaiting publication',
     noCover: 'No cover',
     edit: 'Edit',
+    editAndPublish: 'Edit and publish',
     preview: 'Preview',
     delete: 'Delete',
     generateReel: 'Generate reel',
@@ -847,11 +849,13 @@ const PagesView = () => {
                         <div className="hidden sm:flex px-4 py-3 border-t border-gray-100 justify-between items-center bg-gray-50/50">
                             <div className="space-x-2">
                                 <button className="text-sm text-sky-600 hover:text-sky-700 font-medium bg-sky-50 hover:bg-sky-100 px-3 py-1.5 rounded-md transition-colors inline-flex items-center cursor-pointer disabled:cursor-not-allowed" onClick={() => openEditor(page.id, page.draft_url)} disabled={actionLoading === page.id}>
-                                    {actionLoading === page.id ? <div className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent mr-1.5"></div> : <Edit size={14} className="inline mr-1.5" />}{t.edit}
+                                    {actionLoading === page.id ? <div className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent mr-1.5"></div> : <Edit size={14} className="inline mr-1.5" />}{page.status === 'published' ? t.edit : t.editAndPublish}
                                 </button>
+                                {page.status === 'published' && (
                                 <button className="text-sm text-gray-600 hover:text-gray-700 font-medium bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-md transition-colors inline-flex items-center disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed" onClick={() => openPreview(page.id, page.draft_url)} disabled={actionLoading === page.id}>
                                     {actionLoading === page.id ? <div className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent mr-1.5"></div> : <Eye size={14} className="inline mr-1.5" />}{t.preview}
                                 </button>
+                                )}
                             </div>
                             <div className="space-x-2">
                                 <button className="text-sm text-purple-600 hover:text-purple-700 font-medium bg-purple-50 hover:bg-purple-100 px-3 py-1.5 rounded-md transition-colors inline-flex items-center cursor-pointer" onClick={() => handleReelToggle(page.id)} title={reelUrls[page.id] ? t.showReel : t.generateReel}>
@@ -867,11 +871,13 @@ const PagesView = () => {
                         <div className="flex sm:hidden flex-col px-4 py-3 border-t border-gray-100 bg-gray-50/50 gap-2">
                             <div className="flex gap-2">
                                 <button className="flex-1 text-sm text-sky-600 hover:text-sky-700 font-medium bg-sky-50 hover:bg-sky-100 px-3 py-2 rounded-md transition-colors inline-flex items-center justify-center cursor-pointer disabled:cursor-not-allowed" onClick={() => openEditor(page.id, page.draft_url)} disabled={actionLoading === page.id}>
-                                    {actionLoading === page.id ? <div className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent mr-1.5"></div> : <Edit size={14} className="inline mr-1.5" />}{t.edit}
+                                    {actionLoading === page.id ? <div className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent mr-1.5"></div> : <Edit size={14} className="inline mr-1.5" />}{page.status === 'published' ? t.edit : t.editAndPublish}
                                 </button>
+                                {page.status === 'published' && (
                                 <button className="flex-1 text-sm text-gray-600 hover:text-gray-700 font-medium bg-gray-100 hover:bg-gray-200 px-3 py-2 rounded-md transition-colors inline-flex items-center justify-center disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed" onClick={() => openPreview(page.id, page.draft_url)} disabled={actionLoading === page.id}>
                                     {actionLoading === page.id ? <div className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent mr-1.5"></div> : <Eye size={14} className="inline mr-1.5" />}{t.preview}
                                 </button>
+                                )}
                                 <button className="flex-1 text-sm text-red-600 hover:text-red-700 font-medium bg-red-50 hover:bg-red-100 px-3 py-2 rounded-md transition-colors inline-flex items-center justify-center cursor-pointer" onClick={() => handleDeletePage(page)} title={t.delete}>
                                     <Trash2 size={14} className="inline mr-1.5" />{t.delete}
                                 </button>

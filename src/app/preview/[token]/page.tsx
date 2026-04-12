@@ -170,6 +170,12 @@ const translations = {
     // ColorSchemeButton
     changeColorSchemeTo: 'Zmień kolorystykę na',
 
+    // Nazwy profili kolorystycznych
+    colorSchemeDark: 'Ciemny',
+    colorSchemeLight: 'Jasny',
+    colorSchemeEarth: 'Ziemia',
+    colorSchemeFrost: 'Mróz',
+
     // PreviewModeBanner
     previewModeWatermark: 'PODGLĄD',
     previewModeTitle: 'TRYB PODGLĄDU (TYLKO DO ODCZYTU)',
@@ -200,6 +206,7 @@ const translations = {
 
     // Admin Panel
     adminSelectColor: 'Wybierz kolorystykę:',
+    adminThemeLabel: 'Motyw',
     adminBack: 'Powrót',
     adminSaving: 'Zapisywanie...',
     adminSave: 'Zapisz',
@@ -270,6 +277,12 @@ const translations = {
     // ColorSchemeButton
     changeColorSchemeTo: 'Change color scheme to',
 
+    // Color scheme profile names
+    colorSchemeDark: 'Dark',
+    colorSchemeLight: 'Light',
+    colorSchemeEarth: 'Earth',
+    colorSchemeFrost: 'Frost',
+
     // PreviewModeBanner
     previewModeWatermark: 'PREVIEW',
     previewModeTitle: 'PREVIEW MODE (READ-ONLY)',
@@ -300,6 +313,7 @@ const translations = {
 
     // Admin Panel
     adminSelectColor: 'Select color scheme:',
+    adminThemeLabel: 'Theme',
     adminBack: 'Back',
     adminSaving: 'Saving...',
     adminSave: 'Save',
@@ -418,7 +432,7 @@ const ConfirmDialog = ({
 };
 
 // Główny komponent strony podglądu
-const PreviewPageContent = ({ t }: { t: typeof translations.pl }) => {
+const PreviewPageContent = ({ t, lang }: { t: typeof translations.pl; lang: 'pl' | 'en' }) => {
   const params = useParams();
   const searchParams = useSearchParams();
   const { data: session, status } = useSession();
@@ -458,38 +472,36 @@ const PreviewPageContent = ({ t }: { t: typeof translations.pl }) => {
   const editModeContext = useEditMode();
   const useContextMode = !!editModeContext;
 
-  // Przycisk kolorystyki
+  // Przycisk kolorystyki — styl spójny z przyciskami akcji
   const ColorSchemeButton = ({
     scheme,
     currentScheme,
     onClick,
     colorName,
-    color,
     disabled
   }: {
     scheme: string,
     currentScheme: string,
     onClick: (scheme: string) => void,
     colorName: string,
-    color: string,
+    color?: string,
     disabled?: boolean
   }) => {
+    const isActive = currentScheme === scheme;
     return (
       <button
         onClick={() => !disabled && onClick(scheme)}
-        className={`flex items-center justify-center p-1.5 sm:p-2 rounded-full border-2 w-8 h-8 sm:w-10 sm:h-10 transition-all ${
-          currentScheme === scheme ? 'border-gray-800' : 'border-gray-300'
+        className={`px-4 py-2 rounded text-sm font-medium transition-colors ${
+          isActive
+            ? 'bg-gray-800 text-white'
+            : 'bg-gray-100 text-gray-600 hover:bg-gray-200 hover:text-gray-800'
         } ${
           disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
         }`}
-        title={colorName}
         aria-label={`${t.changeColorSchemeTo} ${colorName}`}
         disabled={disabled}
       >
-        <div
-          className="w-full h-full rounded-full"
-          style={{ backgroundColor: color }}
-        />
+        {colorName}
       </button>
     );
   };
@@ -699,7 +711,21 @@ const getStatusChangeInfo = () => {
           cognitoSub: (session?.user as any)?.cognitoSub
         };
 
+        // Capture changes before save (saveAllChanges clears pendingChanges)
+        const savedTextChanges = { ...editModeContext.pendingChanges };
+        const savedColorChange = editModeContext.pendingColorChange;
+
         await editModeContext.saveAllChanges(pageData.id, credentials);
+
+        // Merge saved values into pageData so display reflects new state
+        setPageData(prev => {
+          if (!prev) return null;
+          return {
+            ...prev,
+            ...savedTextChanges,
+            ...(savedColorChange ? { color: savedColorChange } : {}),
+          };
+        });
 
         setToast({
           type: 'success',
@@ -1166,11 +1192,7 @@ const getStatusChangeInfo = () => {
         subheadline: pageData?.pagecontent_hero_subheadline || "",
         description: pageData?.pagecontent_hero_description || "",
         buttonText: t.heroButtonText,
-        stats: [
-          { value: "10,000+", label: t.heroStatsReaders },
-          { value: "4.9/5", label: t.heroStatsRating },
-          { value: "100%", label: t.heroStatsSatisfaction }
-        ]
+        stats: []
       },
       benefits: {
         title: t.benefitsTitle,
@@ -1322,6 +1344,8 @@ const getStatusChangeInfo = () => {
           <DemoView
             pageContent={formattedContent}
             colorSchemeName={currentColorScheme}
+            language={lang}
+            ebookMeta={pageData?.ebookMeta}
             partnerName={pageData.author_display_name || "Autor"}
             visitors={pageData.visitors || 0}
             pageId={pageData.id}
@@ -1336,56 +1360,66 @@ const getStatusChangeInfo = () => {
         {!isPreviewMode && (
           <div className="fixed bottom-0 left-0 right-0 z-40 bg-white shadow-lg py-3 px-4 border-t border-gray-200">
             <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center gap-4">
-              {/* Sekcja wyboru kolorystyki */}
-              <div className="flex-grow flex flex-col items-center">
-                <p className="text-xs text-gray-600 mb-1 font-medium text-center">{t.adminSelectColor}</p>
-                <div className="flex flex-wrap gap-2 justify-center">
-                  {Object.entries(colorSchemes).map(([key, scheme]) => (
+
+              {/* Sekcja motywu kolorystycznego */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs text-gray-400 font-medium uppercase tracking-wide mr-1">{t.adminThemeLabel}</span>
+                {Object.entries(colorSchemes).map(([key, scheme]) => {
+                  const nameMap: Record<string, string> = {
+                    dark: t.colorSchemeDark,
+                    light: t.colorSchemeLight,
+                    earth: t.colorSchemeEarth,
+                    frost: t.colorSchemeFrost,
+                  };
+                  const translatedName = nameMap[key] || scheme.name;
+                  return (
                     <ColorSchemeButton
                       key={key}
                       scheme={key}
                       currentScheme={currentColorScheme}
                       onClick={(scheme) => handleColorChange(scheme as keyof typeof colorSchemes)}
-                      colorName={scheme.name}
-                      color={scheme.accent}
+                      colorName={translatedName}
                       disabled={!canEditPage}
                     />
-                  ))}
-                </div>
+                  );
+                })}
               </div>
 
-              {/* Przyciski akcji */}
-              <div className="flex flex-wrap gap-2 sm:gap-3 justify-end">
+              {/* Separator */}
+              <div className="hidden sm:block w-px h-8 bg-gray-200"></div>
+
+              {/* Sekcja akcji */}
+              <div className="flex items-center gap-2 flex-wrap sm:ml-auto">
                 <Link
                   href="/landings"
-                  className="flex items-center bg-gray-100 text-gray-700 px-4 py-2 rounded text-sm hover:bg-gray-200 transition-colors cursor-pointer"
+                  className="flex items-center bg-gray-100 text-gray-600 px-4 py-2 rounded text-sm font-medium hover:bg-gray-200 hover:text-gray-800 transition-colors cursor-pointer"
                 >
-                  <ArrowLeft className="h-4 w-4 mr-1" />
+                  <ArrowLeft className="h-4 w-4 mr-1.5" />
                   {t.adminBack}
                 </Link>
 
                 <button
                   onClick={saveChanges}
                   disabled={isSaving || !canEditPage || !hasAnyChanges()}
-                  className={`flex items-center ${
+                  className={`flex items-center px-4 py-2 rounded text-sm font-medium transition-colors ${
                     !canEditPage || !hasAnyChanges()
-                      ? 'bg-blue-200 cursor-not-allowed'
+                      ? 'bg-blue-100 text-blue-300 cursor-not-allowed'
                       : isSaving
-                        ? 'bg-blue-300'
-                        : 'bg-blue-600 hover:bg-blue-700 cursor-pointer'
-                  } text-white px-4 py-2 rounded text-sm transition-colors`}
+                        ? 'bg-blue-400 text-white'
+                        : 'bg-blue-600 text-white hover:bg-blue-700 cursor-pointer'
+                  }`}
                 >
                   {isSaving ? (
                     <>
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-1"></div>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-1.5"></div>
                       {t.adminSaving}
                     </>
                   ) : (
                     <>
-                      <Save className="h-4 w-4 mr-1" />
+                      <Save className="h-4 w-4 mr-1.5" />
                       {t.adminSave}
                       {hasAnyChanges() && (
-                        <span className="ml-1 bg-white text-blue-600 rounded-full w-4 h-4 flex items-center justify-center text-xs font-bold">
+                        <span className="ml-1.5 bg-white text-blue-600 rounded w-5 h-5 flex items-center justify-center text-xs font-bold">
                           {useContextMode ? editModeContext.getPendingChangesCount() : (Object.keys(localTextChanges).length + (hasLocalColorChange ? 1 : 0))}
                         </span>
                       )}
@@ -1396,19 +1430,19 @@ const getStatusChangeInfo = () => {
                 <button
                   onClick={initiateStatusChange}
                   disabled={isChangingStatus || !statusInfo.enabled}
-                  className={`flex items-center ${
+                  className={`flex items-center px-4 py-2 rounded text-sm font-medium transition-colors ${
                     !statusInfo.enabled
-                      ? 'bg-gray-300 cursor-not-allowed'
+                      ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
                       : isChangingStatus
-                        ? 'bg-green-300'
+                        ? 'bg-green-400 text-white'
                         : pageData.status === 'pending'
-                          ? 'bg-yellow-500 hover:bg-yellow-600 cursor-pointer'
-                          : 'bg-green-600 hover:bg-green-700 cursor-pointer'
-                  } text-white px-4 py-2 rounded text-sm transition-colors`}
+                          ? 'bg-yellow-500 text-white hover:bg-yellow-600 cursor-pointer'
+                          : 'bg-green-600 text-white hover:bg-green-700 cursor-pointer'
+                  }`}
                 >
                   {isChangingStatus ? (
                     <>
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-1"></div>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-1.5"></div>
                       {t.adminProcessing}
                     </>
                   ) : (
@@ -1416,6 +1450,7 @@ const getStatusChangeInfo = () => {
                   )}
                 </button>
               </div>
+
             </div>
           </div>
         )}
@@ -1461,8 +1496,6 @@ export default function PreviewPage() {
 
   const autoEnableEditMode = !isPreviewMode && editMode;
 
-  const [toast, setToast] = useState<{type: 'success' | 'error', text: string} | null>(null);
-
   const [currentLang, setCurrentLang] = useState<'pl' | 'en'>('pl');
 
   useEffect(() => {
@@ -1474,31 +1507,12 @@ export default function PreviewPage() {
 
   const t = translations[currentLang];
 
-  const handleToast = (message: {type: 'success' | 'error', text: string}) => {
-    // Tłumaczenie wiadomości z providera (jeśli to konieczne)
-    let translatedText = message.text;
-    if (message.text === 'Changes saved successfully') {
-      translatedText = t.changesSaved;
-    } else if (message.text === 'Error saving changes') {
-      translatedText = t.errorSaving;
-    }
-    setToast({ ...message, text: translatedText });
-  };
-
   return (
     <EditModeProvider
       initialValues={{}}
       autoEnableEditMode={autoEnableEditMode}
-      onToast={handleToast}
     >
-      <PreviewPageContent t={t} />
-      {toast && (
-        <ToastNotification
-          type={toast.type}
-          message={toast.text}
-          onClose={() => setToast(null)}
-        />
-      )}
+      <PreviewPageContent t={t} lang={currentLang} />
     </EditModeProvider>
   );
 }

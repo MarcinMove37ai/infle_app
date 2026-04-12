@@ -45,14 +45,9 @@ export async function GET(
       },
       include: {
         content: true,  // Dane z tabeli page_content
-        ebook: {        // Dane ebook dla logo i autora
-          select: {
-            authorDisplayName: true,
-            authorLogoUrl: true,
-            final_mockup_url: true,
-            cover_image_webp_url: true,
-            title: true,
-            subtitle: true
+        ebook: {
+          include: {
+            ebook_chapters: { orderBy: { position: 'asc' } }
           }
         },
         user: {         // Dane użytkownika
@@ -206,6 +201,23 @@ function mapPageContentToFrontend(page: any) {
     pagecontent_faq_items_1_answer: content.faq_item_1_answer,
     pagecontent_faq_items_2_question: content.faq_item_2_question,
     pagecontent_faq_items_2_answer: content.faq_item_2_answer,
+  };
+
+  // Język strony
+  mappedData.language = page.language || 'en';
+
+  // Dane rozdziałów dla spisu treści
+  const chapters = ebook?.ebook_chapters ?? [];
+  mappedData.ebookMeta = {
+    chapterCount: chapters.length,
+    estimatedPages: ebook?.total_pages ?? 0,
+    chapters: chapters.map((ch: any) => ({
+      position: ch.position,
+      title: ch.title ?? '',
+      preview: ch.content
+        ? ch.content.replace(/\s+/g, ' ').trim().substring(0, 120) + (ch.content.length > 120 ? '…' : '')
+        : '',
+    })),
   };
 
   // Dodaj wszystkie zmapowane pola do wyniku

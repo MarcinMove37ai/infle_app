@@ -188,6 +188,7 @@ export default function EbookiContent() {
   const [deletingIds, setDeletingIds] = useState<Set<number>>(new Set());
   const [creatingPageId, setCreatingPageId] = useState<number | null>(null);
   const [downloadingIds, setDownloadingIds] = useState<Set<number>>(new Set());
+  const [loadingPreviewId, setLoadingPreviewId] = useState<number | null>(null);
   const [currentLang, setCurrentLang] = useState<'pl' | 'en'>('pl');
   const [allEbooks, setAllEbooks] = useState<Ebook[]>([]);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -472,10 +473,10 @@ export default function EbookiContent() {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 30000);
 
-        const contentResponse = await fetch('/api/pages/ai-content', {
+        const contentResponse = await fetch('/api/pages/new-ai-content', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ pageId: pageData.id, ebookId: ebookId }),
+          body: JSON.stringify({ pageId: pageData.id, ebookId: ebookId, language: currentLang }),
           signal: controller.signal
         });
 
@@ -521,6 +522,7 @@ export default function EbookiContent() {
 
   const handlePreviewEbook = async (ebook: Ebook) => {
     if (ebook.cover_image_webp_url) {
+        setLoadingPreviewId(ebook.id);
         setPreviewEbook(ebook);
         const originalFilename = ebook.cover_image_webp_url;
         const lastDotIndex = originalFilename.lastIndexOf('.');
@@ -556,6 +558,7 @@ export default function EbookiContent() {
             setPreviewTocItems([]);
         } finally {
             setIsPreviewTocLoading(false);
+            setLoadingPreviewId(null);
         }
     } else {
         console.warn("Attempted to open preview for an e-book without a cover.");
@@ -755,7 +758,7 @@ export default function EbookiContent() {
               {displayedEbooks.map((ebook) => {
                 const isDeleting = deletingIds.has(ebook.id);
                 const isDownloading = downloadingIds.has(ebook.id);
-                const isDisabled = isDeleting || isDownloading;
+                const isDisabled = isDeleting || isDownloading || loadingPreviewId === ebook.id;
 
                 return (
                   <div key={ebook.id} className={`bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden hover:shadow-md transition-shadow duration-200 flex flex-col ${isDisabled ? 'opacity-50 pointer-events-none' : ''}`}>
@@ -765,13 +768,20 @@ export default function EbookiContent() {
                       <div className="flex gap-4">
                           <div className="w-1/3 flex-shrink-0 flex flex-col justify-center">
                             {ebook.cover_image_webp_url ? (
-                                <img
-                                  src={`/api/assets/${ebook.cover_image_webp_url}`}
-                                  alt={`Cover: ${ebook.title}`}
-                                  className="w-full h-auto object-contain rounded-md bg-gray-200 cursor-pointer"
-                                  loading="lazy"
-                                  onClick={() => handlePreviewEbook(ebook)}
-                                />
+                                <div className="relative">
+                                  <img
+                                    src={`/api/assets/${ebook.cover_image_webp_url}`}
+                                    alt={`Cover: ${ebook.title}`}
+                                    className="w-full h-auto object-contain rounded-md bg-gray-200 cursor-pointer"
+                                    loading="lazy"
+                                    onClick={() => handlePreviewEbook(ebook)}
+                                  />
+                                  {loadingPreviewId === ebook.id && (
+                                    <div className="absolute inset-0 bg-white/60 flex items-center justify-center rounded-md">
+                                      <RefreshCw size={20} className="animate-spin text-gray-600" />
+                                    </div>
+                                  )}
+                                </div>
                             ) : (
                                 <div className="w-full h-full flex items-center justify-center bg-gray-100 rounded-md aspect-square"><ImageIcon className="w-8 h-8 text-gray-400" /></div>
                             )}

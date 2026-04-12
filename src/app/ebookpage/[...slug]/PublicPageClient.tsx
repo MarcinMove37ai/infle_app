@@ -4,7 +4,6 @@ import React, { useEffect } from 'react';
 import DemoView, { colorSchemes } from '@/components/views/demo';
 import DemoVideo from '@/components/views/demoVideo';
 
-// Interfejsy i typy (bez zmian)
 interface PageData {
   id: string;
   status: string;
@@ -17,171 +16,251 @@ interface PageData {
   author_display_name: string;
   author_logo_url: string;
   visitors?: number;
-  [key: string]: any; // Pozwala na dostęp do dynamicznych pól
+  [key: string]: any;
 }
 
+// Testimonials usunięte — nie generujemy fikcji
 interface EbookPageContent {
   s3_file_key: string;
-  hero: { headline: string; subheadline: string; description: string; buttonText: string; stats: any[] };
+  hero: {
+    headline: string;
+    subheadline: string;
+    description: string;
+    buttonText: string;
+    stats: any[];
+  };
   benefits: { title: string; items: any[] };
-  testimonials: { title: string; items: any[] };
   content: { title: string; chapters: any[] };
-  form: { title: string; subtitle: string; namePlaceholder: string; emailPlaceholder: string; phonePlaceholder: string; buttonText: string; privacyText: string; };
+  form: {
+    title: string;
+    subtitle: string;
+    namePlaceholder: string;
+    emailPlaceholder: string;
+    phonePlaceholder: string;
+    buttonText: string;
+    privacyText: string;
+  };
   guarantees: { items: any[] };
   faq: { title: string; items: any[] };
 }
 
-// ====================================================================================
-// DODANO: Typ dla kluczy colorSchemes
-// ====================================================================================
+// Metadane e-booka z ebook_chapters — do stats bara i TOC
+export interface EbookMeta {
+  chapterCount: number;
+  estimatedPages: number;
+  chapters: Array<{
+    position: number;
+    title: string;
+    preview: string; // pierwsze ~120 znaków treści
+  }>;
+}
+
 type ColorSchemeKey = keyof typeof colorSchemes;
 
-// Funkcja pomocnicza do sprawdzania czy kolor jest prawidłowym kluczem
 const isValidColorScheme = (color: any): color is ColorSchemeKey => {
   return typeof color === 'string' && color in colorSchemes;
 };
-// ====================================================================================
 
-// ====================================================================================
-// NOWA FUNKCJA DO BUDOWANIA POPRAWNYCH URL-I
-// ====================================================================================
-/**
- * Tworzy pełny, publiczny URL do zasobu (obrazka) na podstawie jego ścieżki.
- * Jeśli ścieżka zaczyna się od "/uploads", dodaje prefix "/api/assets".
- * @param path Ścieżka do pliku (może być pusta lub null).
- * @returns Poprawny, publicznie dostępny URL do zasobu.
- */
 const buildAssetUrl = (path?: string | null): string => {
-  if (!path) {
-    return ""; // Zwróć pusty string, jeśli ścieżka nie istnieje
-  }
-  // Sprawdź, czy to nasza lokalna ścieżka do uploadu
+  if (!path) return "";
+  if (path.startsWith('http://') || path.startsWith('https://')) return path;
   if (path.startsWith('/uploads/')) {
-    return `/api/assets/${path.slice('/uploads/'.length)}`;
+    const filename = path.substring('/uploads/'.length);
+    return `/api/assets/uploads/${filename}`;
   }
-  // Jeśli to już jest pełny URL (np. z innego serwera), zwróć go bez zmian
-  if (path.startsWith('http://') || path.startsWith('https://')) {
-    return path;
-  }
-  // W każdym innym przypadku zwróć oryginalną ścieżkę
-  return path;
+  return `/api/assets/uploads/${path}`;
 };
-// ====================================================================================
 
+// ---------------------------------------------------------------------------
+// Resolve mockup image URL — checks multiple possible sources
+// ---------------------------------------------------------------------------
+const resolveMockupUrl = (pageData: any): string => {
+  // 0. URL obliczony na serwerze (page.tsx) — już przetworzony, użyj wprost
+  if (pageData?.resolvedMockupUrl) return pageData.resolvedMockupUrl;
 
-/**
- * Zaktualizowana funkcja formatująca, używająca buildAssetUrl.
- */
+  const ebook = pageData?.ebook;
+
+  // 1. Zagnieżdżone pola ebooka (final mockup > cover webp)
+  const ebookUrl = ebook?.final_mockup_url || ebook?.cover_image_webp_url;
+  if (ebookUrl) return buildAssetUrl(ebookUrl);
+
+  // 2. Płaskie pole s3_file_key (tak jak w preview)
+  if (pageData?.s3_file_key) return buildAssetUrl(pageData.s3_file_key);
+
+  // 3. Ebook s3_file_key
+  if (ebook?.s3_file_key) return buildAssetUrl(ebook.s3_file_key);
+
+  // 4. Inne możliwe lokalizacje
+  if (ebook?.mockup_url) return buildAssetUrl(ebook.mockup_url);
+  if (pageData?.mockup_url) return buildAssetUrl(pageData.mockup_url);
+
+  return "";
+};
+
+// ---------------------------------------------------------------------------
+// Budowanie ebookMeta z ebook_chapters
+// ---------------------------------------------------------------------------
+const buildEbookMeta = (ebook: any): EbookMeta => {
+  const chapters = ebook?.ebook_chapters ?? [];
+
+  // Użyj rzeczywistej liczby stron jeśli dostępna (z API/bazy),
+  // w przeciwnym razie estymuj z liczby słów
+  let estimatedPages: number;
+
+  if (ebook?.estimated_pages && ebook.estimated_pages > 0) {
+    // Pole z serwera — ta sama wartość co w preview
+    estimatedPages = ebook.estimated_pages;
+  } else if (ebook?.page_count && ebook.page_count > 0) {
+    // Alternatywna nazwa pola
+    estimatedPages = ebook.page_count;
+  } else if (ebook?.pages && ebook.pages > 0) {
+    // Jeszcze inna możliwa nazwa
+    estimatedPages = ebook.pages;
+  } else {
+    // Fallback — estymacja z treści rozdziałów
+    const totalWords = chapters.reduce((acc: number, ch: any) => {
+      return acc + (ch.content?.split(/\s+/).length ?? 0);
+    }, 0);
+    estimatedPages = Math.max(1, Math.round(totalWords / 250));
+  }
+
+  return {
+    chapterCount: chapters.length,
+    estimatedPages,
+    chapters: chapters.map((ch: any) => ({
+      position: ch.position,
+      title: ch.title ?? "",
+      preview: ch.content
+        ? ch.content.replace(/\s+/g, ' ').trim().substring(0, 120) + (ch.content.length > 120 ? '…' : '')
+        : "",
+    })),
+  };
+};
+
+// ---------------------------------------------------------------------------
+// Formatowanie treści strony
+// ---------------------------------------------------------------------------
 const formatPageContent = (pageData: PageData | any): EbookPageContent => {
   if (!pageData) throw new Error("Brak danych strony");
 
   const content = pageData.content || {};
-  const ebook = pageData.ebook || {};
+  const ebook   = pageData.ebook   || {};
+
+  // Resolve mockup URL z wielu możliwych źródeł
+  const mockupUrl = resolveMockupUrl(pageData);
 
   return {
-    // Używamy nowej funkcji do zbudowania poprawnego URL-a dla mockupu
-    s3_file_key: buildAssetUrl(ebook.final_mockup_url || ebook.cover_image_url),
+    s3_file_key: mockupUrl,
+
     hero: {
-      headline: content.hero_headline ?? "",
+      headline:    content.hero_headline    ?? "",
       subheadline: content.hero_subheadline ?? "",
       description: content.hero_description ?? "",
-      buttonText: "Pobierz bezpłatny e-book",
-      stats: [
-        { value: "10,000+", label: "czytelników" },
-        { value: "4.9/5", label: "ocena" },
-        { value: "100%", label: "satysfakcji" }
-      ]
+      buttonText:  "",   // renderowane przez ui.heroCta w demo.tsx
+      stats: ebook.ebook_chapters?.length
+        ? [
+            { value: String(ebook.ebook_chapters.length), label: "" },
+            { value: "PDF",  label: "" },
+            { value: "",     label: "" },
+          ]
+        : [],
     },
+
     benefits: {
       title: "Co zyskasz dzięki temu przewodnikowi?",
       items: [
         { title: content.benefits_item_0_title ?? "", text: content.benefits_item_0_text ?? "" },
         { title: content.benefits_item_1_title ?? "", text: content.benefits_item_1_text ?? "" },
         { title: content.benefits_item_2_title ?? "", text: content.benefits_item_2_text ?? "" },
-        { title: content.benefits_item_3_title ?? "", text: content.benefits_item_3_text ?? "" }
-      ]
+        { title: content.benefits_item_3_title ?? "", text: content.benefits_item_3_text ?? "" },
+      ],
     },
-    testimonials: {
-      title: "Opinie czytelników",
-      items: [
-        { avatar: "", text: content.testimonials_item_0_text ?? "", author: content.testimonials_item_0_author ?? "", role: content.testimonials_item_0_role ?? "", rating: 5 },
-        { avatar: "", text: content.testimonials_item_1_text ?? "", author: content.testimonials_item_1_author ?? "", role: content.testimonials_item_1_role ?? "", rating: 5 },
-        { avatar: "", text: content.testimonials_item_2_text ?? "", author: content.testimonials_item_2_author ?? "", role: content.testimonials_item_2_role ?? "", rating: 5 }
-      ]
-    },
+
     content: {
       title: "Co znajdziesz w środku?",
       chapters: [
         { number: "01", title: content.content_chapter_0_title ?? "", description: content.content_chapter_0_description ?? "" },
         { number: "02", title: content.content_chapter_1_title ?? "", description: content.content_chapter_1_description ?? "" },
-        { number: "03", title: content.content_chapter_2_title ?? "", description: content.content_chapter_2_description ?? "" }
-      ]
+        { number: "03", title: content.content_chapter_2_title ?? "", description: content.content_chapter_2_description ?? "" },
+      ],
     },
+
     form: {
-      title: content.form_title ?? "Pobierz bezpłatny e-book już teraz",
-      subtitle: "Uzupełnij poniższy formularz, aby otrzymać e-book",
-      namePlaceholder: "Twoje imię",
-      emailPlaceholder: "Twój adres e-mail",
-      phonePlaceholder: "Twój numer telefonu (opcjonalnie)",
-      buttonText: "Wyślij mi e-book",
-      privacyText: "Twoje dane są bezpieczne. Zapoznaj się z polityką prywatności."
+      title:            content.form_title ?? "",
+      subtitle:         "",   // ui.formLeftText
+      namePlaceholder:  "",   // ui.namePlaceholder
+      emailPlaceholder: "",   // ui.emailPlaceholder
+      phonePlaceholder: "",   // ui.phonePlaceholder
+      buttonText:       "",   // ui.formSubmitBtn
+      privacyText:      "",   // ui.privacyText
     },
-    guarantees: {
-      items: [
-        { text: "Sprawdzone badania naukowe" },
-        { text: "Aktualizacja 2025" },
-        { text: "Bezpieczne porady" }
-      ]
-    },
+
+    guarantees: { items: [] }, // ui.guaranteeFree/NoSpam/Pdf
+
     faq: {
       title: "Najczęściej zadawane pytania",
       items: [
         { question: content.faq_item_0_question ?? "", answer: content.faq_item_0_answer ?? "" },
         { question: content.faq_item_1_question ?? "", answer: content.faq_item_1_answer ?? "" },
-        { question: content.faq_item_2_question ?? "", answer: content.faq_item_2_answer ?? "" }
-      ]
-    }
+        { question: content.faq_item_2_question ?? "", answer: content.faq_item_2_answer ?? "" },
+      ],
+    },
   };
 };
 
+// ---------------------------------------------------------------------------
+// Komponent
+// ---------------------------------------------------------------------------
 const PublicPageClient = ({ initialPageData }: { initialPageData: any }) => {
+  // ─── HOOKS ZAWSZE NA GÓRZE — przed jakimkolwiek return ───────────────────
+  const language = (initialPageData?.language === 'pl' ? 'pl' : 'en') as 'pl' | 'en';
+
+  useEffect(() => {
+    if (initialPageData?.id) {
+      fetch('/api/pages/visits', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pageId: initialPageData.id }),
+      }).catch(err => console.error("Błąd podczas zliczania wizyty:", err));
+    }
+  }, [initialPageData]);
+
+  // DEBUG — loguj strukturę danych żeby zidentyfikować pola mockupu
+  useEffect(() => {
+    if (initialPageData?.ebook) {
+      console.log('[PublicPageClient] ebook fields:', {
+        final_mockup_url: initialPageData.ebook.final_mockup_url,
+        cover_image_webp_url: initialPageData.ebook.cover_image_webp_url,
+        s3_file_key: initialPageData.ebook.s3_file_key,
+        mockup_url: initialPageData.ebook.mockup_url,
+        estimated_pages: initialPageData.ebook.estimated_pages,
+        page_count: initialPageData.ebook.page_count,
+        pages: initialPageData.ebook.pages,
+      });
+      console.log('[PublicPageClient] top-level s3_file_key:', initialPageData.s3_file_key);
+      console.log('[PublicPageClient] resolved mockup URL:', resolveMockupUrl(initialPageData));
+    }
+  }, [initialPageData]);
+  // ─────────────────────────────────────────────────────────────────────────
+
   if (!initialPageData) {
     return <div>Błąd: Nie udało się załadować danych strony.</div>;
   }
 
-  // ====================================================================================
-  // ✅ POCZĄTEK ZMIAN: DODANIE LOGIKI ZLICZANIA WIZYT
-  // ====================================================================================
-  useEffect(() => {
-    // Uruchamiamy zliczanie tylko w środowisku produkcyjnym, aby nie zliczać wizyt deweloperskich
-    if (initialPageData && initialPageData.id) { // Usunięto warunek 'process.env.NODE_ENV'
-      fetch('/api/pages/visits', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ pageId: initialPageData.id }),
-      }).catch(err => console.error("Błąd podczas zliczania wizyty:", err));
-    }
-  }, [initialPageData]); // Tablica zależności sprawia, że efekt uruchomi się tylko raz po załadowaniu danych
-  // ====================================================================================
-  // ✅ KONIEC ZMIAN
-  // ====================================================================================
-
   const pageContent = formatPageContent(initialPageData);
-  const pageType = initialPageData.type || 'ebook';
+
+  // Preferuj ebookMeta obliczone na serwerze (page.tsx),
+  // fallback na kliencką estymację
+  const ebookMeta   = initialPageData.ebookMeta ?? buildEbookMeta(initialPageData.ebook);
+
+  const pageType    = initialPageData.type || 'ebook';
 
   const partnerName = `${initialPageData.user?.firstName || ''} ${initialPageData.user?.lastName || ''}`.trim() || "Omega Zdrowie";
 
-  // ====================================================================================
-  // POPRAWKA: Bezpieczne sprawdzanie i wybór schematu kolorów
-  // ====================================================================================
   const colorSchemeName: ColorSchemeKey = isValidColorScheme(initialPageData.color)
     ? initialPageData.color
     : 'harmonia';
-  // ====================================================================================
 
-  // Przygotowujemy obiekt `pageData` dla DemoView, używając nowej funkcji dla logo
   const processedPageData = {
     ...initialPageData,
     author_logo_url: buildAssetUrl(initialPageData.user?.authorLogoUrl),
@@ -192,6 +271,8 @@ const PublicPageClient = ({ initialPageData }: { initialPageData: any }) => {
       {pageType === 'ebook' ? (
         <DemoView
           pageContent={pageContent}
+          ebookMeta={ebookMeta}
+          language={language}
           colorSchemeName={colorSchemeName}
           partnerName={partnerName}
           visitors={initialPageData.visits || 0}
@@ -202,12 +283,12 @@ const PublicPageClient = ({ initialPageData }: { initialPageData: any }) => {
       ) : (
         <DemoVideo
           pageContent={{
-              title: initialPageData.content?.hero_headline || "Strona wideo",
-              videoEmbedUrl: initialPageData.ebook?.video_embed_url || "",
-              videoProvider: initialPageData.ebook?.video_provider || "vimeo",
-              description: initialPageData.content?.hero_description,
-              videoThumbnailUrl: initialPageData.ebook?.video_thumbnail_url,
-              ctaButtonText: initialPageData.content?.cta_button_text || "Obejrzyj teraz"
+            title:            initialPageData.content?.hero_headline || "Strona wideo",
+            videoEmbedUrl:    initialPageData.ebook?.video_embed_url || "",
+            videoProvider:    initialPageData.ebook?.video_provider || "vimeo",
+            description:      initialPageData.content?.hero_description,
+            videoThumbnailUrl: initialPageData.ebook?.video_thumbnail_url,
+            ctaButtonText:    initialPageData.content?.cta_button_text || "Obejrzyj teraz",
           }}
           colorSchemeName={colorSchemeName}
           partnerName={partnerName}

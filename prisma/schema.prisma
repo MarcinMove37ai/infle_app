@@ -273,6 +273,7 @@ model ebooks {
   authorLogoUrl                   String?          @db.VarChar(1024)
   cover_image_webp_url            String?
   final_mockup_url                String?
+  total_pages                     Int?
   ebook_chapters                  ebook_chapters[]
   sources                         EbookSource[]
   user                            User?            @relation(fields: [userId], references: [id])
@@ -320,6 +321,7 @@ model pages {
   userId           String?       @db.VarChar(255)
   ebookId          Int?
   color            String?       @db.VarChar(50)
+  language         String?       @default("en") @db.VarChar(5)
   leads            leads[]
   content          page_content?
   ebook            ebooks?       @relation(fields: [ebookId], references: [id], onDelete: Cascade, map: "fk_ebook")

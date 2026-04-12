@@ -352,7 +352,13 @@ export async function generateEbookPdf(ebookId: number): Promise<PdfGeneratorRes
     const finalPdfBuffer = await generatePdfFromPage(page2);
     await page2.close();
 
-    console.log('✅ Finalny PDF wygenerowany pomyślnie!');
+    const totalPages = await countPdfPages(finalPdfBuffer);
+    console.log(`✅ Finalny PDF wygenerowany pomyślnie! Stron: ${totalPages}`);
+
+    await prisma.ebooks.update({
+      where: { id: ebookId },
+      data: { total_pages: totalPages },
+    });
 
     return { pdfBuffer: finalPdfBuffer, ebook: ebook as EbookData };
 

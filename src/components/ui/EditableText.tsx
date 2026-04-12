@@ -1,27 +1,24 @@
 // src/components/ui/EditableText.tsx
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useEditMode } from '@/contexts/EditModeContext';
 
-/**
- * Interfejs dla komponentu EditableText
- */
 interface EditableTextProps {
-  fieldName: string;         // Nazwa pola w bazie danych (pagecontent_hero_headline, itp.)
-  value: string;             // Obecna wartość tekstu
-  tag?: 'h1' | 'h2' | 'h3' | 'p' | 'div' | 'span'; // Element HTML
-  isEditMode: boolean;       // Czy tryb edycji jest aktywny
-  onChange?: (fieldName: string, newValue: string) => void; // Wywołane przy zmianie tekstu
-  onSave?: (fieldName: string, newValue: string) => Promise<void>; // Wywołane przy zapisie lokalnym
+  fieldName: string;
+  value: string;
+  tag?: 'h1' | 'h2' | 'h3' | 'p' | 'div' | 'span';
+  isEditMode: boolean;
+  onChange?: (fieldName: string, newValue: string) => void;
+  onSave?: (fieldName: string, newValue: string) => Promise<void>;
   className?: string;
   style?: React.CSSProperties;
-  placeholder?: string;      // Tekst zastępczy gdy value jest puste
-  multiline?: boolean;       // Czy tekst może być wieloliniowy
-  maxLength?: number;        // Maksymalna długość tekstu
+  placeholder?: string;
+  multiline?: boolean;
+  maxLength?: number;
+  overrideContext?: boolean;
+  editLabel?: string;       // Translated label for hover badge (default: "Edit")
+  forceUnsaved?: boolean;   // Force unsaved indicator (for virtual sub-fields of a composite field)
 }
 
-/**
- * Komponent EditableText - pozwala na edycję tekstów bezpośrednio na stronie
- */
 const EditableText: React.FC<EditableTextProps> = ({
   fieldName,
   value,
@@ -33,210 +30,165 @@ const EditableText: React.FC<EditableTextProps> = ({
   style = {},
   placeholder = 'Kliknij, aby edytować tekst',
   multiline = false,
-  maxLength = 1000
+  maxLength = 1000,
+  overrideContext = false,
+  editLabel = 'Edit',
+  forceUnsaved = false
 }) => {
   const [editing, setEditing] = useState(false);
-  const [text, setText] = useState(value);
-  const [error, setError] = useState<string | null>(null);
   const [isHovered, setIsHovered] = useState(false);
-  const inputRef = useRef<HTMLTextAreaElement | HTMLInputElement | null>(null);
+  const editableRef = useRef<HTMLElement | null>(null);
   const originalValue = useRef(value);
 
-  // Sprawdź czy mamy dostęp do kontekstu
   const editContext = useEditMode();
-  const hasContext = !!editContext;
+  const hasContext = !!editContext && !overrideContext;
+  const hasUnsavedChanges = forceUnsaved || (hasContext && editContext.isFieldChanged(fieldName));
 
-  // Sprawdź czy pole ma niezapisane zmiany
-  const hasUnsavedChanges = hasContext && editContext.isFieldChanged(fieldName);
-
-  // Aktualizuj stan, gdy zmienia się value z zewnątrz
   useEffect(() => {
-    setText(value);
     originalValue.current = value;
   }, [value]);
 
-  // Efekt ustawiający focus na polu edycji
-  useEffect(() => {
-    if (editing && inputRef.current) {
-      inputRef.current.focus();
+  const getDisplayValue = useCallback(() => {
+    if (hasContext && hasUnsavedChanges) {
+      const pendingValue = editContext.pendingChanges[fieldName];
+      return pendingValue !== undefined ? pendingValue : value;
+    }
+    return value;
+  }, [hasContext, hasUnsavedChanges, editContext, fieldName, value]);
 
-      // Ustawienie kursora na końcu tekstu
-      if (inputRef.current instanceof HTMLInputElement || inputRef.current instanceof HTMLTextAreaElement) {
-        const length = inputRef.current.value.length;
-        inputRef.current.setSelectionRange(length, length);
-      }
+  const commitEdit = useCallback(() => {
+    const el = editableRef.current;
+    if (!el) return;
+
+    const newText = el.textContent?.trim() ?? '';
+
+    if (maxLength && newText.length > maxLength) {
+      el.textContent = originalValue.current;
+      setEditing(false);
+      return;
+    }
+
+    setEditing(false);
+
+    if (newText === originalValue.current) return;
+
+    if (hasContext) {
+      editContext.handleTextChange(fieldName, newText);
+    } else if (onSave) {
+      onSave(fieldName, newText).catch(console.error);
+    } else if (onChange) {
+      onChange(fieldName, newText);
+    }
+  }, [fieldName, hasContext, editContext, onChange, onSave, maxLength]);
+
+  const handleClick = useCallback(() => {
+    if (isEditMode && !editing) setEditing(true);
+  }, [isEditMode, editing]);
+
+  useEffect(() => {
+    if (editing && editableRef.current) {
+      const el = editableRef.current;
+      el.textContent = getDisplayValue();
+      el.focus();
+      const range = document.createRange();
+      const sel = window.getSelection();
+      range.selectNodeContents(el);
+      range.collapse(false);
+      sel?.removeAllRanges();
+      sel?.addRange(range);
     }
   }, [editing]);
 
-  // Funkcja zwracająca wartość, która powinna być wyświetlana
-  const getDisplayValue = () => {
-    // Jeśli pole ma niezapisane zmiany w kontekście, pobierz wartość z kontekstu
-    if (hasContext && hasUnsavedChanges) {
-      // Pobierz zmienioną wartość z kontekstu
-      const pendingValue = editContext.pendingChanges[fieldName];
-      return pendingValue !== undefined ? pendingValue : text;
-    }
-
-    // W przeciwnym razie użyj lokalnej wartości
-    return text;
-  };
-
-  // Walidacja tekstu
-  const validateText = (value: string): string | null => {
-    if (maxLength && value.length > maxLength) {
-      return `Tekst nie może być dłuższy niż ${maxLength} znaków`;
-    }
-    return null;
-  };
-
-  // Obsługa zmiany tekstu w polu edycji
-  const handleTextChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const newValue = e.target.value;
-    setText(newValue);
-    setError(validateText(newValue));
-  };
-
-  // Obsługa zakończenia edycji i zapisania zmian lokalnie
-  const handleFinishEditing = () => {
-    // Sprawdź czy tekst jest poprawny
-    const validationError = validateText(text);
-    if (validationError) {
-      setError(validationError);
-      return;
-    }
-
-    // Zakończ edycję tylko jeśli nie ma błędów
-    setEditing(false);
-
-    // Jeśli tekst nie został zmieniony, nie rób nic więcej
-    if (text === originalValue.current) {
-      return;
-    }
-
-    // Aktualizuj lokalne zmiany przez context jeśli jest dostępny
-    if (hasContext) {
-      editContext.handleTextChange(fieldName, text);
-    }
-    // W przeciwnym razie używaj standardowych callbacków
-    else {
-      // Wywołaj callback onSave dla lokalnej aktualizacji
-      if (onSave) {
-        onSave(fieldName, text).catch(err => {
-          console.error('Błąd podczas zapisywania:', err);
-          setError('Nie udało się zapisać zmian');
-        });
-      }
-      // Wywołaj callback onChange jeśli nie ma onSave
-      else if (onChange) {
-        onChange(fieldName, text);
-      }
-    }
-  };
-
-  // Obsługa naciśnięcia klawisza w polu edycji
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    // Enter zapisuje zmiany (chyba że to textarea i nie naciśnięto Shift+Enter)
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && (!multiline || e.shiftKey)) {
       e.preventDefault();
-      handleFinishEditing();
+      commitEdit();
     }
-
-    // Escape anuluje edycję
     if (e.key === 'Escape') {
-      setText(originalValue.current);
+      if (editableRef.current) editableRef.current.textContent = originalValue.current;
       setEditing(false);
     }
+  }, [multiline, commitEdit]);
+
+  const handleBlur = useCallback(() => {
+    if (editing) commitEdit();
+  }, [editing, commitEdit]);
+
+  const handlePaste = useCallback((e: React.ClipboardEvent) => {
+    e.preventDefault();
+    const text = e.clipboardData.getData('text/plain');
+    document.execCommand('insertText', false, text);
+  }, []);
+
+  const Tag = tag as keyof React.JSX.IntrinsicElements;
+  const displayValue = getDisplayValue();
+
+  const unsavedStyle: React.CSSProperties = hasUnsavedChanges
+    ? { borderLeft: '3px solid #f59e0b', paddingLeft: '0.5rem' }
+    : {};
+
+  const editingOutline: React.CSSProperties = {
+    outline: '2px solid rgba(96,165,250,0.5)',
+    outlineOffset: '2px',
+    borderRadius: '4px',
   };
 
-  // Obsługa kliknięcia poza elementem - zapisuje zmiany lokalnie
-  const handleBlur = () => {
-    if (editing) {
-      handleFinishEditing();
-    }
-  };
+  // Hover tint — semi-transparent overlay that works on both light and dark backgrounds
+  const hoverStyle: React.CSSProperties = isHovered && !editing
+    ? { backgroundColor: 'rgba(96,165,250,0.08)', borderRadius: '4px' }
+    : {};
 
-  // Obsługa kliknięcia w element - rozpoczyna edycję
-  const handleClick = () => {
-    if (isEditMode && !editing) {
-      setEditing(true);
-    }
-  };
-
-  // Renderowanie pola edycji
-  const renderEditField = () => {
-    const commonProps = {
-      value: text,
-      onChange: handleTextChange,
-      onKeyDown: handleKeyDown,
-      onBlur: handleBlur,
-      className: `w-full px-2 py-1 rounded border ${error ? 'border-red-500' : 'border-blue-400'} outline-none focus:ring-2 focus:ring-blue-300 ${className}`,
-      style: {
-        ...style,
-        minHeight: '2rem',
-        transition: 'all 0.2s ease'
-      },
-      placeholder,
-      maxLength: maxLength + 10 // Pozwalamy na wpisanie więcej, aby pokazać błąd walidacji
-    };
-
-    if (multiline) {
-      return (
-        <textarea
-          ref={inputRef as React.RefObject<HTMLTextAreaElement>}
-          {...commonProps}
-          rows={Math.min(5, Math.max(2, (text.match(/\n/g) || []).length + 1))}
-        />
-      );
-    }
-
-    return (
-      <input
-        type="text"
-        ref={inputRef as React.RefObject<HTMLInputElement>}
-        {...commonProps}
-      />
-    );
-  };
-
-  // Renderowanie wskaźnika edycji i zmiany
-  const renderEditIndicator = () => {
-    if (!isEditMode || editing) return null;
-
-    return (
-      <span
-        className={`absolute right-0 top-0 text-xs bg-blue-500 text-white px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity`}
-        style={{ fontSize: '0.65rem' }}
-      >
-        Edytuj
-      </span>
-    );
-  };
-
-  // Renderowanie elementu w trybie edycji (ale nie aktywnym)
-  if (isEditMode && !editing) {
-    const Tag = tag as keyof React.JSX.IntrinsicElements;
-    const displayValue = getDisplayValue();
-
-    // Dodajemy wskaźnik niezapisanych zmian jeśli potrzeba
-    const unsavedChangeStyle = hasUnsavedChanges
-      ? { borderLeft: '3px solid #f59e0b', paddingLeft: '0.5rem' }
-      : {};
-
+  // ----------------------------------------------------------------
+  // EDITING — contentEditable, managed via ref, no React children
+  // ----------------------------------------------------------------
+  if (isEditMode && editing) {
     return (
       <Tag
-        className={`${className} relative group cursor-pointer hover:bg-blue-50 hover:ring-1 hover:ring-blue-200 px-1 py-0.5 rounded transition-all ${hasUnsavedChanges ? 'bg-amber-50' : ''}`}
-        style={{ ...style, ...unsavedChangeStyle }}
+        key={`${fieldName}-editing`}
+        ref={editableRef as any}
+        className={className}
+        style={{ ...style, ...unsavedStyle, ...editingOutline }}
+        contentEditable
+        suppressContentEditableWarning
+        onKeyDown={handleKeyDown}
+        onBlur={handleBlur}
+        onPaste={handlePaste}
+      />
+    );
+  }
+
+  // ----------------------------------------------------------------
+  // EDIT MODE idle — hoverable, clickable to start editing
+  // ----------------------------------------------------------------
+  if (isEditMode) {
+    return (
+      <Tag
+        key={`${fieldName}-display`}
+        className={`${className} relative cursor-pointer transition-colors`}
+        style={{ ...style, ...unsavedStyle, ...hoverStyle }}
         onClick={handleClick}
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
       >
-        {displayValue || <span className="text-gray-400 italic">{placeholder}</span>}
-        {isHovered && renderEditIndicator()}
+        {displayValue || <span className="opacity-40 italic">{placeholder}</span>}
 
-        {/* Wskaźnik niezapisanych zmian */}
+        {isHovered && (
+          <span
+            className="absolute right-0 top-0 text-white px-1.5 py-0.5 rounded pointer-events-none"
+            style={{
+              fontSize: '0.6rem',
+              fontWeight: 600,
+              backgroundColor: 'rgba(59,130,246,0.85)',
+              lineHeight: 1.2,
+            }}
+          >
+            {editLabel}
+          </span>
+        )}
+
         {hasUnsavedChanges && (
           <span
-            className="absolute -right-1 -top-1 w-2 h-2 bg-amber-500 rounded-full"
+            className="absolute -right-1 -top-1 w-2 h-2 bg-amber-500 rounded-full pointer-events-none"
             title="Niezapisane zmiany"
           />
         )}
@@ -244,43 +196,18 @@ const EditableText: React.FC<EditableTextProps> = ({
     );
   }
 
-  // Renderowanie w trybie edycji aktywnej
-  if (editing) {
-    return (
-      <div className="relative">
-        {renderEditField()}
-
-        {/* Komunikat błędu */}
-        {error && (
-          <div className="text-red-500 text-xs mt-1">
-            {error}
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  // Renderowanie w normalnym trybie (bez edycji)
-  // Jeśli pole ma niezapisane zmiany, dodajemy wskaźnik
-  const Tag = tag as keyof React.JSX.IntrinsicElements;
-  const displayValue = getDisplayValue();
-
-  // Style dla niezapisanych zmian w trybie normalnego wyświetlania
-  const unsavedChangeStyle = hasUnsavedChanges
-    ? { borderLeft: '3px solid #f59e0b', paddingLeft: '0.5rem' }
-    : {};
-
+  // ----------------------------------------------------------------
+  // Normal display — no edit capability
+  // ----------------------------------------------------------------
   return (
     <Tag
       className={`${className} ${hasUnsavedChanges ? 'relative' : ''}`}
-      style={{ ...style, ...unsavedChangeStyle }}
+      style={{ ...style, ...unsavedStyle }}
     >
-      {displayValue || <span className="text-gray-400 italic">{placeholder}</span>}
-
-      {/* Wskaźnik niezapisanych zmian - widoczny również w trybie normalnym */}
+      {displayValue || <span className="opacity-40 italic">{placeholder}</span>}
       {hasUnsavedChanges && (
         <span
-          className="absolute -right-1 -top-1 w-2 h-2 bg-amber-500 rounded-full"
+          className="absolute -right-1 -top-1 w-2 h-2 bg-amber-500 rounded-full pointer-events-none"
           title="Niezapisane zmiany"
         />
       )}
