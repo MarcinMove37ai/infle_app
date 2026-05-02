@@ -1,228 +1,190 @@
 // src/app/api/pages/preview/[token]/route.ts
+//
+// Preview endpoint dla strony zapisu (LP).
+//
+// Zwraca pełen kontekst potrzebny do renderowania LP:
+//   - metadata strony (id, title, status, language, autor)
+//   - pageContent: 7 sekcji jsonb (hero, problem, promise, benefits, content, form, faq)
+//   - ebook: mockup + TOC (rozdziały z preview)
+//
+// Dostęp:
+//   - ?view_mode=preview  → bez auth (kto zna token, ten widzi)
+//   - bez parametru       → wymaga zalogowanego użytkownika
+//
+// Token to nanoid(10) z draft_url postaci "/preview/{token}".
+
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 
+// ─── Helpery ──────────────────────────────────────────────────────────────
+
+/** Konstruuje URL servowany przez /api/assets/uploads/* lub zwraca pełny URL. */
+function buildAssetUrl(path: string | null | undefined): string {
+  if (!path) return '';
+  if (path.startsWith('http://') || path.startsWith('https://')) return path;
+  if (path.startsWith('/uploads/')) {
+    return `/api/assets/uploads/${path.substring('/uploads/'.length)}`;
+  }
+  return `/api/assets/uploads/${path}`;
+}
+
+/** Zwraca pierwsze N znaków treści rozdziału z normalizacją whitespace + ellipsis. */
+function makeChapterPreview(content: string | null | undefined, maxLen = 120): string {
+  if (!content) return '';
+  const trimmed = content.replace(/\s+/g, ' ').trim();
+  return trimmed.length > maxLen ? trimmed.substring(0, maxLen) + '…' : trimmed;
+}
+
+/** Estymuje liczbę stron e-booka — używa total_pages jeśli istnieje, w przeciwnym razie ze średniej 250 słów na stronę. */
+function estimatePages(totalPages: number | null | undefined, chapters: Array<{ content: string | null }>): number {
+  if (totalPages && totalPages > 0) return totalPages;
+  const totalWords = chapters.reduce(
+    (acc, ch) => acc + (ch.content?.split(/\s+/).filter(Boolean).length ?? 0),
+    0,
+  );
+  return Math.max(1, Math.round(totalWords / 250));
+}
+
+// ─── GET ──────────────────────────────────────────────────────────────────
+
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ token: string }> }
+  { params }: { params: Promise<{ token: string }> },
 ) {
-  const resolvedParams = await params;
-  const token = resolvedParams.token;
+  const { token } = await params;
   const isPreviewMode = request.nextUrl.searchParams.get('view_mode') === 'preview';
 
-  console.log(`Obsługa zapytania dla tokenu: ${token}, tryb podglądu: ${isPreviewMode}`);
-
   if (!token) {
-    return NextResponse.json(
-      { error: 'Nie podano tokenu' },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: 'Nie podano tokenu' }, { status: 400 });
+  }
+
+  // Auth — pomijamy w view_mode=preview (token sam jest zabezpieczeniem)
+  if (!isPreviewMode) {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Użytkownik niezalogowany' }, { status: 401 });
+    }
   }
 
   try {
-    // W trybie podglądu pomijamy pełną autoryzację
-    if (!isPreviewMode) {
-      const session = await getServerSession(authOptions);
-      if (!session?.user?.id) {
-        return NextResponse.json(
-          { error: 'Użytkownik niezalogowany' },
-          { status: 401 }
-        );
-      }
-    }
-
-    // Konstruujemy draft_url - pamiętaj że w bazie zaczynają się od "/"
     const draftUrl = `/preview/${token}`;
 
-    console.log(`Szukanie strony z draft_url: ${draftUrl}`);
-
-    // Pobierz stronę wraz z powiązanymi danymi
     const page = await prisma.pages.findFirst({
-      where: {
-        draft_url: draftUrl
-      },
+      where: { draft_url: draftUrl },
       include: {
-        content: true,  // Dane z tabeli page_content
+        content: true,
         ebook: {
           include: {
-            ebook_chapters: { orderBy: { position: 'asc' } }
-          }
+            ebook_chapters: { orderBy: { position: 'asc' } },
+          },
         },
-        user: {         // Dane użytkownika
+        user: {
           select: {
             id: true,
             firstName: true,
             lastName: true,
-            role: true
-          }
-        }
-      }
+            role: true,
+            authorDisplayName: true,
+            authorLogoUrl: true,
+            profilePicture: true,
+          },
+        },
+      },
     });
 
     if (!page) {
       return NextResponse.json(
         { error: 'Nie znaleziono strony dla podanego tokenu' },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
-    console.log('Znaleziono stronę:', {
+    // ─── Autor — preferuj ebook.authorDisplayName, fallback do User ─────
+    const authorDisplayName =
+      (page.ebook as any)?.authorDisplayName ||
+      page.user?.authorDisplayName ||
+      [page.user?.firstName, page.user?.lastName].filter(Boolean).join(' ') ||
+      null;
+
+    const authorLogoUrl =
+      (page.ebook as any)?.authorLogoUrl ||
+      page.user?.authorLogoUrl ||
+      null;
+
+    // ─── E-book + TOC ───────────────────────────────────────────────────
+    const ebook = page.ebook;
+    const chapters = ebook?.ebook_chapters ?? [];
+    const estimatedPages = ebook ? estimatePages(ebook.total_pages, chapters) : 0;
+
+    // ─── Mockup URL — kaskada źródeł ─────────────────────────────────────
+    const mockupCandidate =
+      ebook?.final_mockup_url ||
+      ebook?.cover_image_webp_url ||
+      page.s3_file_key ||
+      null;
+
+    // ─── Response ───────────────────────────────────────────────────────
+    return NextResponse.json({
+      // Metadata strony
       id: page.id,
       title: page.title,
+      status: page.status,
       type: page.type,
-      hasContent: !!page.content,
-      hasEbook: !!page.ebook
+      language: page.language ?? 'pl',
+      color: page.color,
+      url: page.url,
+      draft_url: page.draft_url,
+      visitors: page.visits ?? 0,
+      userId: page.userId,
+      ebookId: page.ebookId,
+      authorDisplayName,
+      authorLogoUrl: buildAssetUrl(authorLogoUrl),
+      profilePicture: buildAssetUrl(page.user?.profilePicture),
+
+      // Treść strony (nowy schemat — 7 sekcji jsonb)
+      pageContent: page.content
+        ? {
+            id: page.content.id,
+            schema_version: page.content.schema_version,
+            hero: page.content.hero,
+            problem: page.content.problem,
+            promise: page.content.promise,
+            benefits: page.content.benefits,
+            content: page.content.content,
+            form: page.content.form,
+            faq: page.content.faq,
+            createdAt: page.content.createdAt,
+            updatedAt: page.content.updatedAt,
+          }
+        : null,
+
+      // E-book — okładka + spis treści
+      ebook: ebook
+        ? {
+            id: ebook.id,
+            title: ebook.title,
+            subtitle: ebook.subtitle,
+            total_pages: ebook.total_pages,
+            estimatedPages,
+            chapterCount: chapters.length,
+            chapters: chapters.map(ch => ({
+              position: ch.position,
+              title: ch.title ?? '',
+              preview: makeChapterPreview(ch.content),
+            })),
+          }
+        : null,
+
+      // Resolved mockup URL — gotowy do wstawienia w <Image src={...} />
+      resolvedMockupUrl: buildAssetUrl(mockupCandidate),
     });
-
-    // Mapowanie danych z page_content na format oczekiwany przez frontend
-    const mappedData = mapPageContentToFrontend(page);
-
-    return NextResponse.json(mappedData);
-
   } catch (error) {
-    console.error('Błąd podczas pobierania danych strony:', error);
+    console.error('[preview] Błąd:', error);
     return NextResponse.json(
       { error: 'Wystąpił błąd podczas pobierania danych strony' },
-      { status: 500 }
+      { status: 500 },
     );
   }
-}
-
-/**
- * Funkcja mapująca dane z bazy na format oczekiwany przez frontend
- */
-function mapPageContentToFrontend(page: any) {
-  const content = page.content;
-  const ebook = page.ebook;
-
-  // DEBUG - sprawdź dane ebook
-  console.log('DEBUG - Dane ebook:', {
-    exists: !!ebook,
-    authorDisplayName: ebook?.authorDisplayName,
-    authorLogoUrl: ebook?.authorLogoUrl,
-    final_mockup_url: ebook?.final_mockup_url,
-    cover_image_webp_url: ebook?.cover_image_webp_url
-  });
-
-  // DEBUG - sprawdź dane user
-  console.log('DEBUG - Dane user:', {
-    firstName: page.user?.firstName,
-    lastName: page.user?.lastName,
-    role: page.user?.role
-  });
-
-  // Funkcja pomocnicza do generowania URL-i assetów
-  const getAssetUrl = (imagePath: string | null | undefined): string => {
-    if (!imagePath) return '';
-    if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
-      return imagePath; // już pełny URL
-    }
-    if (imagePath.startsWith('/uploads/')) {
-      const filename = imagePath.substring('/uploads/'.length);
-      return `/api/assets/uploads/${filename}`;
-    }
-    return `/api/assets/uploads/${imagePath}`;
-  };
-
-  // Podstawowe dane strony
-  const mappedData: any = {
-    id: page.id,
-    status: page.status,
-    type: page.type || 'ebook',
-    color: page.color,
-    userId: page.user?.id,
-    x_amz_meta_title: page.title,
-    x_amz_meta_page_type: page.type || 'ebook',
-
-    // URL do mockupu ebook (już przetworzony)
-    s3_file_key: getAssetUrl(ebook?.final_mockup_url || ebook?.cover_image_webp_url),
-
-    // Dane autora z ebook (logo też przetwarzamy)
-    author_display_name: ebook?.authorDisplayName || `${page.user?.firstName || ''} ${page.user?.lastName || ''}`.trim(),
-    author_logo_url: getAssetUrl(ebook?.authorLogoUrl),
-  };
-
-  console.log('DEBUG - Zmapowane dane autora:', {
-    author_display_name: mappedData.author_display_name,
-    author_logo_url: mappedData.author_logo_url
-  });
-
-  // Jeśli nie ma zawartości w page_content, zwróć podstawowe dane
-  if (!content) {
-    console.warn(`Brak zawartości dla strony ${page.id}, zwracam podstawowe dane`);
-    return mappedData;
-  }
-
-  // Mapowanie zawartości z page_content na format frontendowy
-  const contentMapping = {
-    // Hero section
-    pagecontent_hero_headline: content.hero_headline,
-    pagecontent_hero_subheadline: content.hero_subheadline,
-    pagecontent_hero_description: content.hero_description,
-
-    // Benefits section (4 elementy)
-    pagecontent_benefits_items_0_title: content.benefits_item_0_title,
-    pagecontent_benefits_items_0_text: content.benefits_item_0_text,
-    pagecontent_benefits_items_1_title: content.benefits_item_1_title,
-    pagecontent_benefits_items_1_text: content.benefits_item_1_text,
-    pagecontent_benefits_items_2_title: content.benefits_item_2_title,
-    pagecontent_benefits_items_2_text: content.benefits_item_2_text,
-    pagecontent_benefits_items_3_title: content.benefits_item_3_title,
-    pagecontent_benefits_items_3_text: content.benefits_item_3_text,
-
-    // Testimonials section (3 elementy)
-    pagecontent_testimonials_items_0_text: content.testimonials_item_0_text,
-    pagecontent_testimonials_items_0_author: content.testimonials_item_0_author,
-    pagecontent_testimonials_items_0_role: content.testimonials_item_0_role,
-    pagecontent_testimonials_items_1_text: content.testimonials_item_1_text,
-    pagecontent_testimonials_items_1_author: content.testimonials_item_1_author,
-    pagecontent_testimonials_items_1_role: content.testimonials_item_1_role,
-    pagecontent_testimonials_items_2_text: content.testimonials_item_2_text,
-    pagecontent_testimonials_items_2_author: content.testimonials_item_2_author,
-    pagecontent_testimonials_items_2_role: content.testimonials_item_2_role,
-
-    // Content chapters section (3 rozdziały)
-    pagecontent_content_chapters_0_title: content.content_chapter_0_title,
-    pagecontent_content_chapters_0_description: content.content_chapter_0_description,
-    pagecontent_content_chapters_1_title: content.content_chapter_1_title,
-    pagecontent_content_chapters_1_description: content.content_chapter_1_description,
-    pagecontent_content_chapters_2_title: content.content_chapter_2_title,
-    pagecontent_content_chapters_2_description: content.content_chapter_2_description,
-
-    // Form section
-    pagecontent_form_title: content.form_title,
-
-    // FAQ section (3 pytania)
-    pagecontent_faq_items_0_question: content.faq_item_0_question,
-    pagecontent_faq_items_0_answer: content.faq_item_0_answer,
-    pagecontent_faq_items_1_question: content.faq_item_1_question,
-    pagecontent_faq_items_1_answer: content.faq_item_1_answer,
-    pagecontent_faq_items_2_question: content.faq_item_2_question,
-    pagecontent_faq_items_2_answer: content.faq_item_2_answer,
-  };
-
-  // Język strony
-  mappedData.language = page.language || 'en';
-
-  // Dane rozdziałów dla spisu treści
-  const chapters = ebook?.ebook_chapters ?? [];
-  mappedData.ebookMeta = {
-    chapterCount: chapters.length,
-    estimatedPages: ebook?.total_pages ?? 0,
-    chapters: chapters.map((ch: any) => ({
-      position: ch.position,
-      title: ch.title ?? '',
-      preview: ch.content
-        ? ch.content.replace(/\s+/g, ' ').trim().substring(0, 120) + (ch.content.length > 120 ? '…' : '')
-        : '',
-    })),
-  };
-
-  // Dodaj wszystkie zmapowane pola do wyniku
-  return {
-    ...mappedData,
-    ...contentMapping
-  };
 }

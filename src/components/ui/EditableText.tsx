@@ -15,8 +15,12 @@ interface EditableTextProps {
   multiline?: boolean;
   maxLength?: number;
   overrideContext?: boolean;
-  editLabel?: string;       // Translated label for hover badge (default: "Edit")
-  forceUnsaved?: boolean;   // Force unsaved indicator (for virtual sub-fields of a composite field)
+  /** Tekst hover hinta (niebieski badge w prawym górnym rogu na hover). Default: 'Edit'. */
+  editLabel?: string;
+  /** Tekst przy niezapisanych zmianach (pomarańczowy badge). Default: 'Edited'. */
+  editedLabel?: string;
+  /** Wymuszenie wskaźnika niezapisanych zmian (dla virtual sub-fields). */
+  forceUnsaved?: boolean;
 }
 
 const EditableText: React.FC<EditableTextProps> = ({
@@ -33,6 +37,7 @@ const EditableText: React.FC<EditableTextProps> = ({
   maxLength = 1000,
   overrideContext = false,
   editLabel = 'Edit',
+  editedLabel = 'Edited',
   forceUnsaved = false
 }) => {
   const [editing, setEditing] = useState(false);
@@ -65,12 +70,22 @@ const EditableText: React.FC<EditableTextProps> = ({
     if (maxLength && newText.length > maxLength) {
       el.textContent = originalValue.current;
       setEditing(false);
+      setIsHovered(false);
       return;
     }
 
     setEditing(false);
+    setIsHovered(false);
 
-    if (newText === originalValue.current) return;
+    // Wracamy do oryginału — jeśli pole było wcześniej zmienione,
+    // usuń je z pendingChanges (revert), żeby badge "Edited" zniknął
+    // i podgląd pokazał aktualną wartość z bazy zamiast starej zmiany.
+    if (newText === originalValue.current) {
+      if (hasContext && editContext.isFieldChanged(fieldName)) {
+        editContext.revertField(fieldName);
+      }
+      return;
+    }
 
     if (hasContext) {
       editContext.handleTextChange(fieldName, newText);
@@ -82,7 +97,10 @@ const EditableText: React.FC<EditableTextProps> = ({
   }, [fieldName, hasContext, editContext, onChange, onSave, maxLength]);
 
   const handleClick = useCallback(() => {
-    if (isEditMode && !editing) setEditing(true);
+    if (isEditMode && !editing) {
+      setEditing(true);
+      setIsHovered(false);
+    }
   }, [isEditMode, editing]);
 
   useEffect(() => {
@@ -107,11 +125,13 @@ const EditableText: React.FC<EditableTextProps> = ({
     if (e.key === 'Escape') {
       if (editableRef.current) editableRef.current.textContent = originalValue.current;
       setEditing(false);
+      setIsHovered(false);
     }
   }, [multiline, commitEdit]);
 
   const handleBlur = useCallback(() => {
     if (editing) commitEdit();
+    setIsHovered(false);
   }, [editing, commitEdit]);
 
   const handlePaste = useCallback((e: React.ClipboardEvent) => {
@@ -133,14 +153,47 @@ const EditableText: React.FC<EditableTextProps> = ({
     borderRadius: '4px',
   };
 
-  // Hover tint — semi-transparent overlay that works on both light and dark backgrounds
   const hoverStyle: React.CSSProperties = isHovered && !editing
     ? { backgroundColor: 'rgba(96,165,250,0.08)', borderRadius: '4px' }
     : {};
 
-  // ----------------------------------------------------------------
-  // EDITING — contentEditable, managed via ref, no React children
-  // ----------------------------------------------------------------
+  // Badge "Edited" — pokazywany tylko przy niezapisanych zmianach
+  const editedBadge = hasUnsavedChanges ? (
+    <span
+      className="absolute right-0 top-0 px-1.5 py-0.5 rounded pointer-events-none flex items-center gap-1 text-white"
+      style={{
+        fontSize: '0.6rem',
+        fontWeight: 600,
+        backgroundColor: '#f59e0b',
+        lineHeight: 1.2,
+        transform: 'translate(0, -50%)',
+      }}
+      title="Niezapisane zmiany"
+    >
+      <span
+        className="rounded-full"
+        style={{ width: '0.35rem', height: '0.35rem', backgroundColor: '#fff' }}
+      />
+      {editedLabel}
+    </span>
+  ) : null;
+
+  // Badge "Edit" — hover hint przed kliknięciem (priorytet ma "Edited")
+  const hoverBadge = isHovered && !editing && !hasUnsavedChanges ? (
+    <span
+      className="absolute right-0 top-0 text-white px-1.5 py-0.5 rounded pointer-events-none"
+      style={{
+        fontSize: '0.6rem',
+        fontWeight: 600,
+        backgroundColor: 'rgba(59,130,246,0.85)',
+        lineHeight: 1.2,
+      }}
+    >
+      {editLabel}
+    </span>
+  ) : null;
+
+  // ─── EDITING — contentEditable, managed via ref ────────────────────────
   if (isEditMode && editing) {
     return (
       <Tag
@@ -157,9 +210,7 @@ const EditableText: React.FC<EditableTextProps> = ({
     );
   }
 
-  // ----------------------------------------------------------------
-  // EDIT MODE idle — hoverable, clickable to start editing
-  // ----------------------------------------------------------------
+  // ─── EDIT MODE idle — hoverable, clickable to start editing ────────────
   if (isEditMode) {
     return (
       <Tag
@@ -171,46 +222,20 @@ const EditableText: React.FC<EditableTextProps> = ({
         onMouseLeave={() => setIsHovered(false)}
       >
         {displayValue || <span className="opacity-40 italic">{placeholder}</span>}
-
-        {isHovered && (
-          <span
-            className="absolute right-0 top-0 text-white px-1.5 py-0.5 rounded pointer-events-none"
-            style={{
-              fontSize: '0.6rem',
-              fontWeight: 600,
-              backgroundColor: 'rgba(59,130,246,0.85)',
-              lineHeight: 1.2,
-            }}
-          >
-            {editLabel}
-          </span>
-        )}
-
-        {hasUnsavedChanges && (
-          <span
-            className="absolute -right-1 -top-1 w-2 h-2 bg-amber-500 rounded-full pointer-events-none"
-            title="Niezapisane zmiany"
-          />
-        )}
+        {hoverBadge}
+        {editedBadge}
       </Tag>
     );
   }
 
-  // ----------------------------------------------------------------
-  // Normal display — no edit capability
-  // ----------------------------------------------------------------
+  // ─── Normal display — no edit capability ───────────────────────────────
   return (
     <Tag
       className={`${className} ${hasUnsavedChanges ? 'relative' : ''}`}
       style={{ ...style, ...unsavedStyle }}
     >
       {displayValue || <span className="opacity-40 italic">{placeholder}</span>}
-      {hasUnsavedChanges && (
-        <span
-          className="absolute -right-1 -top-1 w-2 h-2 bg-amber-500 rounded-full pointer-events-none"
-          title="Niezapisane zmiany"
-        />
-      )}
+      {editedBadge}
     </Tag>
   );
 };

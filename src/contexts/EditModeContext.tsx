@@ -18,7 +18,8 @@ interface EditModeContextType {
   isSaving: boolean;                                 // Czy trwa zapisywanie zmian
   saveError: string | null;                          // Błąd podczas zapisywania, jeśli wystąpił
   isFieldChanged: (fieldName: string) => boolean;    // Sprawdza czy konkretne pole ma niezapisane zmiany
-  getCurrentValue: (fieldName: string) => string | undefined; // Nowa funkcja - zwraca bieżącą wartość pola z uwzględnieniem pendingChanges
+  getCurrentValue: (fieldName: string) => string | undefined; // Zwraca bieżącą wartość pola z uwzględnieniem pendingChanges
+  revertField: (fieldName: string) => void;          // Usuwa pojedyncze pole z pendingChanges (gdy user wrócił do oryginału)
 }
 
 // Inicjalizacja kontekstu z wartościami domyślnymi
@@ -38,7 +39,8 @@ const EditModeContext = createContext<EditModeContextType>({
   isSaving: false,
   saveError: null,
   isFieldChanged: () => false,
-  getCurrentValue: () => undefined
+  getCurrentValue: () => undefined,
+  revertField: () => {},
 });
 
 // Hook do użycia kontekstu edycji
@@ -52,6 +54,18 @@ interface EditModeProviderProps {
   onToast?: (message: {type: 'success' | 'error', text: string}) => void; // Callback dla powiadomień
 }
 
+// ─── Helper: parsowanie fieldName na path do jsonb_set ───────────────────
+// Konwencja:
+//   - "hero.headline_l1"            → ["hero", "headline_l1"]
+//   - "hero.barriers.0"             → ["hero", "barriers", 0]
+//   - "benefits.items.2.title"      → ["benefits", "items", 2, "title"]
+function parseFieldNameToPath(fieldName: string): Array<string | number> {
+  return fieldName.split('.').map(p => {
+    const num = Number(p);
+    return Number.isInteger(num) && p !== '' ? num : p;
+  });
+}
+
 /**
  * Provider kontekstu trybu edycji
  */
@@ -62,7 +76,6 @@ export const EditModeProvider: React.FC<EditModeProviderProps> = ({
   autoEnableEditMode = false,
   onToast
 }) => {
-  // Domyślnie włącz tryb edycji jeśli autoEnableEditMode jest true
   const [isTextEditMode, setTextEditMode] = useState(autoEnableEditMode);
   const [pendingChanges, setPendingChanges] = useState<Record<string, string>>({});
   const [pendingColorChange, setPendingColorChange] = useState<string | null>(null);
@@ -71,22 +84,18 @@ export const EditModeProvider: React.FC<EditModeProviderProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  // Automatycznie włączamy tryb edycji jeśli właściwość autoEnableEditMode się zmieni
   useEffect(() => {
     if (autoEnableEditMode) {
       setTextEditMode(true);
     }
   }, [autoEnableEditMode]);
 
-  // Aktualizujemy oryginalne wartości gdy zmieniają się ich źródła
   useEffect(() => {
     setOriginalValues(initialValues);
     setOriginalColor(initialColor);
   }, [initialValues, initialColor]);
 
-  // Obsługa zmiany tekstu - aktualizuje pendingChanges
   const handleTextChange = useCallback((field: string, value: string) => {
-    // Jeśli wartość jest taka sama jak oryginalna, usuń z oczekujących zmian
     if (originalValues[field] === value) {
       setPendingChanges(prev => {
         const updated = { ...prev };
@@ -94,7 +103,6 @@ export const EditModeProvider: React.FC<EditModeProviderProps> = ({
         return updated;
       });
     } else {
-      // W przeciwnym razie dodaj do oczekujących zmian
       setPendingChanges(prev => ({
         ...prev,
         [field]: value
@@ -102,57 +110,58 @@ export const EditModeProvider: React.FC<EditModeProviderProps> = ({
     }
   }, [originalValues]);
 
-  // Obsługa zmiany kolorystyki
   const handleColorChange = useCallback((color: string) => {
-    // Jeśli kolor jest taki sam jak oryginalny, anuluj oczekującą zmianę
     if (color === originalColor) {
       setPendingColorChange(null);
     } else {
-      // W przeciwnym razie ustaw nowy oczekujący kolor
       setPendingColorChange(color);
     }
   }, [originalColor]);
 
-  // Sprawdzenie czy są jakieś oczekujące zmiany (tekst lub kolor)
   const hasPendingChanges = Object.keys(pendingChanges).length > 0 || pendingColorChange !== null;
 
-  // Czyszczenie wszystkich oczekujących zmian
   const clearPendingChanges = useCallback(() => {
     setPendingChanges({});
     setPendingColorChange(null);
   }, []);
 
-  // Ilość oczekujących zmian (tekst + kolor)
+  // ─── revertField — usuwa pojedyncze pole z pendingChanges ──────────────
+  // Wywoływane przez EditableText gdy user wpisał z powrotem oryginalną
+  // wartość po wcześniejszej modyfikacji. Bez tego pendingChanges trzymałby
+  // martwą zmianę (taka sama jak baza), pole pokazywałoby badge "Edited"
+  // mimo że faktycznie nic się nie zmieniło.
+  const revertField = useCallback((fieldName: string) => {
+    setPendingChanges(prev => {
+      if (!(fieldName in prev)) return prev;
+      const updated = { ...prev };
+      delete updated[fieldName];
+      return updated;
+    });
+  }, []);
+
   const getPendingChangesCount = useCallback(() => {
     return Object.keys(pendingChanges).length + (pendingColorChange !== null ? 1 : 0);
   }, [pendingChanges, pendingColorChange]);
 
-  // Pobieranie oryginalnej wartości pola
   const getOriginalValue = useCallback((field: string) => {
     return originalValues[field];
   }, [originalValues]);
 
-  // Pobieranie aktualnej wartości pola (oryginał + pendingChanges)
   const getCurrentValue = useCallback((field: string) => {
-    // Jeśli pole ma oczekującą zmianę, zwróć ją
     if (pendingChanges.hasOwnProperty(field)) {
       return pendingChanges[field];
     }
-    // W przeciwnym razie zwróć oryginalną wartość
     return originalValues[field];
   }, [pendingChanges, originalValues]);
 
-  // Pobieranie oryginalnej kolorystyki
   const getOriginalColor = useCallback(() => {
     return originalColor;
   }, [originalColor]);
 
-  // Sprawdzanie czy dane pole ma niezapisane zmiany
   const isFieldChanged = useCallback((fieldName: string) => {
     return pendingChanges.hasOwnProperty(fieldName);
   }, [pendingChanges]);
 
-  // Aktualizacja oryginalnych wartości po zapisie
   const updateOriginalValues = useCallback((newTextValues: Record<string, string>, newColor?: string) => {
     if (Object.keys(newTextValues).length > 0) {
       setOriginalValues(prev => ({
@@ -160,77 +169,100 @@ export const EditModeProvider: React.FC<EditModeProviderProps> = ({
         ...newTextValues
       }));
     }
-
     if (newColor !== undefined) {
       setOriginalColor(newColor);
     }
   }, []);
 
-  // Zapisywanie wszystkich zmian do bazy danych
+  // ─── Zapis wszystkich zmian ────────────────────────────────────────────
+  // Konwencja fieldName:
+  //   - z kropkami ("hero.headline_l1") → /api/pages/[id]/content (atomic jsonb_set)
+  //   - bez kropek ("color", "status")  → /api/pages/[id] (page-level update)
+  // Pendingi czyszczone TYLKO gdy wszystkie requesty się powiodły.
   const saveAllChanges = useCallback(async (
     pageId: string,
     userCredentials?: {userId?: string, cognitoSub?: string}
   ): Promise<boolean> => {
-    // Jeśli nie ma żadnych zmian, nie ma co zapisywać
     if (!hasPendingChanges) return true;
 
     setIsSaving(true);
     setSaveError(null);
 
     try {
-      // Przygotowanie wszystkich zmian do wysłania (tekst + kolorystyka)
-      const allChanges = {
-        ...pendingChanges,
-        ...(pendingColorChange !== null ? { color: pendingColorChange } : {})
-      };
+      const contentChanges: Array<{ path: Array<string | number>; value: string; fieldName: string }> = [];
+      const pageLevelChanges: Record<string, string> = {};
 
-      // Nagłówki z danymi użytkownika, jeśli są dostępne
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json'
-      };
-
-      if (userCredentials) {
-        if (userCredentials.userId) headers['X-User-Id'] = userCredentials.userId;
-        if (userCredentials.cognitoSub) headers['X-User-Cognito-Sub'] = userCredentials.cognitoSub;
+      for (const [fieldName, value] of Object.entries(pendingChanges)) {
+        if (fieldName.includes('.')) {
+          contentChanges.push({
+            path: parseFieldNameToPath(fieldName),
+            value,
+            fieldName,
+          });
+        } else {
+          pageLevelChanges[fieldName] = value;
+        }
       }
 
-      const response = await fetch(`/api/pages/${pageId}`, {
-        method: 'PATCH',
-        headers,
-        body: JSON.stringify(allChanges)
+      if (pendingColorChange !== null) {
+        pageLevelChanges.color = pendingColorChange;
+      }
+
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      if (userCredentials?.userId) headers['X-User-Id'] = userCredentials.userId;
+      if (userCredentials?.cognitoSub) headers['X-User-Cognito-Sub'] = userCredentials.cognitoSub;
+
+      const contentRequests = contentChanges.map(async ({ path, value, fieldName }) => {
+        const res = await fetch(`/api/pages/${pageId}/content`, {
+          method: 'PATCH',
+          headers,
+          credentials: 'include',
+          body: JSON.stringify({ path, value }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(`${fieldName}: ${err.error || `HTTP ${res.status}`}`);
+        }
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Wystąpił błąd podczas zapisywania zmian');
-      }
+      const pageLevelRequest = Object.keys(pageLevelChanges).length > 0
+        ? fetch(`/api/pages/${pageId}`, {
+            method: 'PATCH',
+            headers,
+            credentials: 'include',
+            body: JSON.stringify(pageLevelChanges),
+          }).then(async res => {
+            if (!res.ok) {
+              const err = await res.json().catch(() => ({}));
+              throw new Error(`page-level: ${err.error || `HTTP ${res.status}`}`);
+            }
+          })
+        : Promise.resolve();
 
-      // Aktualizacja oryginalnych wartości po pomyślnym zapisie
+      await Promise.all([...contentRequests, pageLevelRequest]);
+
       updateOriginalValues(pendingChanges, pendingColorChange || undefined);
-
-      // Wyczyść oczekujące zmiany
       clearPendingChanges();
 
-      // Powiadomienie o sukcesie
       if (onToast) {
         onToast({
           type: 'success',
-          text: 'Zmiany zostały zapisane'
+          text: 'Zmiany zostały zapisane',
         });
       }
 
       return true;
     } catch (error) {
       console.error('Błąd podczas zapisywania zmian:', error);
-
       const errorMessage = error instanceof Error ? error.message : 'Nieznany błąd';
       setSaveError(errorMessage);
 
-      // Powiadomienie o błędzie
       if (onToast) {
         onToast({
           type: 'error',
-          text: `Nie udało się zapisać zmian: ${errorMessage}`
+          text: `Nie udało się zapisać zmian: ${errorMessage}`,
         });
       }
 
@@ -240,7 +272,6 @@ export const EditModeProvider: React.FC<EditModeProviderProps> = ({
     }
   }, [pendingChanges, pendingColorChange, hasPendingChanges, clearPendingChanges, updateOriginalValues, onToast]);
 
-  // Wartość kontekstu
   const contextValue: EditModeContextType = {
     isTextEditMode,
     pendingChanges,
@@ -257,7 +288,8 @@ export const EditModeProvider: React.FC<EditModeProviderProps> = ({
     isSaving,
     saveError,
     isFieldChanged,
-    getCurrentValue
+    getCurrentValue,
+    revertField,
   };
 
   return (

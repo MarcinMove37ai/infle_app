@@ -4,7 +4,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   BookOpen, CheckCircle, Shield, Clock, Heart,
-  Target, ChevronDown, ChevronRight, ArrowRight, Download, Check
+  Target, ChevronDown, ChevronRight, ArrowRight, Download, Check,
+  TrendingUp,
+  // Pełna whitelista ikon dla benefits.items[].icon (16 nazw — generator AI używa tylko tych)
+  Bell, Filter, Users, ListChecks, Calculator, Zap,
+  BrainCircuit, Lightbulb, Compass, Rocket, Database, Award,
+  // Hamburger menu (mobile nav)
+  Menu, X
 } from 'lucide-react';
 import Image from 'next/image';
 import EditableText from '@/components/ui/EditableText';
@@ -31,33 +37,92 @@ const LAYOUT = {
 } as const;
 
 // ---------------------------------------------------------------------------
+// Benefit icons map — string z bazy (whitelist 16) → komponent lucide-react
+// ---------------------------------------------------------------------------
+// Generator AI zapisuje icon jako string (np. "Compass", "Target") z whitelisty.
+// Mapowanie pozwala uniknąć if-else łańcucha w renderze.
+const BENEFIT_ICON_MAP: Record<string, React.ComponentType<{ className?: string; style?: React.CSSProperties }>> = {
+  Target, Bell, Filter, Users, ListChecks, Calculator,
+  Shield, Zap, BookOpen, BrainCircuit, TrendingUp, Lightbulb,
+  Compass, Rocket, Database, Award,
+};
+
+// Fallback gdy ikona w bazie jest nieprawidłowa lub null — Compass jako neutralna domyślna
+const FALLBACK_BENEFIT_ICON = Compass;
+
+// ---------------------------------------------------------------------------
 // Editable field definitions (from database)
 // ---------------------------------------------------------------------------
+// Whitelist edytowalnych pól. Konwencja: dot notation = ścieżka do pola w jsonb.
+// Dodawaj nowe sekcje wraz z refactorem (pliki 7-12: problem, promise, benefits, content, faq, form).
 const EDITABLE_FIELDS = [
-  'pagecontent_hero_headline',
-  'pagecontent_hero_subheadline',
-  'pagecontent_hero_description',
-  'pagecontent_benefits_items_0_title',
-  'pagecontent_benefits_items_0_text',
-  'pagecontent_benefits_items_1_title',
-  'pagecontent_benefits_items_1_text',
-  'pagecontent_benefits_items_2_title',
-  'pagecontent_benefits_items_2_text',
-  'pagecontent_benefits_items_3_title',
-  'pagecontent_benefits_items_3_text',
-  'pagecontent_content_chapters_0_title',
-  'pagecontent_content_chapters_0_description',
-  'pagecontent_content_chapters_1_title',
-  'pagecontent_content_chapters_1_description',
-  'pagecontent_content_chapters_2_title',
-  'pagecontent_content_chapters_2_description',
-  'pagecontent_form_title',
-  'pagecontent_faq_items_0_question',
-  'pagecontent_faq_items_0_answer',
-  'pagecontent_faq_items_1_question',
-  'pagecontent_faq_items_1_answer',
-  'pagecontent_faq_items_2_question',
-  'pagecontent_faq_items_2_answer'
+  // HERO (plik 6)
+  'hero.headline_l1',
+  'hero.headline_l2',
+  'hero.subheadline',
+  'hero.barriers.0',
+  'hero.barriers.1',
+  'hero.barriers.2',
+  'hero.cta_primary',
+
+  // PROBLEM (plik 7) — pains do 8 sztuk (max ze specki generatora)
+  'problem.headline',
+  'problem.intro',
+  'problem.summary',
+  'problem.pains.0.title', 'problem.pains.0.text',
+  'problem.pains.1.title', 'problem.pains.1.text',
+  'problem.pains.2.title', 'problem.pains.2.text',
+  'problem.pains.3.title', 'problem.pains.3.text',
+  'problem.pains.4.title', 'problem.pains.4.text',
+  'problem.pains.5.title', 'problem.pains.5.text',
+  'problem.pains.6.title', 'problem.pains.6.text',
+  'problem.pains.7.title', 'problem.pains.7.text',
+
+  // PROMISE (plik 8) — most z bólu do rozwiązania
+  'promise.label',
+  'promise.headline',
+  'promise.text',
+  'promise.outcomes.0',
+  'promise.outcomes.1',
+  'promise.outcomes.2',
+
+  // BENEFITS (plik 9) — items do 8 sztuk (max ze specki generatora)
+  'benefits.headline',
+  'benefits.subheadline',
+  'benefits.items.0.title', 'benefits.items.0.text', 'benefits.items.0.icon',
+  'benefits.items.1.title', 'benefits.items.1.text', 'benefits.items.1.icon',
+  'benefits.items.2.title', 'benefits.items.2.text', 'benefits.items.2.icon',
+  'benefits.items.3.title', 'benefits.items.3.text', 'benefits.items.3.icon',
+  'benefits.items.4.title', 'benefits.items.4.text', 'benefits.items.4.icon',
+  'benefits.items.5.title', 'benefits.items.5.text', 'benefits.items.5.icon',
+  'benefits.items.6.title', 'benefits.items.6.text', 'benefits.items.6.icon',
+  'benefits.items.7.title', 'benefits.items.7.text', 'benefits.items.7.icon',
+
+  // CONTENT (plik 10) — DOKŁADNIE 4 WIIFM milestones
+  'content.headline',
+  'content.subheadline',
+  'content.items.0.title', 'content.items.0.text',
+  'content.items.1.title', 'content.items.1.text',
+  'content.items.2.title', 'content.items.2.text',
+  'content.items.3.title', 'content.items.3.text',
+
+  // FAQ (plik 11) — items 7-9 sztuk (max ze specki generatora)
+  'faq.headline',
+  'faq.items.0.question', 'faq.items.0.answer',
+  'faq.items.1.question', 'faq.items.1.answer',
+  'faq.items.2.question', 'faq.items.2.answer',
+  'faq.items.3.question', 'faq.items.3.answer',
+  'faq.items.4.question', 'faq.items.4.answer',
+  'faq.items.5.question', 'faq.items.5.answer',
+  'faq.items.6.question', 'faq.items.6.answer',
+  'faq.items.7.question', 'faq.items.7.answer',
+  'faq.items.8.question', 'faq.items.8.answer',
+
+  // FORM (plik 12) — 4 pola edytowalne
+  'form.headline',
+  'form.subheadline',
+  'form.cta',
+  'form.trust_line',
 ];
 
 // ---------------------------------------------------------------------------
@@ -530,7 +595,8 @@ const FaqItem = ({
   onTextUpdate,
   questionFieldName,
   answerFieldName,
-  editLabel = 'Edit'
+  editLabel = 'Edit',
+  editedLabel = 'Edited'
 }: {
   question: string;
   answer: string;
@@ -540,6 +606,7 @@ const FaqItem = ({
   questionFieldName: string;
   answerFieldName: string;
   editLabel?: string;
+  editedLabel?: string;
 }) => {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -561,7 +628,7 @@ const FaqItem = ({
   return (
     <div style={{ borderBottom: `1px solid ${theme.divider}` }}>
       <button
-        className="flex w-full items-center justify-between py-4 sm:py-5 text-left transition-colors"
+        className="flex w-full items-center justify-between py-4 sm:py-5 text-left transition-colors cursor-pointer"
         onClick={() => setIsOpen(!isOpen)}
         style={{ color: isOpen ? theme.faqHoverText : theme.pageText }}
       >
@@ -573,6 +640,7 @@ const FaqItem = ({
               tag="span"
               isEditMode={isTextEditMode || false}
                 editLabel={editLabel}
+              editedLabel={editedLabel}
               onChange={handleTextChange}
             />
           ) : (
@@ -595,6 +663,7 @@ const FaqItem = ({
               tag="span"
               isEditMode={isTextEditMode || false}
                 editLabel={editLabel}
+              editedLabel={editedLabel}
               onChange={handleTextChange}
               multiline={true}
             />
@@ -637,38 +706,78 @@ interface PageContentFaqItem {
   answer: string;
 }
 
+// PageContent — struktura zsynchronizowana z bazą (jsonb 7 sekcji, schema_version v2).
+// HERO już używa nowych pól (plik 6). Pozostałe sekcje są refactorowane sekwencyjnie
+// w plikach 7-12 — do tego czasu typy benefits/content/form/faq są opcjonalne / luźne.
 interface PageContent {
   s3_file_key?: string;
+
+  // HERO — nowy schemat (plik 6)
   hero: {
+    headline_l1: string;
+    headline_l2: string;
+    subheadline: string;
+    barriers: [string, string, string];
+    cta_primary: string;
+  };
+
+  // PROBLEM — nowy schemat (plik 7)
+  problem?: {
+    headline: string;
+    intro: string;
+    pains: Array<{ title: string; text: string }>;
+    summary: string;
+  };
+
+  // PROMISE — nowy schemat (plik 8)
+  promise?: {
+    label: string;
+    headline: string;
+    text: string;
+    outcomes: [string, string, string];
+  };
+
+  // BENEFITS — nowy schemat (plik 9)
+  benefits?: {
     headline: string;
     subheadline: string;
-    description: string;  // format: "Lead sentence.||Bez X||Bez Y||Bez Z"
-    buttonText: string;
-    stats: PageContentStat[];
+    items: Array<{
+      title: string;
+      text: string;
+      icon: string;  // nazwa ikony z whitelisty (16 lucide names)
+    }>;
   };
-  benefits: {
-    title: string;
-    items: PageContentBenefitItem[];
+
+  // CONTENT — nowy schemat (plik 10): 4 WIIFM milestones (NIE chapters)
+  content?: {
+    headline: string;
+    subheadline: string;
+    items: [
+      { title: string; text: string },
+      { title: string; text: string },
+      { title: string; text: string },
+      { title: string; text: string },
+    ];
   };
-  content: {
-    title: string;
-    chapters: PageContentChapter[];
+
+  // FAQ — nowy schemat (plik 11): 7-9 obiekcji psychologicznych
+  faq?: {
+    headline: string;
+    items: Array<{ question: string; answer: string }>;
   };
-  form: {
-    title: string;
-    subtitle: string;
-    namePlaceholder: string;
-    emailPlaceholder: string;
-    phonePlaceholder: string;
-    buttonText: string;
-    privacyText: string;
+
+  // FORM — nowy schemat (plik 12): final push to convert
+  form?: {
+    headline: string;
+    subheadline: string;
+    cta: string;
+    trust_line: string;
   };
-  guarantees: {
-    items: PageContentGuaranteeItem[];
-  };
-  faq: {
-    title: string;
-    items: PageContentFaqItem[];
+
+  // Sekcje jeszcze nieprzerobione — wartości mogą być null/undefined gdy wczytujemy
+  // dane z nowego schematu jsonb. Odczyty zabezpieczone przez `?.` w renderze.
+  guarantees?: {
+    items?: PageContentGuaranteeItem[];
   };
 }
 
@@ -688,6 +797,7 @@ interface DemoViewProps {
   language?: 'pl' | 'en';
   colorSchemeName?: keyof typeof colorSchemes;
   partnerName?: string;
+  partnerLogoUrl?: string;  // Zdjęcie profilowe usera — wyświetlane po prawej w headerze (opcjonalne)
   visitors?: number;
   pageId?: string;
   pageData?: any;
@@ -705,6 +815,7 @@ const DemoView: React.FC<DemoViewProps> = ({
   language = 'pl',
   colorSchemeName = 'dark',
   partnerName = 'Jan Kowalski',
+  partnerLogoUrl,
   visitors = 0,
   pageId,
   pageData,
@@ -712,6 +823,20 @@ const DemoView: React.FC<DemoViewProps> = ({
   isTextEditMode = false,
   onTextUpdate
 }) => {
+  // Resolver dla zdjęcia profilowego — sprawdza prop, a w fallbacku pageData.
+  // Nazwa to PROFILE PICTURE z tabeli users (NIE authorLogoUrl który jest
+  // osobnym polem dla logo brand/firmy). Obsługuje wiele konwencji żeby
+  // działało z różnymi caller'ami:
+  //   - explicit prop partnerLogoUrl (najwyższy priorytet)
+  //   - pageData.profilePicture (root, camelCase)
+  //   - pageData.user.profilePicture (zagnieżdżony, jak w PublicPageClient)
+  //   - pageData.profile_picture (snake_case fallback)
+  const resolvedPartnerLogoUrl =
+    partnerLogoUrl
+    || pageData?.profilePicture
+    || pageData?.user?.profilePicture
+    || pageData?.profile_picture
+    || undefined;
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
@@ -721,23 +846,27 @@ const DemoView: React.FC<DemoViewProps> = ({
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [downloadStarted, setDownloadStarted] = useState(false);
-  const [tocOpen, setTocOpen] = useState(false);
+  const [tocOpen, setTocOpen] = useState(true);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // Focus states for inputs
   const [focusedInput, setFocusedInput] = useState<string | null>(null);
 
-  // Helper: parse hero description "Lead.||Bez X||Bez Y||Bez Z"
-  const parseHeroDescription = (desc: string) => {
-    const parts = desc.split('||');
-    return {
-      lead: parts[0]?.trim() ?? desc,
-      bullets: parts.slice(1).map(b => b.trim()).filter(Boolean),
-    };
-  };
-
   // i18n
   const isEN = language === 'en';
   const editLabel = isEN ? 'Edit' : 'Edytuj';
+  const editedLabel = isEN ? 'Edited' : 'Edytowane';
+
+  // Definicja linków nawigacji — sekcje strony w kolejności scroll
+  // (hero pomijamy — kliknięcie logo wraca tam naturalnie)
+  const navLinks = [
+    { href: '#problem',  label: isEN ? 'Problem'   : 'Problem' },
+    { href: '#promise',  label: isEN ? 'Promise'   : 'Obietnica' },
+    { href: '#benefits', label: isEN ? 'Benefits'  : 'Korzyści' },
+    { href: '#content',  label: isEN ? 'Contents'  : 'Spis treści' },
+    { href: '#faq',      label: isEN ? 'FAQ'       : 'FAQ' },
+  ];
+  const navCta = { href: '#signup', label: isEN ? 'Get the e-book' : 'Pobierz e-book' };
   const ui = {
     benefitsSectionTitle:  isEN ? 'What will you gain from this guide?' : 'Co zyskasz dzięki temu przewodnikowi?',
     contentSectionTitle:   isEN ? "What's inside?"                      : 'Co znajdziesz w środku?',
@@ -818,6 +947,31 @@ const DemoView: React.FC<DemoViewProps> = ({
     return raw;
   })();
 
+  // Mockup URL — kaskadowo z możliwych źródeł.
+  // Najpierw resolvedMockupUrl (zbudowany server-side w preview API i page.tsx),
+  // potem klientowy fallback z pageData.ebook, ostatecznie placeholder.
+  const mockupUrl = (() => {
+    if (pageData?.resolvedMockupUrl) return pageData.resolvedMockupUrl;
+
+    const buildAssetUrl = (path?: string | null): string => {
+      if (!path) return '';
+      if (path.startsWith('http://') || path.startsWith('https://')) return path;
+      if (path.startsWith('/uploads/')) {
+        return `/api/assets/uploads/${path.substring('/uploads/'.length)}`;
+      }
+      return `/api/assets/uploads/${path}`;
+    };
+
+    const ebook = pageData?.ebook;
+    const fromEbook = ebook?.final_mockup_url || ebook?.cover_image_webp_url || ebook?.s3_file_key || ebook?.mockup_url;
+    if (fromEbook) return buildAssetUrl(fromEbook);
+
+    const fromPage = pageData?.s3_file_key || pageData?.mockup_url;
+    if (fromPage) return buildAssetUrl(fromPage);
+
+    return '/mockup.png';
+  })();
+
   // Note: hero stats from pageContent.hero.stats are not displayed separately
   // — the ebookMeta cards section below shows the relevant metadata instead.
 
@@ -845,7 +999,7 @@ const DemoView: React.FC<DemoViewProps> = ({
     };
 
     const sectionIds = [
-      'hero', 'painpoints', 'benefits', 'content',
+      'hero', 'problem', 'promise', 'benefits', 'content',
       'signup', 'faq'
     ];
 
@@ -986,63 +1140,6 @@ const DemoView: React.FC<DemoViewProps> = ({
     transition: 'border-color 0.2s, box-shadow 0.2s',
   });
 
-  // Parse hero description into lead text + bullet points
-  const { lead: heroLead, bullets: heroBullets } = parseHeroDescription(pageContent.hero.description);
-
-  // Editable state for description parts (lead + bullets → reconstructed as single field)
-  const [editableLead, setEditableLead] = useState(heroLead);
-  const [editableBullets, setEditableBullets] = useState(heroBullets);
-
-  // Sync when pageContent.hero.description changes externally
-  useEffect(() => {
-    const { lead, bullets } = parseHeroDescription(pageContent.hero.description);
-    setEditableLead(lead);
-    setEditableBullets(bullets);
-  }, [pageContent.hero.description]);
-
-  // Handler for description sub-parts — reconstructs full string and saves as real field
-  const handleDescriptionPartChange = (field: string, value: string) => {
-    let newLead = editableLead;
-    let newBullets = [...editableBullets];
-
-    if (field === 'description_lead') {
-      newLead = value;
-      setEditableLead(value);
-    } else {
-      const match = field.match(/^description_bullet_(\d+)$/);
-      if (match) {
-        const index = parseInt(match[1]);
-        newBullets[index] = value;
-        setEditableBullets(newBullets);
-      }
-    }
-
-    // Reconstruct "Lead.||Bullet 1||Bullet 2||..." and propagate as real DB field
-    const parts = [newLead, ...newBullets].filter(Boolean);
-    const fullDescription = parts.join('||');
-    handleTextChange('pagecontent_hero_description', fullDescription);
-  };
-
-  // Track which description parts have been individually edited
-  const [changedDescParts, setChangedDescParts] = useState<Set<string>>(new Set());
-
-  // Wrap handleDescriptionPartChange to also track per-part changes
-  const handleDescriptionPartChangeTracked = (field: string, value: string) => {
-    setChangedDescParts(prev => new Set(prev).add(field));
-    handleDescriptionPartChange(field, value);
-  };
-
-  // Clear per-part tracking after save (when context pendingChanges is empty)
-  const descriptionFieldChanged = useContextMode
-    ? editModeContext.isFieldChanged('pagecontent_hero_description')
-    : false;
-
-  useEffect(() => {
-    if (!descriptionFieldChanged) {
-      setChangedDescParts(new Set());
-    }
-  }, [descriptionFieldChanged]);
-
   // Shared glass-card style object to avoid repetition
   const glassCard: React.CSSProperties = {
     backgroundColor: theme.cardBg,
@@ -1065,10 +1162,12 @@ const DemoView: React.FC<DemoViewProps> = ({
       }}
     >
       {/* ================================================================ */}
-      {/* HEADER                                                           */}
+      {/* HEADER — nav (left) + partner info (right)                        */}
       {/* ================================================================ */}
+      {/* Logo tymczasowo ukryte. Content ograniczony do LAYOUT.maxW jak    */}
+      {/* sekcja hero — pełnoszerokie tło, content wycentrowany w kontenerze.*/}
       <header
-        className="fixed top-0 left-0 w-full h-20 z-50 flex items-center justify-between px-4 sm:px-6 lg:px-8"
+        className="fixed top-0 left-0 w-full h-20 z-50"
         style={{
           backgroundColor: theme.headerBg,
           borderBottom: `1px solid ${theme.headerBorder}`,
@@ -1077,32 +1176,212 @@ const DemoView: React.FC<DemoViewProps> = ({
           WebkitBackdropFilter: 'blur(16px)',
         }}
       >
-        <div className="flex items-center">
-          <div className="h-8 md:h-12 w-auto">
-            <Image
-              src={logoUrl}
-              alt="Logo aplikacji"
-              width={120}
-              height={48}
-              className="h-full w-auto"
-              priority
-              unoptimized
-            />
-          </div>
-        </div>
+        <div className={`mx-auto h-full flex items-center justify-between ${LAYOUT.px} ${LAYOUT.maxW}`}>
 
-        <div className="flex items-center gap-3">
-          <div className="flex flex-col items-end justify-center">
-            <span className="text-sm font-medium" style={{ color: theme.pageText }}>
-              {partnerName}
-            </span>
-            <div className="w-full h-px my-0.5" style={{ backgroundColor: theme.divider }}></div>
-            <span className="text-xs" style={{ color: theme.pageSubtext }}>
-              made with inflee.app
-            </span>
+          {/* ── LEFT — desktop nav lub mobile hamburger ─────────────── */}
+
+          {/* Desktop nav (lg+) — od lewej */}
+          <nav className="hidden lg:flex items-center gap-7">
+            {navLinks.map(link => (
+              <a
+                key={link.href}
+                href={link.href}
+                className="text-sm font-medium transition-colors"
+                style={{ color: theme.pageText, opacity: 0.75 }}
+                onMouseEnter={(e) => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.color = theme.accent; }}
+                onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.75'; e.currentTarget.style.color = theme.pageText; }}
+              >
+                {link.label}
+              </a>
+            ))}
+            <a
+              href={navCta.href}
+              className="ml-2 px-4 py-2 rounded-full text-sm font-semibold transition-all"
+              style={{
+                backgroundColor: theme.accent,
+                color: theme.ctaText,
+                boxShadow: theme.ctaShadow,
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-1px)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; }}
+            >
+              {navCta.label}
+            </a>
+          </nav>
+
+          {/* Mobile hamburger (do lg) — po lewej */}
+          <button
+            type="button"
+            onClick={() => setMobileMenuOpen(true)}
+            className="lg:hidden flex items-center justify-center w-11 h-11 rounded-lg transition-colors cursor-pointer -ml-2"
+            style={{ color: theme.pageText }}
+            aria-label={isEN ? 'Open menu' : 'Otwórz menu'}
+          >
+            <Menu className="w-6 h-6" />
+          </button>
+
+          {/* ── RIGHT MOBILE — podpis + profilowe (do lg) ─────────────── */}
+          {/* Skondensowany layout: tekst po lewej, avatar po prawej. */}
+          {/* Mniejsze rozmiary niż desktop żeby zmieściło się obok hamburgera. */}
+          <div className="flex lg:hidden items-center gap-2.5">
+            <div className="flex flex-col items-end justify-center">
+              <span className="text-xs leading-tight" style={{ color: theme.pageSubtext }}>
+                {isEN ? 'made by' : 'stworzone przez'}{' '}
+                <span style={{ color: theme.pageText, opacity: 0.85 }}>{partnerName}</span>
+              </span>
+              <div className="w-full h-px my-0.5" style={{ backgroundColor: theme.divider }}></div>
+              <span className="text-[0.65rem] leading-tight" style={{ color: theme.pageSubtext }}>
+                {isEN ? 'with' : 'z'}{' '}
+                <span style={{ color: theme.pageText, opacity: 0.85 }}>inflee.app</span>
+              </span>
+            </div>
+
+            {resolvedPartnerLogoUrl && (
+              <div
+                className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0"
+                style={{ border: `1.5px solid ${theme.cardBorder}` }}
+              >
+                <Image
+                  src={resolvedPartnerLogoUrl}
+                  alt={partnerName}
+                  width={40}
+                  height={40}
+                  className="w-full h-full object-cover"
+                  unoptimized
+                />
+              </div>
+            )}
+          </div>
+
+          {/* ── RIGHT — partner info (desktop only) ─────────────────── */}
+          <div className="hidden lg:flex items-center gap-3">
+            {/* Tekst: made by [name] / with inflee.app — klasycznie, bez ozdobników */}
+            <div className="flex flex-col items-end justify-center">
+              <span className="text-sm" style={{ color: theme.pageSubtext }}>
+                {isEN ? 'made by' : 'stworzone przez'}{' '}
+                <span style={{ color: theme.pageText, opacity: 0.85 }}>{partnerName}</span>
+              </span>
+              <div className="w-full h-px my-0.5" style={{ backgroundColor: theme.divider }}></div>
+              <span className="text-xs" style={{ color: theme.pageSubtext }}>
+                {isEN ? 'with' : 'z'}{' '}
+                <span style={{ color: theme.pageText, opacity: 0.85 }}>inflee.app</span>
+              </span>
+            </div>
+
+            {/* Avatar — opcjonalny, po prawej tekstu */}
+            {resolvedPartnerLogoUrl && (
+              <div
+                className="w-12 h-12 rounded-full overflow-hidden flex-shrink-0"
+                style={{ border: `1.5px solid ${theme.cardBorder}` }}
+              >
+                <Image
+                  src={resolvedPartnerLogoUrl}
+                  alt={partnerName}
+                  width={48}
+                  height={48}
+                  className="w-full h-full object-cover"
+                  unoptimized
+                />
+              </div>
+            )}
           </div>
         </div>
       </header>
+
+      {/* ================================================================ */}
+      {/* MOBILE NAV DRAWER — fullscreen overlay (do lg)                    */}
+      {/* ================================================================ */}
+      <div
+        className={`fixed inset-0 z-[60] lg:hidden transition-opacity duration-300 ${
+          mobileMenuOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+        }`}
+        style={{
+          backgroundColor: theme.pageBg,
+          backdropFilter: 'blur(16px)',
+          WebkitBackdropFilter: 'blur(16px)',
+        }}
+      >
+        {/* Drawer header — podpis (orientacja jak desktop) + close */}
+        {/* Layout: [.................podpis + avatar] gap [X] */}
+        <div
+          className="h-20 flex items-center justify-end px-4 sm:px-6 gap-3"
+          style={{ borderBottom: `1px solid ${theme.headerBorder}` }}
+        >
+          {/* Podpis — taka sama orientacja jak w desktop right side: */}
+          {/* tekst right-aligned (items-end), avatar po prawej tekstu. */}
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="flex flex-col items-end min-w-0">
+              <span className="text-sm leading-tight truncate" style={{ color: theme.pageSubtext }}>
+                {isEN ? 'made by' : 'stworzone przez'}{' '}
+                <span style={{ color: theme.pageText, opacity: 0.85 }}>{partnerName}</span>
+              </span>
+              <span className="text-xs leading-tight mt-0.5" style={{ color: theme.pageSubtext }}>
+                {isEN ? 'with' : 'z'}{' '}
+                <span style={{ color: theme.pageText, opacity: 0.85 }}>inflee.app</span>
+              </span>
+            </div>
+            {resolvedPartnerLogoUrl && (
+              <div
+                className="w-11 h-11 rounded-full overflow-hidden flex-shrink-0"
+                style={{ border: `1.5px solid ${theme.cardBorder}` }}
+              >
+                <Image
+                  src={resolvedPartnerLogoUrl}
+                  alt={partnerName}
+                  width={44}
+                  height={44}
+                  className="w-full h-full object-cover"
+                  unoptimized
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Close button — po prawej brzegu */}
+          <button
+            type="button"
+            onClick={() => setMobileMenuOpen(false)}
+            className="flex items-center justify-center w-11 h-11 rounded-lg transition-colors cursor-pointer flex-shrink-0"
+            style={{ color: theme.pageText }}
+            aria-label={isEN ? 'Close menu' : 'Zamknij menu'}
+          >
+            <X className="w-6 h-6" />
+          </button>
+        </div>
+
+        {/* Drawer body — nav links stacked + CTA */}
+        <nav className="px-6 sm:px-8 py-8 flex flex-col">
+          {navLinks.map((link, i) => (
+            <a
+              key={link.href}
+              href={link.href}
+              onClick={() => setMobileMenuOpen(false)}
+              className="text-xl font-medium py-3.5 transition-opacity"
+              style={{
+                color: theme.pageText,
+                fontFamily: theme.headingFont,
+                borderTop: i === 0 ? 'none' : `1px solid ${theme.divider}`,
+                opacity: 0.9,
+              }}
+            >
+              {link.label}
+            </a>
+          ))}
+          <a
+            href={navCta.href}
+            onClick={() => setMobileMenuOpen(false)}
+            className="mt-8 px-6 py-3.5 rounded-full text-base font-semibold text-center transition-all"
+            style={{
+              backgroundColor: theme.accent,
+              color: theme.ctaText,
+              boxShadow: theme.ctaShadow,
+            }}
+          >
+            {navCta.label}
+          </a>
+        </nav>
+
+      </div>
 
       {/* ================================================================ */}
       {/* HERO SECTION                                                     */}
@@ -1116,15 +1395,29 @@ const DemoView: React.FC<DemoViewProps> = ({
           <div className="flex flex-col lg:flex-row items-center relative z-10 gap-8 sm:gap-10 lg:gap-16 xl:gap-20">
             {/* Left column — text */}
             <div className="lg:w-1/2 mb-8 lg:mb-0 w-full">
-              {/* h1 — headline */}
+              {/* Eyebrow label — bezpłatny e-book */}
+              <div
+                className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold mb-5 sm:mb-6 uppercase tracking-wide"
+                style={{
+                  backgroundColor: theme.accentSubtle,
+                  color: theme.accent,
+                  fontFamily: theme.bodyFont,
+                  letterSpacing: '0.08em',
+                }}
+              >
+                {isEN ? 'Free e-book' : 'Bezpłatny e-book'}
+              </div>
+
+              {/* h1 — headline_l1 (transformacja PRZED → PO) */}
               <EditableText
-                fieldName="pagecontent_hero_headline"
-                value={pageContent.hero.headline}
+                fieldName="hero.headline_l1"
+                value={pageContent.hero.headline_l1 ?? ''}
                 tag="h1"
                 isEditMode={isTextEditMode || false}
                 editLabel={editLabel}
+                editedLabel={editedLabel}
                 onChange={handleTextChange}
-                className="text-3xl sm:text-4xl lg:text-5xl font-extrabold mb-5 sm:mb-6 leading-tight text-left break-words"
+                className="text-3xl sm:text-4xl lg:text-5xl font-extrabold mb-4 sm:mb-5 leading-tight text-left break-words"
                 style={{
                   color: theme.pageText,
                   fontFamily: theme.headingFont,
@@ -1133,22 +1426,41 @@ const DemoView: React.FC<DemoViewProps> = ({
 
               {/* Decorative divider between h1 and h2 */}
               <div
-                className="w-32 sm:w-48 h-px mb-5 sm:mb-6 rounded-full ml-0 mr-auto"
+                className="w-32 sm:w-48 h-px mb-4 sm:mb-5 rounded-full ml-0 mr-auto"
                 style={{ background: theme.dividerAccent, opacity: 0.6 }}
               ></div>
 
-              {/* h2 — subheadline */}
+              {/* h2 — headline_l2 (sentence case, accent color) */}
               <EditableText
-                fieldName="pagecontent_hero_subheadline"
-                value={pageContent.hero.subheadline}
+                fieldName="hero.headline_l2"
+                value={pageContent.hero.headline_l2 ?? ''}
                 tag="h2"
                 isEditMode={isTextEditMode || false}
                 editLabel={editLabel}
+                editedLabel={editedLabel}
                 onChange={handleTextChange}
-                className="text-lg sm:text-xl lg:text-2xl font-medium mb-4 sm:mb-5 text-left break-words"
+                className="text-2xl sm:text-3xl lg:text-4xl font-bold mb-5 sm:mb-6 leading-tight text-left break-words"
+                style={{
+                  color: theme.accent,
+                  fontFamily: theme.headingFont,
+                }}
+              />
+
+              {/* Subheadline — mechanizm w jednym zdaniu */}
+              <EditableText
+                fieldName="hero.subheadline"
+                value={pageContent.hero.subheadline ?? ''}
+                tag="p"
+                isEditMode={isTextEditMode || false}
+                editLabel={editLabel}
+                editedLabel={editedLabel}
+                onChange={handleTextChange}
+                multiline={true}
+                maxLength={400}
+                className="text-base sm:text-lg lg:text-xl mb-6 sm:mb-8 leading-relaxed font-light"
                 style={{
                   color: theme.pageSubtext,
-                  fontFamily: theme.headingFont,
+                  fontFamily: theme.bodyFont,
                 }}
               />
 
@@ -1156,7 +1468,7 @@ const DemoView: React.FC<DemoViewProps> = ({
               <div className="block lg:hidden w-full mb-6 sm:mb-8">
                 <div className="mx-auto max-w-xs">
                   <Image
-                    src={pageContent.s3_file_key || "/mockup.png"}
+                    src={mockupUrl}
                     alt="E-book Mockup"
                     className="w-full h-auto"
                     width={300}
@@ -1181,11 +1493,71 @@ const DemoView: React.FC<DemoViewProps> = ({
                 </div>
               </div>
 
-              {/* CTA button — extra breathing room on desktop */}
-              <div className="text-center lg:text-left mt-2 lg:mt-10">
-                <AnimatedButton href="#signup" theme={theme}>
-                  {ui.heroCta}
-                </AnimatedButton>
+              {/* Barriers — 3 negacje "Bez ..." pokazują że proces jest prosty/dostępny */}
+              {Array.isArray(pageContent.hero.barriers) && pageContent.hero.barriers.length > 0 && (
+                <ul className="space-y-2.5 sm:space-y-3 mb-7 sm:mb-9">
+                  {pageContent.hero.barriers.map((barrier, i) => (
+                    <li key={i} className="flex items-start gap-3">
+                      <span
+                        className="w-5 h-5 rounded-full flex-shrink-0 mt-1 flex items-center justify-center"
+                        style={{
+                          backgroundColor: theme.bulletCircleBg,
+                          border: `1px solid ${theme.bulletCircleBorder}`,
+                        }}
+                      >
+                        <Check className="w-3 h-3" style={{ color: theme.iconColor }} />
+                      </span>
+                      <EditableText
+                        fieldName={`hero.barriers.${i}`}
+                        value={barrier ?? ''}
+                        tag="span"
+                        isEditMode={isTextEditMode || false}
+                        editLabel={editLabel}
+                        editedLabel={editedLabel}
+                        onChange={handleTextChange}
+                        multiline={false}
+                        maxLength={120}
+                        className="text-sm sm:text-base leading-relaxed flex-1"
+                        style={{
+                          color: theme.pageText,
+                          fontFamily: theme.bodyFont,
+                        }}
+                      />
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              {/* CTA button — w trybie edycji bez href (żeby kliknięcie nie nawigowało) */}
+              <div className="text-center lg:text-left mt-2 lg:mt-2">
+                {isTextEditMode ? (
+                  <span
+                    className="inline-flex items-center justify-center rounded-full px-6 sm:px-8 py-3.5 sm:py-4 font-semibold text-sm sm:text-base"
+                    style={{
+                      background: theme.ctaBg,
+                      color: theme.ctaText,
+                      boxShadow: `${theme.ctaShadow}, ${theme.ctaGlow}`,
+                    }}
+                  >
+                    <EditableText
+                      fieldName="hero.cta_primary"
+                      value={pageContent.hero.cta_primary ?? ''}
+                      tag="span"
+                      isEditMode={true}
+                      editLabel={editLabel}
+                      editedLabel={editedLabel}
+                      onChange={handleTextChange}
+                      multiline={false}
+                      maxLength={50}
+                      className="mr-2 sm:mr-3 inline-block"
+                    />
+                    <ArrowRight className="h-4 w-4 sm:h-5 sm:w-5" style={{ color: theme.ctaText }} />
+                  </span>
+                ) : (
+                  <AnimatedButton href="#signup" theme={theme}>
+                    {pageContent.hero.cta_primary ?? ''}
+                  </AnimatedButton>
+                )}
               </div>
             </div>
 
@@ -1193,7 +1565,7 @@ const DemoView: React.FC<DemoViewProps> = ({
             <div className="lg:w-1/2 hidden lg:flex flex-col items-center pl-0 lg:pl-8 xl:pl-12">
               <div className="w-72 md:w-96 lg:w-[28rem] xl:w-[34rem]">
                 <Image
-                  src={pageContent.s3_file_key || "/mockup.png"}
+                  src={mockupUrl}
                   alt="E-book Mockup"
                   className="w-full h-auto"
                   width={680}
@@ -1222,404 +1594,784 @@ const DemoView: React.FC<DemoViewProps> = ({
       </section>
 
       {/* ================================================================ */}
-      {/* PAIN POINTS — the problem this ebook solves                       */}
+      {/* PROBLEM SECTION — editorial, narrative, accent-bar storytelling   */}
       {/* ================================================================ */}
-      {(editableLead || editableBullets.length > 0) && (
+      {pageContent.problem && (
         <section
-          id="painpoints"
+          id="problem"
           className={`${LAYOUT.sectionPy} transition-all duration-700 ease-out
-            ${elements.painpoints ? 'opacity-100' : 'opacity-0 translate-y-10'}`}
+            ${elements.problem ? 'opacity-100' : 'opacity-0 translate-y-10'}`}
           style={{ backgroundColor: theme.sectionAltBg }}
         >
           <div className={`mx-auto ${LAYOUT.px} ${LAYOUT.maxW}`}>
-            {/* Lead paragraph — editable core problem statement */}
-            {editableLead && (
-              <EditableText
-                fieldName="description_lead"
-                value={editableLead}
-                tag="p"
-                isEditMode={isTextEditMode || false}
-                editLabel={editLabel}
-                onChange={handleDescriptionPartChangeTracked}
-                overrideContext={true}
-                forceUnsaved={changedDescParts.has('description_lead')}
-                className="text-lg sm:text-xl lg:text-2xl mb-10 sm:mb-14 text-center max-w-3xl mx-auto leading-relaxed font-light"
-                style={{ color: theme.pageText }}
-                multiline={true}
-                maxLength={500}
-              />
-            )}
 
-            {/* Decorative divider */}
-            {editableLead && editableBullets.length > 0 && (
-              <div className="flex justify-center mb-10 sm:mb-14">
-                <div className="w-32 sm:w-48 h-px rounded-full" style={{ background: theme.dividerAccent, opacity: 0.4 }}></div>
+            {/* Eyebrow — narracyjny, uniwersalny */}
+            <div className="text-center mb-4 sm:mb-5">
+              <span
+                className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold uppercase"
+                style={{
+                  backgroundColor: theme.accentSubtle,
+                  color: theme.accent,
+                  fontFamily: theme.bodyFont,
+                  letterSpacing: '0.12em',
+                }}
+              >
+                {isEN ? 'Know this?' : 'Brzmi znajomo?'}
+              </span>
+            </div>
+
+            {/* Headline — hook (max 8 słów) — pełna szerokość kontenera */}
+            <EditableText
+              fieldName="problem.headline"
+              value={pageContent.problem.headline ?? ''}
+              tag="h2"
+              isEditMode={isTextEditMode || false}
+              editLabel={editLabel}
+              editedLabel={editedLabel}
+              onChange={handleTextChange}
+              maxLength={150}
+              className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-center mb-5 sm:mb-7 leading-tight tracking-tight"
+              style={{
+                color: theme.pageText,
+                fontFamily: theme.headingFont,
+              }}
+            />
+
+            {/* Intro — żywa scena zmysłowa (max 40 słów) — pełna szerokość */}
+            <EditableText
+              fieldName="problem.intro"
+              value={pageContent.problem.intro ?? ''}
+              tag="p"
+              isEditMode={isTextEditMode || false}
+              editLabel={editLabel}
+              editedLabel={editedLabel}
+              onChange={handleTextChange}
+              multiline={true}
+              maxLength={400}
+              className="text-lg sm:text-xl lg:text-2xl mb-14 sm:mb-20 text-center leading-relaxed font-light italic"
+              style={{
+                color: theme.pageSubtext,
+                fontFamily: theme.bodyFont,
+              }}
+            />
+
+            {/* Pains — 2-column editorial grid, accent bar storytelling   */}
+            {Array.isArray(pageContent.problem.pains) && pageContent.problem.pains.length > 0 && (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-12 lg:gap-x-16 gap-y-10 sm:gap-y-12 mb-14 sm:mb-20">
+                {/*
+                  Wyświetlamy max 6 painów (parzysta siatka 2×3).
+                  Generator AI generuje 6-8 — slice(0, 6) zapewnia że
+                  prawy dolny róg nigdy nie jest pusty. Na mobile
+                  (1 col) liczba i tak nie ma znaczenia wizualnego.
+                */}
+                {pageContent.problem.pains.slice(0, 6).map((pain, i) => (
+                  <article
+                    key={i}
+                    className="relative pl-5 sm:pl-6"
+                  >
+                    {/* Lewy pionowy pasek akcent — kotwica wizualna każdej historii */}
+                    <div
+                      className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-full"
+                      style={{ background: theme.dividerAccent, opacity: 0.55 }}
+                      aria-hidden="true"
+                    ></div>
+
+                    {/* Title — hero typografii pain story */}
+                    <EditableText
+                      fieldName={`problem.pains.${i}.title`}
+                      value={pain.title ?? ''}
+                      tag="h3"
+                      isEditMode={isTextEditMode || false}
+                      editLabel={editLabel}
+                      editedLabel={editedLabel}
+                      onChange={handleTextChange}
+                      maxLength={150}
+                      className="text-xl sm:text-2xl lg:text-[1.625rem] font-bold mb-3 sm:mb-4 leading-tight tracking-tight"
+                      style={{
+                        color: theme.pageText,
+                        fontFamily: theme.headingFont,
+                      }}
+                    />
+
+                    {/* Text — naturalny rytm czytania */}
+                    <EditableText
+                      fieldName={`problem.pains.${i}.text`}
+                      value={pain.text ?? ''}
+                      tag="p"
+                      isEditMode={isTextEditMode || false}
+                      editLabel={editLabel}
+                      editedLabel={editedLabel}
+                      onChange={handleTextChange}
+                      multiline={true}
+                      maxLength={400}
+                      className="text-base sm:text-lg leading-relaxed"
+                      style={{
+                        color: theme.pageSubtext,
+                        fontFamily: theme.bodyFont,
+                      }}
+                    />
+                  </article>
+                ))}
               </div>
             )}
 
-            {/* Bullet cards — editable, 3 columns on desktop */}
-            {editableBullets.length > 0 && (
-              <div className={`grid grid-cols-1 sm:grid-cols-3 ${LAYOUT.gap}`}>
-                {editableBullets.map((bullet, i) => (
-                <div
-                  key={i}
-                  className={`flex items-start gap-4 sm:gap-5 ${LAYOUT.cardP} rounded-2xl transition-all duration-300`}
-                  style={glassCard}
-                >
+            {/* ─── SUMMARY — pull-quote puenta ───────────────────────────── */}
+            {/* Wycentrowana, eleganckie wzmocnienie wizualne (subtle bg +    */}
+            {/* dwa accent dashes po bokach), znacząco większa typograficznie */}
+            {/* niż text painów — czytelnik widzi że to konkluzja, bez       */}
+            {/* krzyczenia kolorem czy obwódkami.                            */}
+            <div className="mt-2 sm:mt-4">
+              <div
+                className="relative rounded-2xl px-8 sm:px-12 py-8 sm:py-10"
+                style={{
+                  backgroundColor: theme.accentSubtle,
+                  border: `1px solid ${theme.cardBorder}`,
+                }}
+              >
+                {/* Decorative dashes left & right — pull-quote markery */}
+                <div className="flex items-center justify-center gap-4 mb-5 sm:mb-6">
                   <div
-                    className="w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5"
+                    className="h-px w-12 sm:w-16 rounded-full"
+                    style={{ background: theme.dividerAccent, opacity: 0.6 }}
+                    aria-hidden="true"
+                  ></div>
+                  <span
+                    className="text-xs font-semibold uppercase"
                     style={{
-                      backgroundColor: theme.iconCircleBg,
-                      border: `1px solid ${theme.iconCircleBorder}`,
+                      color: theme.accent,
+                      fontFamily: theme.bodyFont,
+                      letterSpacing: '0.18em',
                     }}
                   >
-                    <Check className="w-4 h-4 sm:w-5 sm:h-5" style={{ color: theme.iconColor }} />
-                  </div>
-                  <EditableText
-                    fieldName={`description_bullet_${i}`}
-                    value={bullet}
-                    tag="span"
-                    isEditMode={isTextEditMode || false}
-                editLabel={editLabel}
-                    onChange={handleDescriptionPartChangeTracked}
-                    overrideContext={true}
-                    forceUnsaved={changedDescParts.has(`description_bullet_${i}`)}
-                    className="text-sm sm:text-base lg:text-lg leading-relaxed"
-                    style={{ color: theme.pageText }}
-                    multiline={true}
-                    maxLength={300}
-                  />
+                    {isEN ? 'The reality' : 'Sedno'}
+                  </span>
+                  <div
+                    className="h-px w-12 sm:w-16 rounded-full"
+                    style={{ background: theme.dividerAccent, opacity: 0.6 }}
+                    aria-hidden="true"
+                  ></div>
                 </div>
-              ))}
+
+                <EditableText
+                  fieldName="problem.summary"
+                  value={pageContent.problem.summary ?? ''}
+                  tag="p"
+                  isEditMode={isTextEditMode || false}
+                  editLabel={editLabel}
+                  editedLabel={editedLabel}
+                  onChange={handleTextChange}
+                  multiline={true}
+                  maxLength={250}
+                  className="text-xl sm:text-2xl lg:text-3xl text-center leading-snug font-semibold"
+                  style={{
+                    color: theme.pageText,
+                    fontFamily: theme.headingFont,
+                    letterSpacing: '-0.02em',
+                  }}
+                />
               </div>
-            )}
+            </div>
+
           </div>
         </section>
       )}
 
       {/* ================================================================ */}
-      {/* BENEFITS SECTION                                                 */}
+      {/* PROMISE SECTION — bridge from pain to solution                    */}
       {/* ================================================================ */}
-      <section
-        id="benefits"
-        className={`${LAYOUT.sectionPy} transition-all duration-700 ease-out
-          ${elements.benefits ? 'opacity-100' : 'opacity-0 translate-y-10'}`}
-      >
-        <div className={`mx-auto ${LAYOUT.px} ${LAYOUT.maxW}`}>
-          <div className={`text-center max-w-3xl mx-auto ${LAYOUT.headingMb}`}>
-            <h2
-              className={`${LAYOUT.headingSize} font-bold mb-4`}
-              style={{ fontFamily: theme.headingFont, color: theme.pageText }}
-            >
-              {ui.benefitsSectionTitle}
-            </h2>
-          </div>
+      {/* Layout:                                                           */}
+      {/*   ┌───────────────────────────────────────────────────────────┐   */}
+      {/*   │ LABEL + HEADLINE         │  TEXT (rozwinięcie z refrenem) │   */}
+      {/*   │ (lewa kolumna)           │  (prawa kolumna)               │   */}
+      {/*   ├───────────────────────────────────────────────────────────┤   */}
+      {/*   │  [1] outcome  │  [2] outcome  │  [3] outcome              │   */}
+      {/*   │     (3 równoważne karty w jednym wierszu)                 │   */}
+      {/*   └───────────────────────────────────────────────────────────┘   */}
+      {pageContent.promise && (
+        <section
+          id="promise"
+          className={`${LAYOUT.sectionPy} relative overflow-hidden transition-all duration-700 ease-out
+            ${elements.promise ? 'opacity-100' : 'opacity-0 translate-y-10'}`}
+          style={{ backgroundColor: theme.pageBg }}
+        >
+          {/* Subtle radial accent w tle — sygnalizuje "moment światła" */}
+          <div
+            className="absolute inset-0 pointer-events-none"
+            style={{
+              background: `radial-gradient(ellipse 1000px 600px at 50% 50%, ${theme.accentSubtle}, transparent 70%)`,
+              opacity: 0.5,
+            }}
+            aria-hidden="true"
+          ></div>
 
-          <div className={`flex flex-col ${LAYOUT.gap}`}>
-            {pageContent.benefits.items.map((item, index) => (
-              <div
-                key={index}
-                className={`group ${LAYOUT.cardP} rounded-2xl transition-all duration-300 flex items-start gap-5 sm:gap-6`}
-                style={glassCard}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.borderColor = theme.cardHoverBorder;
-                  e.currentTarget.style.boxShadow = theme.cardHoverShadow;
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor = theme.cardBorder;
-                  e.currentTarget.style.boxShadow = theme.cardShadow;
-                }}
-              >
-                {/* Icon — fixed left column */}
-                <div
-                  className="w-11 h-11 sm:w-13 sm:h-13 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5"
+          <div className={`relative mx-auto ${LAYOUT.px} ${LAYOUT.maxW}`}>
+
+            {/* ═══ TOP — duet 2-col rozdzielony pionową linią ═══════════ */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-0 mb-12 sm:mb-14 lg:mb-16">
+
+              {/* Lewa kolumna — label + headline */}
+              <div className="lg:pr-12 xl:pr-16">
+                {/* Label — eyebrow */}
+                <EditableText
+                  fieldName="promise.label"
+                  value={pageContent.promise.label ?? ''}
+                  tag="div"
+                  isEditMode={isTextEditMode || false}
+                  editLabel={editLabel}
+                  editedLabel={editedLabel}
+                  onChange={handleTextChange}
+                  maxLength={80}
+                  className="inline-block px-3 py-1 rounded-full text-xs font-semibold uppercase mb-5 sm:mb-6"
                   style={{
-                    backgroundColor: theme.iconCircleBg,
-                    border: `1px solid ${theme.iconCircleBorder}`,
+                    backgroundColor: theme.accentSubtle,
+                    color: theme.accent,
+                    fontFamily: theme.bodyFont,
+                    letterSpacing: '0.12em',
                   }}
-                >
-                  {item.icon ? <item.icon className="w-5 h-5 sm:w-6 sm:h-6" style={{ color: theme.iconColor }} /> :
-                  index === 0 ? <Heart className="w-5 h-5 sm:w-6 sm:h-6" style={{ color: theme.iconColor }} /> :
-                  index === 1 ? <Target className="w-5 h-5 sm:w-6 sm:h-6" style={{ color: theme.iconColor }} /> :
-                  index === 2 ? <Clock className="w-5 h-5 sm:w-6 sm:h-6" style={{ color: theme.iconColor }} /> :
-                  <Shield className="w-5 h-5 sm:w-6 sm:h-6" style={{ color: theme.iconColor }} />}
-                </div>
-
-                {/* Text — fills remaining space */}
-                <div className="flex-1 min-w-0">
-                  {EDITABLE_FIELDS.includes(`pagecontent_benefits_items_${index}_title`) ? (
-                    <EditableText
-                      fieldName={`pagecontent_benefits_items_${index}_title`}
-                      value={item.title}
-                      tag="h3"
-                      isEditMode={isTextEditMode || false}
-                editLabel={editLabel}
-                      onChange={handleTextChange}
-                      className="text-lg sm:text-xl font-bold mb-1.5 sm:mb-2 transition-colors"
-                      style={{
-                        fontFamily: theme.headingFont,
-                        color: theme.pageText,
-                      }}
-                    />
-                  ) : (
-                    <h3
-                      className="text-lg sm:text-xl font-bold mb-1.5 sm:mb-2 transition-colors"
-                      style={{
-                        fontFamily: theme.headingFont,
-                        color: theme.pageText,
-                      }}
-                    >
-                      {item.title}
-                    </h3>
-                  )}
-
-                  {EDITABLE_FIELDS.includes(`pagecontent_benefits_items_${index}_text`) ? (
-                    <EditableText
-                      fieldName={`pagecontent_benefits_items_${index}_text`}
-                      value={item.text}
-                      tag="p"
-                      isEditMode={isTextEditMode || false}
-                editLabel={editLabel}
-                      onChange={handleTextChange}
-                      className="text-sm sm:text-base leading-relaxed"
-                      style={{ color: theme.pageSubtext }}
-                      multiline={true}
-                    />
-                  ) : (
-                    <p className="text-sm sm:text-base leading-relaxed" style={{ color: theme.pageSubtext }}>
-                      {item.text}
-                    </p>
-                  )}
-                  {/* Accent bar */}
-                  <div
-                    className="w-10 h-1 mt-3 sm:mt-4 rounded-full"
-                    style={{ background: theme.dividerAccent }}
-                  ></div>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div className={`${LAYOUT.headingMb} text-center`} style={{ marginBottom: 0, marginTop: '2.5rem' }}>
-            <a
-              href="#signup"
-              className="inline-flex items-center justify-center px-6 sm:px-7 py-2.5 sm:py-3 rounded-full font-medium text-sm sm:text-base transition-all duration-300"
-              style={{
-                color: theme.secondaryText,
-                backgroundColor: theme.secondaryBg,
-                border: `1px solid ${theme.secondaryBorder}`,
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = theme.secondaryHoverBg;
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = theme.secondaryBg;
-              }}
-            >
-              {ui.learnMore}
-            </a>
-          </div>
-        </div>
-      </section>
-
-      {/* ================================================================ */}
-      {/* CONTENT PREVIEW SECTION                                          */}
-      {/* ================================================================ */}
-      <section
-        id="content"
-        className={`${LAYOUT.sectionPy} transition-all duration-700 ease-out
-          ${elements.content ? 'opacity-100' : 'opacity-0 translate-y-10'}`}
-        style={{ backgroundColor: theme.sectionAltBg }}
-      >
-        <div className={`mx-auto ${LAYOUT.px} ${LAYOUT.maxW}`}>
-          {/* Section header */}
-          <div className={`text-center max-w-3xl mx-auto ${LAYOUT.headingMb}`}>
-            <h2
-              className={`${LAYOUT.headingSize} font-bold`}
-              style={{ fontFamily: theme.headingFont, color: theme.pageText }}
-            >
-              {ui.contentSectionTitle}
-            </h2>
-          </div>
-
-          {/* Chapter cards */}
-          <div className={`grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 ${LAYOUT.gap}`}>
-            {pageContent.content.chapters.map((chapter, index) => (
-              <div
-                key={index}
-                className={`group ${LAYOUT.cardP} rounded-2xl transition-all duration-300 relative overflow-hidden`}
-                style={glassCard}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.borderColor = theme.cardHoverBorder;
-                  e.currentTarget.style.boxShadow = theme.cardHoverShadow;
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor = theme.cardBorder;
-                  e.currentTarget.style.boxShadow = theme.cardShadow;
-                }}
-              >
-                {/* Chapter number */}
-                <div
-                  className="font-bold text-4xl sm:text-5xl mb-5 sm:mb-7"
-                  style={{
-                    color: theme.chapterNumberColor,
-                    fontFamily: theme.headingFont,
-                    opacity: 0.7,
-                  }}
-                >
-                  {chapter.number}
-                </div>
-
-                {EDITABLE_FIELDS.includes(`pagecontent_content_chapters_${index}_title`) ? (
-                  <EditableText
-                    fieldName={`pagecontent_content_chapters_${index}_title`}
-                    value={chapter.title}
-                    tag="h3"
-                    isEditMode={isTextEditMode || false}
-                editLabel={editLabel}
-                    onChange={handleTextChange}
-                    className="text-lg sm:text-xl font-bold mb-2.5 sm:mb-3 transition-colors"
-                    style={{
-                      color: theme.pageText,
-                      fontFamily: theme.headingFont,
-                    }}
-                  />
-                ) : (
-                  <h3
-                    className="text-lg sm:text-xl font-bold mb-2.5 sm:mb-3 transition-colors"
-                    style={{
-                      color: theme.pageText,
-                      fontFamily: theme.headingFont,
-                    }}
-                  >
-                    {chapter.title}
-                  </h3>
-                )}
-
-                {EDITABLE_FIELDS.includes(`pagecontent_content_chapters_${index}_description`) ? (
-                  <EditableText
-                    fieldName={`pagecontent_content_chapters_${index}_description`}
-                    value={chapter.description}
-                    tag="p"
-                    isEditMode={isTextEditMode || false}
-                editLabel={editLabel}
-                    onChange={handleTextChange}
-                    className="text-sm sm:text-base mb-4 sm:mb-5 leading-relaxed"
-                    style={{ color: theme.pageSubtext }}
-                    multiline={true}
-                  />
-                ) : (
-                  <p className="text-sm sm:text-base mb-4 sm:mb-5 leading-relaxed" style={{ color: theme.pageSubtext }}>
-                    {chapter.description}
-                  </p>
-                )}
-                <div className="w-9 sm:w-11 h-1 rounded-full" style={{ background: theme.dividerAccent }}></div>
-              </div>
-            ))}
-          </div>
-
-          {/* TOC — full chapter list, prominent design */}
-          {ebookMeta && ebookMeta.chapters.length > 0 && (
-            <div className="mt-10 sm:mt-14">
-              <button
-                onClick={() => setTocOpen(prev => !prev)}
-                className="w-full flex items-center justify-between px-6 sm:px-8 py-4 sm:py-5 rounded-2xl text-left transition-all"
-                style={{
-                  border: `1px solid ${tocOpen ? theme.accent : theme.cardBorder}`,
-                  backgroundColor: theme.cardBg,
-                  boxShadow: theme.cardShadow,
-                  backdropFilter: 'blur(12px)',
-                  WebkitBackdropFilter: 'blur(12px)',
-                }}
-              >
-                <div className="flex items-center gap-3">
-                  <BookOpen className="w-5 h-5" style={{ color: theme.accent }} />
-                  <span className="text-sm sm:text-base font-semibold" style={{ color: theme.pageText }}>
-                    {ui.tocToggleLabel(ebookMeta.chapters.length)}
-                  </span>
-                </div>
-                <ChevronDown
-                  className={`w-5 h-5 transition-transform duration-300 ${tocOpen ? 'rotate-180' : ''}`}
-                  style={{ color: theme.accent }}
                 />
-              </button>
 
-              <div className={`overflow-hidden transition-all duration-300 ease-in-out ${tocOpen ? 'max-h-[800px]' : 'max-h-0'}`}>
-                <div
-                  className="border border-t-0 rounded-b-2xl"
-                  style={{ borderColor: tocOpen ? theme.accent : theme.cardBorder, backgroundColor: theme.cardBg }}
-                >
-                  {ebookMeta.chapters.map((ch, idx) => (
-                    <div
-                      key={ch.position}
-                      className="flex gap-4 px-6 sm:px-8 py-4 sm:py-5"
-                      style={{ borderTop: idx > 0 ? `1px solid ${theme.divider}` : 'none' }}
-                    >
-                      <span
-                        className="text-xs font-bold w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5"
-                        style={{ backgroundColor: theme.accentSubtle, color: theme.accent }}
-                      >
-                        {String(ch.position).padStart(2, '0')}
-                      </span>
-                      <div>
-                        <p className="text-sm sm:text-base font-semibold" style={{ color: theme.pageText }}>{ch.title}</p>
-                        {ch.preview && (
-                          <p className="text-xs sm:text-sm mt-1.5 leading-relaxed" style={{ color: theme.pageSubtext }}>{ch.preview}</p>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                {/* Headline — główna obietnica */}
+                <EditableText
+                  fieldName="promise.headline"
+                  value={pageContent.promise.headline ?? ''}
+                  tag="h2"
+                  isEditMode={isTextEditMode || false}
+                  editLabel={editLabel}
+                  editedLabel={editedLabel}
+                  onChange={handleTextChange}
+                  maxLength={200}
+                  className="text-3xl sm:text-4xl lg:text-5xl font-extrabold leading-tight tracking-tight"
+                  style={{
+                    color: theme.pageText,
+                    fontFamily: theme.headingFont,
+                  }}
+                />
+              </div>
+
+              {/* Prawa kolumna — text z pionową linią po lewej (na desktopie) */}
+              <div
+                className="lg:pl-12 xl:pl-16 lg:border-l flex items-center"
+                style={{
+                  borderLeftColor: theme.divider,
+                }}
+              >
+                <EditableText
+                  fieldName="promise.text"
+                  value={pageContent.promise.text ?? ''}
+                  tag="p"
+                  isEditMode={isTextEditMode || false}
+                  editLabel={editLabel}
+                  editedLabel={editedLabel}
+                  onChange={handleTextChange}
+                  multiline={true}
+                  maxLength={600}
+                  className="text-base sm:text-lg lg:text-xl leading-relaxed font-light"
+                  style={{
+                    color: theme.pageSubtext,
+                    fontFamily: theme.bodyFont,
+                  }}
+                />
               </div>
             </div>
-          )}
-        </div>
-      </section>
+
+            {/* ═══ BOTTOM — 3 outcomes vertical stack (jeden pod drugim) ═ */}
+            {/* Outcomes to KOŃCOWE REZULTATY (po przeczytaniu e-booka):  */}
+            {/* krótkie, mocne, bez kotwicy czasowej i dwukropków.        */}
+            {/* Vs content section niżej — która pokazuje DROGĘ do nich.  */}
+            {Array.isArray(pageContent.promise.outcomes) && (
+              <div className="space-y-3 sm:space-y-4">
+                {pageContent.promise.outcomes.map((outcome, i) => (
+                  <div
+                    key={i}
+                    className="rounded-2xl px-6 sm:px-7 py-5 sm:py-6 flex items-center gap-5 sm:gap-6 transition-all duration-300"
+                    style={{
+                      backgroundColor: theme.accentSubtle,
+                      border: `1px solid ${theme.cardBorder}`,
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.borderColor = theme.accent;
+                      e.currentTarget.style.transform = 'translateX(4px)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.borderColor = theme.cardBorder;
+                      e.currentTarget.style.transform = 'translateX(0)';
+                    }}
+                  >
+                    {/* Ikona wzrost/sukces — uniwersalny symbol końcowego rezultatu */}
+                    <div
+                      className="w-12 h-12 sm:w-14 sm:h-14 rounded-full flex items-center justify-center flex-shrink-0"
+                      style={{
+                        backgroundColor: theme.pageBg,
+                        border: `1.5px solid ${theme.accent}`,
+                      }}
+                    >
+                      <TrendingUp
+                        className="w-5 h-5 sm:w-6 sm:h-6"
+                        style={{ color: theme.accent }}
+                        strokeWidth={2.25}
+                      />
+                    </div>
+
+                    {/* Outcome text */}
+                    <div className="flex-1 min-w-0">
+                      <EditableText
+                        fieldName={`promise.outcomes.${i}`}
+                        value={outcome ?? ''}
+                        tag="p"
+                        isEditMode={isTextEditMode || false}
+                        editLabel={editLabel}
+                        editedLabel={editedLabel}
+                        onChange={handleTextChange}
+                        multiline={false}
+                        maxLength={150}
+                        className="text-base sm:text-lg lg:text-xl leading-snug font-semibold"
+                        style={{
+                          color: theme.pageText,
+                          fontFamily: theme.headingFont,
+                        }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+          </div>
+        </section>
+      )}
 
       {/* ================================================================ */}
-      {/* FORM SECTION                                                     */}
+      {/* BENEFITS SECTION — 6-8 konkretnych narzędzi/metod                  */}
       {/* ================================================================ */}
+      {/* Single column, każdy item to glass card z ikoną z whitelisty +    */}
+      {/* tytułem (konkretna rzecz) + tekstem (mechanizm + rezultat).        */}
+      {/* Vs problem (ból) — tu perspektywa REZULTATU, co czytelnik MA.      */}
+      {pageContent.benefits && (
+        <section
+          id="benefits"
+          className={`${LAYOUT.sectionPy} transition-all duration-700 ease-out
+            ${elements.benefits ? 'opacity-100' : 'opacity-0 translate-y-10'}`}
+        >
+          <div className={`mx-auto ${LAYOUT.px} ${LAYOUT.maxW}`}>
+            {/* Header — headline + subheadline, oba edytowalne */}
+            <div className={`text-center max-w-3xl mx-auto ${LAYOUT.headingMb}`}>
+              <EditableText
+                fieldName="benefits.headline"
+                value={pageContent.benefits.headline ?? ''}
+                tag="h2"
+                isEditMode={isTextEditMode || false}
+                editLabel={editLabel}
+                editedLabel={editedLabel}
+                onChange={handleTextChange}
+                maxLength={150}
+                className={`${LAYOUT.headingSize} font-bold mb-3 sm:mb-4 leading-tight tracking-tight`}
+                style={{ fontFamily: theme.headingFont, color: theme.pageText }}
+              />
+              {pageContent.benefits.subheadline && (
+                <EditableText
+                  fieldName="benefits.subheadline"
+                  value={pageContent.benefits.subheadline}
+                  tag="p"
+                  isEditMode={isTextEditMode || false}
+                  editLabel={editLabel}
+                  editedLabel={editedLabel}
+                  onChange={handleTextChange}
+                  multiline={true}
+                  maxLength={250}
+                  className="text-base sm:text-lg leading-relaxed font-light"
+                  style={{ color: theme.pageSubtext, fontFamily: theme.bodyFont }}
+                />
+              )}
+            </div>
+
+            {/* Items — single column, glass cards */}
+            <div className={`flex flex-col ${LAYOUT.gap}`}>
+              {(pageContent.benefits.items ?? []).map((item, index) => {
+                // Resolve ikonę z mappingu — fallback gdy string nie pasuje
+                const IconComponent = BENEFIT_ICON_MAP[item.icon] ?? FALLBACK_BENEFIT_ICON;
+
+                return (
+                  <div
+                    key={index}
+                    className={`group ${LAYOUT.cardP} rounded-2xl transition-all duration-300 flex items-start gap-5 sm:gap-6`}
+                    style={glassCard}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.borderColor = theme.cardHoverBorder;
+                      e.currentTarget.style.boxShadow = theme.cardHoverShadow;
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.borderColor = theme.cardBorder;
+                      e.currentTarget.style.boxShadow = theme.cardShadow;
+                    }}
+                  >
+                    {/* Icon — z whitelisty (lucide), dobrana semantycznie przez AI */}
+                    <div
+                      className="w-11 h-11 sm:w-13 sm:h-13 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5"
+                      style={{
+                        backgroundColor: theme.iconCircleBg,
+                        border: `1px solid ${theme.iconCircleBorder}`,
+                      }}
+                    >
+                      <IconComponent
+                        className="w-5 h-5 sm:w-6 sm:h-6"
+                        style={{ color: theme.iconColor }}
+                      />
+                    </div>
+
+                    {/* Title + text */}
+                    <div className="flex-1 min-w-0">
+                      <EditableText
+                        fieldName={`benefits.items.${index}.title`}
+                        value={item.title ?? ''}
+                        tag="h3"
+                        isEditMode={isTextEditMode || false}
+                        editLabel={editLabel}
+                        editedLabel={editedLabel}
+                        onChange={handleTextChange}
+                        maxLength={120}
+                        className="text-lg sm:text-xl font-bold mb-1.5 sm:mb-2 transition-colors leading-snug"
+                        style={{
+                          fontFamily: theme.headingFont,
+                          color: theme.pageText,
+                        }}
+                      />
+                      <EditableText
+                        fieldName={`benefits.items.${index}.text`}
+                        value={item.text ?? ''}
+                        tag="p"
+                        isEditMode={isTextEditMode || false}
+                        editLabel={editLabel}
+                        editedLabel={editedLabel}
+                        onChange={handleTextChange}
+                        multiline={true}
+                        maxLength={400}
+                        className="text-sm sm:text-base leading-relaxed"
+                        style={{ color: theme.pageSubtext, fontFamily: theme.bodyFont }}
+                      />
+                      {/* Accent bar */}
+                      <div
+                        className="w-10 h-1 mt-3 sm:mt-4 rounded-full"
+                        style={{ background: theme.dividerAccent }}
+                        aria-hidden="true"
+                      ></div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Secondary CTA pod listą benefits */}
+            <div className={`${LAYOUT.headingMb} text-center`} style={{ marginBottom: 0, marginTop: '2.5rem' }}>
+              <a
+                href="#signup"
+                className="inline-flex items-center justify-center px-6 sm:px-7 py-2.5 sm:py-3 rounded-full font-medium text-sm sm:text-base transition-all duration-300"
+                style={{
+                  color: theme.secondaryText,
+                  backgroundColor: theme.secondaryBg,
+                  border: `1px solid ${theme.secondaryBorder}`,
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = theme.secondaryHoverBg;
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = theme.secondaryBg;
+                }}
+              >
+                {ui.learnMore}
+              </a>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* ================================================================ */}
+      {/* CONTENT SECTION — 4 WIIFM milestones + TOC e-booka                 */}
+      {/* ================================================================ */}
+      {/* WIIFM = What's In It For Me — 4 wymiary korzyści dla czytelnika.  */}
+      {/* Vs benefits (narzędzia/metody), tu osobiste konsekwencje:         */}
+      {/* czas / spokój / pieniądze / status / energia / wolność etc.       */}
+      {/* TOC pod spodem — real chapters z ebooka (dane spoza pageContent). */}
+      {(pageContent.content || (ebookMeta && ebookMeta.chapters.length > 0)) && (
+        <section
+          id="content"
+          className={`${LAYOUT.sectionPy} transition-all duration-700 ease-out
+            ${elements.content ? 'opacity-100' : 'opacity-0 translate-y-10'}`}
+          style={{ backgroundColor: theme.sectionAltBg }}
+        >
+          <div className={`mx-auto ${LAYOUT.px} ${LAYOUT.maxW}`}>
+
+            {/* ─── WIIFM milestones (top) ─────────────────────────────── */}
+            {pageContent.content && (
+              <>
+                {/* Header — headline + subheadline */}
+                <div className={`text-center ${LAYOUT.headingMb}`}>
+                  <EditableText
+                    fieldName="content.headline"
+                    value={pageContent.content.headline ?? ''}
+                    tag="h2"
+                    isEditMode={isTextEditMode || false}
+                    editLabel={editLabel}
+                    editedLabel={editedLabel}
+                    onChange={handleTextChange}
+                    maxLength={150}
+                    className={`${LAYOUT.headingSize} font-bold mb-3 sm:mb-4 leading-tight tracking-tight`}
+                    style={{ fontFamily: theme.headingFont, color: theme.pageText }}
+                  />
+                  {pageContent.content.subheadline && (
+                    <EditableText
+                      fieldName="content.subheadline"
+                      value={pageContent.content.subheadline}
+                      tag="p"
+                      isEditMode={isTextEditMode || false}
+                      editLabel={editLabel}
+                      editedLabel={editedLabel}
+                      onChange={handleTextChange}
+                      multiline={true}
+                      maxLength={250}
+                      className="text-base sm:text-lg leading-relaxed font-light max-w-2xl mx-auto"
+                      style={{ color: theme.pageSubtext, fontFamily: theme.bodyFont }}
+                    />
+                  )}
+                </div>
+
+                {/* 4 milestones — editorial 2-col grid, accent bar storytelling */}
+                {Array.isArray(pageContent.content.items) && pageContent.content.items.length > 0 && (
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-12 lg:gap-x-16 gap-y-10 sm:gap-y-12">
+                    {pageContent.content.items.map((item, i) => (
+                      <article
+                        key={i}
+                        className="relative pl-5 sm:pl-6"
+                      >
+                        {/* Lewy pionowy pasek akcent — kotwica wizualna */}
+                        <div
+                          className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-full"
+                          style={{ background: theme.dividerAccent, opacity: 0.7 }}
+                          aria-hidden="true"
+                        ></div>
+
+                        {/* Title — co czytelnik MA / przestaje / zaczyna */}
+                        <EditableText
+                          fieldName={`content.items.${i}.title`}
+                          value={item.title ?? ''}
+                          tag="h3"
+                          isEditMode={isTextEditMode || false}
+                          editLabel={editLabel}
+                          editedLabel={editedLabel}
+                          onChange={handleTextChange}
+                          maxLength={120}
+                          className="text-xl sm:text-2xl lg:text-[1.625rem] font-bold mb-3 sm:mb-4 leading-tight tracking-tight"
+                          style={{
+                            color: theme.pageText,
+                            fontFamily: theme.headingFont,
+                          }}
+                        />
+
+                        {/* Text — dlaczego to dla CIEBIE dobre, deklaratywnie */}
+                        <EditableText
+                          fieldName={`content.items.${i}.text`}
+                          value={item.text ?? ''}
+                          tag="p"
+                          isEditMode={isTextEditMode || false}
+                          editLabel={editLabel}
+                          editedLabel={editedLabel}
+                          onChange={handleTextChange}
+                          multiline={true}
+                          maxLength={300}
+                          className="text-base sm:text-lg leading-relaxed"
+                          style={{
+                            color: theme.pageSubtext,
+                            fontFamily: theme.bodyFont,
+                          }}
+                        />
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* ─── TOC accordion (bottom) — real chapters z ebooka ────── */}
+            {ebookMeta && ebookMeta.chapters.length > 0 && (
+              <div className={`${pageContent.content ? 'mt-12 sm:mt-16' : ''}`}>
+                <button
+                  onClick={() => setTocOpen(prev => !prev)}
+                  className="w-full flex items-center justify-between px-6 sm:px-8 py-4 sm:py-5 rounded-2xl text-left transition-all cursor-pointer"
+                  style={{
+                    border: `1px solid ${tocOpen ? theme.accent : theme.cardBorder}`,
+                    backgroundColor: theme.cardBg,
+                    boxShadow: theme.cardShadow,
+                    backdropFilter: 'blur(12px)',
+                    WebkitBackdropFilter: 'blur(12px)',
+                  }}
+                >
+                  <div className="flex items-center gap-3">
+                    <BookOpen className="w-5 h-5" style={{ color: theme.accent }} />
+                    <span className="text-sm sm:text-base font-semibold" style={{ color: theme.pageText }}>
+                      {ui.tocToggleLabel(ebookMeta.chapters.length)}
+                    </span>
+                  </div>
+                  <ChevronDown
+                    className={`w-5 h-5 transition-transform duration-300 ${tocOpen ? 'rotate-180' : ''}`}
+                    style={{ color: theme.accent }}
+                  />
+                </button>
+
+                <div className={`overflow-hidden transition-all duration-500 ease-in-out ${tocOpen ? 'max-h-[5000px]' : 'max-h-0'}`}>
+                  <div
+                    className="border border-t-0 rounded-b-2xl"
+                    style={{ borderColor: tocOpen ? theme.accent : theme.cardBorder, backgroundColor: theme.cardBg }}
+                  >
+                    {ebookMeta.chapters.map((ch, idx) => (
+                      <div
+                        key={ch.position}
+                        className="flex gap-4 px-6 sm:px-8 py-4 sm:py-5"
+                        style={{ borderTop: idx > 0 ? `1px solid ${theme.divider}` : 'none' }}
+                      >
+                        <span
+                          className="text-xs font-bold w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5"
+                          style={{ backgroundColor: theme.accentSubtle, color: theme.accent }}
+                        >
+                          {String(ch.position).padStart(2, '0')}
+                        </span>
+                        <div>
+                          <p className="text-sm sm:text-base font-semibold" style={{ color: theme.pageText }}>{ch.title}</p>
+                          {ch.preview && (
+                            <p className="text-xs sm:text-sm mt-1.5 leading-relaxed" style={{ color: theme.pageSubtext }}>{ch.preview}</p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+          </div>
+        </section>
+      )}
+
+      {/* ================================================================ */}
+      {/* FAQ SECTION — 7-9 obiekcji psychologicznych                       */}
+      {/* ================================================================ */}
+      {/* "Czy warto?" + "Czy dam radę?" — empatyczne 3-częściowe odpowiedzi */}
+      {pageContent.faq && (
+        <section
+          id="faq"
+          className={`${LAYOUT.sectionPy} transition-all duration-700 ease-out
+            ${elements.faq ? 'opacity-100' : 'opacity-0 translate-y-10'}`}
+          style={{ backgroundColor: theme.sectionAltBg }}
+        >
+          <div className={`mx-auto ${LAYOUT.px} ${LAYOUT.maxW}`}>
+            {/* Subtelna linia podziału — separacja FAQ od poprzedniej sekcji */}
+            <div
+              className="mx-auto h-px mb-12 sm:mb-16 max-w-md"
+              style={{ background: theme.dividerAccent, opacity: 0.35 }}
+              aria-hidden="true"
+            ></div>
+
+            {/* Headline edytowalny — z bazy, nie hard-coded */}
+            <EditableText
+              fieldName="faq.headline"
+              value={pageContent.faq.headline ?? ''}
+              tag="h2"
+              isEditMode={isTextEditMode || false}
+              editLabel={editLabel}
+              editedLabel={editedLabel}
+              onChange={handleTextChange}
+              maxLength={100}
+              className={`${LAYOUT.headingSize} font-bold text-center ${LAYOUT.headingMb} leading-tight tracking-tight`}
+              style={{ fontFamily: theme.headingFont, color: theme.pageText }}
+            />
+
+            {/* Lista pytań/odpowiedzi — accordion */}
+            <div
+              className={`rounded-2xl ${LAYOUT.cardP}`}
+              style={{
+                backgroundColor: theme.faqBg,
+                border: `1px solid ${theme.faqBorder}`,
+                boxShadow: theme.cardShadow,
+                backdropFilter: 'blur(12px)',
+                WebkitBackdropFilter: 'blur(12px)',
+              }}
+            >
+              {(pageContent.faq.items ?? []).map((item, index) => (
+                <FaqItem
+                  key={index}
+                  question={item.question ?? ''}
+                  answer={item.answer ?? ''}
+                  theme={theme}
+                  isTextEditMode={isTextEditMode}
+                  onTextUpdate={onTextUpdate}
+                  questionFieldName={`faq.items.${index}.question`}
+                  answerFieldName={`faq.items.${index}.answer`}
+                  editLabel={editLabel}
+                  editedLabel={editedLabel}
+                />
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* ================================================================ */}
+      {/* FORM SECTION — final push to convert                              */}
+      {/* ================================================================ */}
+      {/* Single-column centered. Po obejrzeniu całej strony czytelnik wie  */}
+      {/* już wszystko — formularz ma być prosty, mało wizualnego szumu.   */}
       <section
         id="signup"
         className={`${LAYOUT.sectionPy} transition-all duration-700 ease-out
           ${elements.signup ? 'opacity-100' : 'opacity-0 translate-y-10'}`}
       >
-        {/* Banner with form title */}
+        {/* Banner — edytowalny headline + subheadline z bazy */}
         <div
-          className="py-5 sm:py-7 mb-8 sm:mb-12"
+          className="py-7 sm:py-10 mb-8 sm:mb-12"
           style={{
             background: theme.formBannerBg,
             borderTop: `1px solid ${theme.divider}`,
             borderBottom: `1px solid ${theme.divider}`,
           }}
         >
-          <div className={`mx-auto ${LAYOUT.px} text-center`}>
-            {EDITABLE_FIELDS.includes("pagecontent_form_title") ? (
+          <div className={`mx-auto ${LAYOUT.px} ${LAYOUT.maxW} text-center`}>
+            <EditableText
+              fieldName="form.headline"
+              value={pageContent.form?.headline ?? ''}
+              tag="h2"
+              isEditMode={isTextEditMode || false}
+              editLabel={editLabel}
+              editedLabel={editedLabel}
+              onChange={handleTextChange}
+              maxLength={200}
+              className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-extrabold mb-3 sm:mb-4 leading-tight tracking-tight"
+              style={{ fontFamily: theme.headingFont, color: theme.formBannerText }}
+            />
+            {pageContent.form?.subheadline && (
               <EditableText
-                fieldName="pagecontent_form_title"
-                value={pageContent.form.title}
-                tag="h2"
+                fieldName="form.subheadline"
+                value={pageContent.form.subheadline}
+                tag="p"
                 isEditMode={isTextEditMode || false}
                 editLabel={editLabel}
+                editedLabel={editedLabel}
                 onChange={handleTextChange}
-                className="text-xl sm:text-2xl md:text-3xl font-bold"
-                style={{ fontFamily: theme.headingFont, color: theme.formBannerText }}
+                multiline={true}
+                maxLength={250}
+                className="text-base sm:text-lg lg:text-xl leading-relaxed font-light"
+                style={{ color: theme.formBannerText, opacity: 0.85 }}
               />
-            ) : (
-              <h2
-                className="text-xl sm:text-2xl md:text-3xl font-bold"
-                style={{ fontFamily: theme.headingFont, color: theme.formBannerText }}
-              >
-                {pageContent.form.title}
-              </h2>
             )}
-            {isPreviewMode && <span className="ml-2 opacity-75 text-base" style={{ color: theme.formBannerText }}>{ui.previewMode}</span>}
+            {isPreviewMode && (
+              <span className="ml-2 opacity-75 text-base block mt-2" style={{ color: theme.formBannerText }}>
+                {ui.previewMode}
+              </span>
+            )}
           </div>
         </div>
 
-        <div className={`mx-auto ${LAYOUT.px} ${LAYOUT.maxW}`}>
+        {/* Form card — centered, max-w-2xl, single-column */}
+        <div className={`mx-auto ${LAYOUT.px}`}>
           <div
-            className={`${LAYOUT.cardP} md:p-9 rounded-2xl relative`}
+            className={`${LAYOUT.cardP} md:p-9 rounded-2xl relative max-w-2xl mx-auto`}
             style={{
               backgroundColor: theme.cardBg,
               border: `2px solid ${theme.cardBorder}`,
@@ -1641,239 +2393,141 @@ const DemoView: React.FC<DemoViewProps> = ({
             </div>
 
             {!submitted ? (
-              <div className={`grid grid-cols-1 md:grid-cols-5 ${LAYOUT.gap} md:gap-9`}>
-                {/* Left side — info */}
-                <div className="md:col-span-2">
-                  <div className="h-full flex flex-col justify-center">
-                    <div className="flex items-center mb-4 sm:mb-5">
-                      <div
-                        className="w-9 h-9 sm:w-11 sm:h-11 rounded-full flex items-center justify-center mr-3"
-                        style={{
-                          backgroundColor: theme.iconCircleBg,
-                          border: `1px solid ${theme.iconCircleBorder}`,
-                        }}
-                      >
-                        <BookOpen className="w-4 h-4 sm:w-6 sm:h-6" style={{ color: theme.iconColor }} />
-                      </div>
-                      <h3
-                        className="text-lg sm:text-xl font-bold"
-                        style={{ fontFamily: theme.headingFont, color: theme.pageText }}
-                      >
-                        {ui.formLeftTitle}
-                      </h3>
-                    </div>
-                    <p className="text-sm sm:text-base mb-5 sm:mb-7 leading-relaxed" style={{ color: theme.pageSubtext }}>
-                      {ui.formLeftText}
-                    </p>
-
-                    {/* Trust badges — hidden on mobile, shown from MD up */}
-                    <div className="mt-auto hidden md:block">
-                      <p className="text-xs mb-3 font-semibold uppercase tracking-wider" style={{ color: theme.pageSubtext }}>
-                        {ui.guaranteeLabel}
-                      </p>
-                      <div className="space-y-2.5">
-                        <div
-                          className="flex items-center text-xs px-3 py-2 rounded-full"
-                          style={{
-                            backgroundColor: theme.trustBg,
-                            border: `1px solid ${theme.trustBorder}`,
-                            color: theme.trustText,
-                          }}
-                        >
-                          <Shield className="w-3.5 h-3.5 mr-2" style={{ color: theme.iconColor }} />
-                          {ui.guaranteeSafe}
-                        </div>
-                        <div
-                          className="flex items-center text-xs px-3 py-2 rounded-full"
-                          style={{
-                            backgroundColor: theme.trustBg,
-                            border: `1px solid ${theme.trustBorder}`,
-                            color: theme.trustText,
-                          }}
-                        >
-                          <CheckCircle className="w-3.5 h-3.5 mr-2" style={{ color: theme.iconColor }} />
-                          {ui.guaranteeNoSpam}
-                        </div>
-                        <div
-                          className="flex items-center text-xs px-3 py-2 rounded-full"
-                          style={{
-                            backgroundColor: theme.trustBg,
-                            border: `1px solid ${theme.trustBorder}`,
-                            color: theme.trustText,
-                          }}
-                        >
-                          <BookOpen className="w-3.5 h-3.5 mr-2" style={{ color: theme.iconColor }} />
-                          {ui.guaranteePdf}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+              <form onSubmit={handleSubmit} className="space-y-5 sm:space-y-6">
+                {/* Name */}
+                <div>
+                  <label htmlFor="name" className="block text-xs sm:text-sm font-medium mb-1.5" style={{ color: theme.labelText }}>
+                    {ui.nameLabel}
+                  </label>
+                  <input
+                    id="name"
+                    type="text"
+                    placeholder={ui.namePlaceholder}
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    required
+                    disabled={isPreviewMode || isSubmitting}
+                    className={`w-full px-4 py-3 text-sm sm:text-base border-2 rounded-lg focus:outline-none transition-all ${(isPreviewMode) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    style={getInputStyle('name')}
+                    onFocus={() => setFocusedInput('name')}
+                    onBlur={() => setFocusedInput(null)}
+                  />
                 </div>
 
-                {/* Right side — form */}
-                <div className="md:col-span-3">
-                  <form onSubmit={handleSubmit} className="space-y-5 sm:space-y-6">
-                    {/* Name */}
-                    <div>
-                      <label htmlFor="name" className="block text-xs sm:text-sm font-medium mb-1.5" style={{ color: theme.labelText }}>
-                        {ui.nameLabel}
-                      </label>
-                      <input
-                        id="name"
-                        type="text"
-                        placeholder={ui.namePlaceholder}
-                        value={name}
-                        onChange={(e) => setName(e.target.value)}
-                        required
-                        disabled={isPreviewMode || isSubmitting}
-                        className={`w-full px-4 py-3 text-sm sm:text-base border-2 rounded-lg focus:outline-none transition-all ${(isPreviewMode) ? 'opacity-50 cursor-not-allowed' : ''}`}
-                        style={getInputStyle('name')}
-                        onFocus={() => setFocusedInput('name')}
-                        onBlur={() => setFocusedInput(null)}
-                      />
-                    </div>
-
-                    {/* Email */}
-                    <div>
-                      <label htmlFor="email" className="block text-xs sm:text-sm font-medium mb-1.5" style={{ color: theme.labelText }}>
-                        {ui.emailLabel}
-                      </label>
-                      <input
-                        id="email"
-                        type="email"
-                        placeholder={ui.emailPlaceholder}
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        required
-                        disabled={isPreviewMode || isSubmitting}
-                        className={`w-full px-4 py-3 text-sm sm:text-base border-2 rounded-lg focus:outline-none transition-all ${(isPreviewMode) ? 'opacity-50 cursor-not-allowed' : ''}`}
-                        style={getInputStyle('email')}
-                        onFocus={() => setFocusedInput('email')}
-                        onBlur={() => setFocusedInput(null)}
-                      />
-                    </div>
-
-                    {/* Phone */}
-                    <div>
-                      <label htmlFor="phone" className="block text-xs sm:text-sm font-medium mb-1.5" style={{ color: theme.labelText }}>
-                        {ui.phoneLabel}
-                      </label>
-                      <input
-                        id="phone"
-                        type="tel"
-                        placeholder={ui.phonePlaceholder}
-                        value={phone}
-                        onChange={(e) => setPhone(e.target.value)}
-                        disabled={isPreviewMode || isSubmitting}
-                        className={`w-full px-4 py-3 text-sm sm:text-base border-2 rounded-lg focus:outline-none transition-all ${(isPreviewMode) ? 'opacity-50 cursor-not-allowed' : ''}`}
-                        style={getInputStyle('phone')}
-                        onFocus={() => setFocusedInput('phone')}
-                        onBlur={() => setFocusedInput(null)}
-                      />
-                    </div>
-
-                    {/* Submit button */}
-                    <button
-                      type="submit"
-                      disabled={isPreviewMode || isSubmitting}
-                      className={`w-full font-bold py-3.5 sm:py-4 px-5 sm:px-6 text-sm sm:text-base rounded-lg transition-all transform hover:scale-[1.02] ${(isPreviewMode || isSubmitting) ? 'opacity-50 cursor-not-allowed' : ''}`}
-                      style={{
-                        background: theme.ctaBg,
-                        color: theme.ctaText,
-                        boxShadow: theme.ctaShadow,
-                      }}
-                    >
-                      {isSubmitting ? (
-                        <>
-                          <span
-                            className="inline-block w-4 h-4 border-2 border-t-transparent rounded-full animate-spin mr-2"
-                            style={{ borderColor: theme.spinnerBorder, borderTopColor: 'transparent' }}
-                          ></span>
-                          {ui.sending}
-                        </>
-                      ) : isPreviewMode ? (
-                        ui.previewUnavailable
-                      ) : (
-                        ui.formSubmitBtn
-                      )}
-                    </button>
-
-                    {/* Error display */}
-                    {submitError && (
-                      <div
-                        className="text-sm text-center mt-2 p-3 rounded-lg"
-                        style={{
-                          backgroundColor: theme.errorBg,
-                          border: `1px solid ${theme.errorBorder}`,
-                          color: theme.errorText,
-                        }}
-                      >
-                        {submitError}
-                      </div>
-                    )}
-
-                    {/* Preview mode notice */}
-                    {isPreviewMode && (
-                      <div
-                        className="text-xs text-center mt-2 p-3 rounded-lg"
-                        style={{
-                          backgroundColor: theme.warningBg,
-                          border: `1px solid ${theme.warningBorder}`,
-                          color: theme.warningText,
-                        }}
-                      >
-                        {ui.previewFormNote}
-                      </div>
-                    )}
-
-                    <p className="text-xs text-center mt-4" style={{ color: theme.pageSubtext }}>
-                      {ui.privacyText}
-                    </p>
-                  </form>
-
-                  {/* Trust badges — mobile only */}
-                  <div className="mt-7 block md:hidden">
-                    <p className="text-xs mb-2.5 font-semibold uppercase tracking-wider" style={{ color: theme.pageSubtext }}>
-                      {ui.guaranteeLabel}
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      <div
-                        className="flex items-center text-xs px-2.5 py-1.5 rounded-full"
-                        style={{
-                          backgroundColor: theme.trustBg,
-                          border: `1px solid ${theme.trustBorder}`,
-                          color: theme.trustText,
-                        }}
-                      >
-                        <Shield className="w-3 h-3 mr-1.5" style={{ color: theme.iconColor }} />
-                        {ui.guaranteeSafe}
-                      </div>
-                      <div
-                        className="flex items-center text-xs px-2.5 py-1.5 rounded-full"
-                        style={{
-                          backgroundColor: theme.trustBg,
-                          border: `1px solid ${theme.trustBorder}`,
-                          color: theme.trustText,
-                        }}
-                      >
-                        <CheckCircle className="w-3 h-3 mr-1.5" style={{ color: theme.iconColor }} />
-                        {ui.guaranteeNoSpam}
-                      </div>
-                      <div
-                        className="flex items-center text-xs px-2.5 py-1.5 rounded-full"
-                        style={{
-                          backgroundColor: theme.trustBg,
-                          border: `1px solid ${theme.trustBorder}`,
-                          color: theme.trustText,
-                        }}
-                      >
-                        <BookOpen className="w-3 h-3 mr-1.5" style={{ color: theme.iconColor }} />
-                        {ui.guaranteePdf}
-                      </div>
-                    </div>
-                  </div>
+                {/* Email */}
+                <div>
+                  <label htmlFor="email" className="block text-xs sm:text-sm font-medium mb-1.5" style={{ color: theme.labelText }}>
+                    {ui.emailLabel}
+                  </label>
+                  <input
+                    id="email"
+                    type="email"
+                    placeholder={ui.emailPlaceholder}
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                    disabled={isPreviewMode || isSubmitting}
+                    className={`w-full px-4 py-3 text-sm sm:text-base border-2 rounded-lg focus:outline-none transition-all ${(isPreviewMode) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    style={getInputStyle('email')}
+                    onFocus={() => setFocusedInput('email')}
+                    onBlur={() => setFocusedInput(null)}
+                  />
                 </div>
-              </div>
+
+                {/* Phone — OPCJONALNE (brak required) */}
+                <div>
+                  <label htmlFor="phone" className="block text-xs sm:text-sm font-medium mb-1.5" style={{ color: theme.labelText }}>
+                    {ui.phoneLabel}
+                    <span className="ml-1.5 font-normal opacity-60">
+                      ({isEN ? 'optional' : 'opcjonalnie'})
+                    </span>
+                  </label>
+                  <input
+                    id="phone"
+                    type="tel"
+                    placeholder={ui.phonePlaceholder}
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    disabled={isPreviewMode || isSubmitting}
+                    className={`w-full px-4 py-3 text-sm sm:text-base border-2 rounded-lg focus:outline-none transition-all ${(isPreviewMode) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    style={getInputStyle('phone')}
+                    onFocus={() => setFocusedInput('phone')}
+                    onBlur={() => setFocusedInput(null)}
+                  />
+                </div>
+
+                {/* Submit button — text z form.cta (edytowalny) */}
+                <button
+                  type="submit"
+                  disabled={isPreviewMode || isSubmitting}
+                  className={`w-full py-3.5 sm:py-4 rounded-lg font-bold text-sm sm:text-base transition-all flex items-center justify-center ${
+                    (isPreviewMode || isSubmitting) ? 'opacity-50 cursor-not-allowed' : 'hover:scale-[1.02]'
+                  }`}
+                  style={{
+                    background: theme.ctaBg,
+                    color: theme.ctaText,
+                    boxShadow: theme.ctaShadow,
+                  }}
+                >
+                  {isSubmitting ? (
+                    <>
+                      <span
+                        className="inline-block w-4 h-4 border-2 border-t-transparent rounded-full animate-spin mr-2"
+                        style={{ borderColor: theme.spinnerBorder, borderTopColor: 'transparent' }}
+                      ></span>
+                      {ui.sending}
+                    </>
+                  ) : isPreviewMode ? (
+                    ui.previewUnavailable
+                  ) : (
+                    pageContent.form?.cta || ui.formSubmitBtn
+                  )}
+                </button>
+
+                {/* Error display */}
+                {submitError && (
+                  <div
+                    className="text-sm text-center mt-2 p-3 rounded-lg"
+                    style={{
+                      backgroundColor: theme.errorBg,
+                      border: `1px solid ${theme.errorBorder}`,
+                      color: theme.errorText,
+                    }}
+                  >
+                    {submitError}
+                  </div>
+                )}
+
+                {/* Preview mode notice */}
+                {isPreviewMode && (
+                  <div
+                    className="text-xs text-center mt-2 p-3 rounded-lg"
+                    style={{
+                      backgroundColor: theme.warningBg,
+                      border: `1px solid ${theme.warningBorder}`,
+                      color: theme.warningText,
+                    }}
+                  >
+                    {ui.previewFormNote}
+                  </div>
+                )}
+
+                {/* Trust line — edytowalna z bazy (zastępuje stary privacyText) */}
+                {pageContent.form?.trust_line && (
+                  <EditableText
+                    fieldName="form.trust_line"
+                    value={pageContent.form.trust_line}
+                    tag="p"
+                    isEditMode={isTextEditMode || false}
+                    editLabel={editLabel}
+                    editedLabel={editedLabel}
+                    onChange={handleTextChange}
+                    maxLength={150}
+                    className="text-xs sm:text-sm text-center mt-4 leading-relaxed"
+                    style={{ color: theme.pageSubtext, fontFamily: theme.bodyFont }}
+                  />
+                )}
+              </form>
             ) : (
               /* ---- Thank-you state ---- */
               <div className="text-center py-7 sm:py-10">
@@ -1949,50 +2603,6 @@ const DemoView: React.FC<DemoViewProps> = ({
                 )}
               </div>
             )}
-          </div>
-        </div>
-      </section>
-
-      {/* ================================================================ */}
-      {/* FAQ SECTION                                                      */}
-      {/* ================================================================ */}
-      <section
-        id="faq"
-        className={`${LAYOUT.sectionPy} transition-all duration-700 ease-out
-          ${elements.faq ? 'opacity-100' : 'opacity-0 translate-y-10'}`}
-        style={{ backgroundColor: theme.sectionAltBg }}
-      >
-        <div className={`mx-auto ${LAYOUT.px} ${LAYOUT.maxW}`}>
-          <h2
-            className={`${LAYOUT.headingSize} font-bold text-center ${LAYOUT.headingMb}`}
-            style={{ fontFamily: theme.headingFont, color: theme.pageText }}
-          >
-            {ui.faqTitle}
-          </h2>
-
-          <div
-            className={`rounded-2xl ${LAYOUT.cardP}`}
-            style={{
-              backgroundColor: theme.faqBg,
-              border: `1px solid ${theme.faqBorder}`,
-              boxShadow: theme.cardShadow,
-              backdropFilter: 'blur(12px)',
-              WebkitBackdropFilter: 'blur(12px)',
-            }}
-          >
-            {pageContent.faq.items.map((item, index) => (
-              <FaqItem
-                key={index}
-                question={item.question}
-                answer={item.answer}
-                theme={theme}
-                isTextEditMode={isTextEditMode}
-                onTextUpdate={onTextUpdate}
-                questionFieldName={`pagecontent_faq_items_${index}_question`}
-                answerFieldName={`pagecontent_faq_items_${index}_answer`}
-                editLabel={editLabel}
-              />
-            ))}
           </div>
         </div>
       </section>

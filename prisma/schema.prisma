@@ -330,48 +330,27 @@ model pages {
 }
 
 model page_content {
-  id                            String   @id @default(cuid())
-  pageId                        String   @unique
-  userId                        String
-  ebookId                       Int?
-  hero_headline                 String?
-  hero_subheadline              String?
-  hero_description              String?
-  benefits_item_0_title         String?
-  benefits_item_0_text          String?
-  benefits_item_1_title         String?
-  benefits_item_1_text          String?
-  benefits_item_2_title         String?
-  benefits_item_2_text          String?
-  benefits_item_3_title         String?
-  benefits_item_3_text          String?
-  testimonials_item_0_text      String?
-  testimonials_item_0_author    String?
-  testimonials_item_0_role      String?
-  testimonials_item_1_text      String?
-  testimonials_item_1_author    String?
-  testimonials_item_1_role      String?
-  testimonials_item_2_text      String?
-  testimonials_item_2_author    String?
-  testimonials_item_2_role      String?
-  content_chapter_0_title       String?
-  content_chapter_0_description String?
-  content_chapter_1_title       String?
-  content_chapter_1_description String?
-  content_chapter_2_title       String?
-  content_chapter_2_description String?
-  form_title                    String?
-  faq_item_0_question           String?
-  faq_item_0_answer             String?
-  faq_item_1_question           String?
-  faq_item_1_answer             String?
-  faq_item_2_question           String?
-  faq_item_2_answer             String?
-  createdAt                     DateTime @default(now())
-  updatedAt                     DateTime @updatedAt
-  ebook                         ebooks?  @relation(fields: [ebookId], references: [id])
-  page                          pages    @relation(fields: [pageId], references: [id], onDelete: Cascade)
-  user                          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id             String   @id @default(cuid())
+  pageId         String   @unique
+  userId         String
+  ebookId        Int?
+
+  hero           Json?
+  problem        Json?
+  promise        Json?
+  benefits       Json?
+  content        Json?
+  form           Json?
+  faq            Json?
+
+  schema_version String   @default("v2") @db.VarChar(10)
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  ebook          ebooks?  @relation(fields: [ebookId], references: [id])
+  page           pages    @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([pageId])
   @@index([userId])

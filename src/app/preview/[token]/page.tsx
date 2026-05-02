@@ -9,109 +9,50 @@ import Link from 'next/link';
 import DemoView, { colorSchemes } from '@/components/views/demo';
 import DemoVideo from '@/components/views/demoVideo';
 import EditModeProvider, { useEditMode } from '@/contexts/EditModeContext';
+import type { PageContent } from '@/types/landing-page';
 
-// Interface dla danych strony z API
-interface PageData {
-  id: string;
-  status: string;
-  type: string;
-  color?: string; // Dodane dla kolorystyki
-  userId?: string; // Dodane dla sprawdzania właściciela
-  url?: string;
-  x_amz_meta_title: string;
-  x_amz_meta_page_type: string;
-  s3_file_key: string;
-  author_display_name: string;
-  author_logo_url: string;
-  visitors?: number; // Dodane dla statystyk
+// ───────────────────────────────────────────────────────────────────────────
+// Typy danych z preview API (/api/pages/preview/[token])
+// ───────────────────────────────────────────────────────────────────────────
 
-  // Wszystkie pola zawartości strony
-  pagecontent_hero_headline?: string;
-  pagecontent_hero_subheadline?: string;
-  pagecontent_hero_description?: string;
-  pagecontent_benefits_items_0_title?: string;
-  pagecontent_benefits_items_0_text?: string;
-  pagecontent_benefits_items_1_title?: string;
-  pagecontent_benefits_items_1_text?: string;
-  pagecontent_benefits_items_2_title?: string;
-  pagecontent_benefits_items_2_text?: string;
-  pagecontent_benefits_items_3_title?: string;
-  pagecontent_benefits_items_3_text?: string;
-  pagecontent_testimonials_items_0_text?: string;
-  pagecontent_testimonials_items_0_author?: string;
-  pagecontent_testimonials_items_0_role?: string;
-  pagecontent_testimonials_items_1_text?: string;
-  pagecontent_testimonials_items_1_author?: string;
-  pagecontent_testimonials_items_1_role?: string;
-  pagecontent_testimonials_items_2_text?: string;
-  pagecontent_testimonials_items_2_author?: string;
-  pagecontent_testimonials_items_2_role?: string;
-  pagecontent_content_chapters_0_title?: string;
-  pagecontent_content_chapters_0_description?: string;
-  pagecontent_content_chapters_1_title?: string;
-  pagecontent_content_chapters_1_description?: string;
-  pagecontent_content_chapters_2_title?: string;
-  pagecontent_content_chapters_2_description?: string;
-  pagecontent_form_title?: string;
-  pagecontent_faq_items_0_question?: string;
-  pagecontent_faq_items_0_answer?: string;
-  pagecontent_faq_items_1_question?: string;
-  pagecontent_faq_items_1_answer?: string;
-  pagecontent_faq_items_2_question?: string;
-  pagecontent_faq_items_2_answer?: string;
+interface EbookFromApi {
+  id: number;
+  title: string;
+  subtitle: string | null;
+  total_pages: number | null;
+  estimatedPages: number;
+  chapterCount: number;
+  chapters: Array<{
+    position: number;
+    title: string;
+    preview: string;
+  }>;
 }
 
-// Interfejsy dla komponentów renderowania (bez zmian)
-interface PageContent {
-  s3_file_key: string;
-  hero: {
-    headline: string;
-    subheadline: string;
-    description: string;
-    buttonText: string;
-    stats: Array<{ value: string; label: string }>;
-  };
-  benefits: {
-    title: string;
-    items: Array<{ title: string; text: string }>;
-  };
-  testimonials: {
-    title: string;
-    items: Array<{
-      avatar: string;
-      text: string;
-      author: string;
-      role: string;
-      rating: number;
-    }>;
-  };
-  content: {
-    title: string;
-    chapters: Array<{
-      number: string;
-      title: string;
-      description: string;
-    }>;
-  };
-  form: {
-    title: string;
-    subtitle: string;
-    namePlaceholder: string;
-    emailPlaceholder: string;
-    phonePlaceholder: string;
-    buttonText: string;
-    privacyText: string;
-  };
-  guarantees: {
-    items: Array<{ text: string }>;
-  };
-  faq: {
-    title: string;
-    items: Array<{
-      question: string;
-      answer: string;
-    }>;
-  };
+interface PageData {
+  id: string;
+  title: string;
+  status: string;
+  type: string | null;
+  language: string;
+  color?: string | null;
+  url?: string | null;
+  draft_url?: string | null;
+  visitors?: number;
+  userId?: string | null;
+  ebookId?: number | null;
+  authorDisplayName?: string | null;
+  authorLogoUrl?: string;
+  profilePicture?: string | null;  // Zdjęcie profilowe usera (z tabeli users)
+
+  // Treść strony — nowy schemat 7 sekcji jsonb (lub null jeśli nie wygenerowana)
+  pageContent: PageContent | null;
+
+  // E-book — okładka + spis treści
+  ebook: EbookFromApi | null;
+
+  // Resolved mockup URL
+  resolvedMockupUrl?: string;
 }
 
 interface VideoPageContent {
@@ -119,11 +60,63 @@ interface VideoPageContent {
   description?: string;
   videoEmbedUrl: string;
   videoThumbnailUrl?: string;
-  videoProvider: "vimeo" | "voomly";
+  videoProvider: 'vimeo' | 'voomly';
   ctaButtonText?: string;
 }
 
+// ───────────────────────────────────────────────────────────────────────────
+// Helpery do operacji na ścieżkach edycji (konwencja: "hero.headline_l1")
+// ───────────────────────────────────────────────────────────────────────────
+
+/** Parsuje pojedynczy segment ścieżki — liczba lub klucz. */
+function parsePathSegment(p: string): string | number {
+  const num = Number(p);
+  return Number.isInteger(num) && p !== '' ? num : p;
+}
+
+/** Czyta wartość z obiektu po ścieżce typu "hero.headline_l1" lub "benefits.items.0.title". */
+function lookupByPath(obj: any, path: string): any {
+  if (!obj) return undefined;
+  const parts = path.split('.').map(parsePathSegment);
+  let cur = obj;
+  for (const p of parts) {
+    if (cur == null) return undefined;
+    cur = cur[p as any];
+  }
+  return cur;
+}
+
+/** Ustawia wartość w obiekcie po ścieżce (mutuje). */
+function setByPath(obj: any, path: string, value: string): void {
+  if (!obj) return;
+  const parts = path.split('.').map(parsePathSegment);
+  let cur = obj;
+  for (let i = 0; i < parts.length - 1; i++) {
+    const next = cur[parts[i] as any];
+    if (next == null) return;
+    cur = next;
+  }
+  cur[parts[parts.length - 1] as any] = value;
+}
+
+/**
+ * Buduje URL do pliku w /uploads — dla relative path zwraca endpoint
+ * /api/assets/uploads/..., dla pełnego URL zwraca bez zmian. Identyczny
+ * wzorzec jak w PublicPageClient — żeby preview wyglądał jak public.
+ */
+const buildAssetUrl = (path?: string | null): string => {
+  if (!path) return '';
+  if (path.startsWith('http://') || path.startsWith('https://')) return path;
+  if (path.startsWith('/uploads/')) {
+    return `/api/assets/uploads/${path.substring('/uploads/'.length)}`;
+  }
+  return `/api/assets/uploads/${path}`;
+};
+
+// ───────────────────────────────────────────────────────────────────────────
 // Tłumaczenia
+// ───────────────────────────────────────────────────────────────────────────
+
 const translations = {
   pl: {
     // Toast
@@ -169,8 +162,6 @@ const translations = {
 
     // ColorSchemeButton
     changeColorSchemeTo: 'Zmień kolorystykę na',
-
-    // Nazwy profili kolorystycznych
     colorSchemeDark: 'Ciemny',
     colorSchemeLight: 'Jasny',
     colorSchemeEarth: 'Ziemia',
@@ -195,7 +186,7 @@ const translations = {
     errorUnauthorized: 'Brak uprawnień do wyświetlenia tej strony',
     errorUnknown: 'Wystąpił nieznany błąd',
     errorNoData: 'Nie otrzymano danych z serwera',
-    errorIncompleteData: 'Dane strony e-book są niekompletne lub uszkodzone. Proszę sprawdzić konfigurację strony.',
+    errorIncompleteData: 'Strona nie ma jeszcze wygenerowanej treści. Wygeneruj treść AI w panelu edycji.',
     errorProcessingData: 'Nie udało się przetworzyć danych strony',
 
     // getStatusChangeInfo
@@ -211,29 +202,8 @@ const translations = {
     adminSaving: 'Zapisywanie...',
     adminSave: 'Zapisz',
     adminProcessing: 'Przetwarzanie...',
-
-    // Domyślna zawartość strony (formatPageContent)
-    heroButtonText: 'Pobierz bezpłatny e-book',
-    heroStatsReaders: 'czytelników',
-    heroStatsRating: 'ocena',
-    heroStatsSatisfaction: 'satysfakcji',
-    benefitsTitle: 'Co zyskasz dzięki temu przewodnikowi?',
-    testimonialsTitle: 'Opinie czytelników',
-    contentTitle: 'Co znajdziesz w środku?',
-    formTitle: 'Pobierz bezpłatny e-book już teraz',
-    formSubtitle: 'Uzupełnij poniższy formularz, aby otrzymać e-book',
-    formNamePlaceholder: 'Twoje imię',
-    formEmailPlaceholder: 'Twój adres e-mail',
-    formPhonePlaceholder: 'Twój numer telefonu (opcjonalnie)',
-    formButtonText: 'Wyślij mi e-book',
-    formPrivacyText: 'Twoje dane są bezpieczne. Zapoznaj się z polityką prywatności.',
-    guarantee1: 'Sprawdzone badania naukowe',
-    guarantee2: 'Aktualizacja 2025',
-    guarantee3: 'Bezpieczne porady',
-    faqTitle: 'Najczęściej zadawane pytania',
   },
   en: {
-    // Toast
     changesSaved: 'Changes have been saved',
     errorSaving: 'Failed to save changes',
     editModeEnabled: 'Edit mode enabled without changing page status',
@@ -241,7 +211,6 @@ const translations = {
     statusChangeError: 'Failed to change page status',
     linkCopied: 'Public link copied to clipboard!',
 
-    // Confirm Dialog
     unsavedChanges: 'Unsaved Changes',
     unsavedChangesMsg: 'You have unsaved changes. Save them before changing the page status.',
     saveChanges: 'Save Changes',
@@ -261,39 +230,31 @@ const translations = {
     publishPage: 'Publish Page',
     publishPageMsg: 'Do you want to publish this page?',
 
-    // Subskrypcja
     paymentVerificationRequired: 'Payment Verification Required',
     subscriptionRequired: 'Subscription Required',
     verifyPayment: 'Verify Payment',
     subscribe: 'Subscribe',
 
-    // Statusy
     statusPending: 'pending approval',
     statusPublished: 'published',
     statusDraft: 'draft',
     statusPublicLink: ' Public link: {url}',
     statusPublicLinkGeneric: ' The page is available at the public link.',
 
-    // ColorSchemeButton
     changeColorSchemeTo: 'Change color scheme to',
-
-    // Color scheme profile names
     colorSchemeDark: 'Dark',
     colorSchemeLight: 'Light',
     colorSchemeEarth: 'Earth',
     colorSchemeFrost: 'Frost',
 
-    // PreviewModeBanner
     previewModeWatermark: 'PREVIEW',
     previewModeTitle: 'PREVIEW MODE (READ-ONLY)',
     previewModeDesc: 'This link is temporary and should not be shared.',
     closePreview: 'Close Preview',
     closeTabConfirm: 'This browser does not allow closing the tab automatically. Go back to the page list?',
 
-    // LoadingState
     loadingPreview: 'Loading page preview...',
 
-    // ErrorState
     errorOccurred: 'An error occurred',
     tryAgain: 'Try again',
     backToList: 'Back to page list',
@@ -302,49 +263,30 @@ const translations = {
     errorUnauthorized: 'You are not authorized to view this page',
     errorUnknown: 'An unknown error occurred',
     errorNoData: 'No data received from the server',
-    errorIncompleteData: 'E-book page data is incomplete or corrupted. Please check the page configuration.',
+    errorIncompleteData: 'The page does not have generated content yet. Generate AI content in the editor.',
     errorProcessingData: 'Failed to process page data',
 
-    // getStatusChangeInfo
     statusNoPermission: 'No permissions',
     statusPublish: 'Publish',
     statusRevertToDraft: 'Revert to Draft',
     statusChangeButton: 'Change Status',
 
-    // Admin Panel
     adminSelectColor: 'Select color scheme:',
     adminThemeLabel: 'Theme',
     adminBack: 'Back',
     adminSaving: 'Saving...',
     adminSave: 'Save',
     adminProcessing: 'Processing...',
-
-    // Domyślna zawartość strony (formatPageContent)
-    heroButtonText: 'Get your free e-book',
-    heroStatsReaders: 'readers',
-    heroStatsRating: 'rating',
-    heroStatsSatisfaction: 'satisfaction',
-    benefitsTitle: 'What will you gain from this guide?',
-    testimonialsTitle: 'Reader reviews',
-    contentTitle: "What's inside?",
-    formTitle: 'Get your free e-book now',
-    formSubtitle: 'Fill out the form below to receive the e-book',
-    formNamePlaceholder: 'Your name',
-    formEmailPlaceholder: 'Your email address',
-    formPhonePlaceholder: 'Your phone number (optional)',
-    formButtonText: 'Send me the e-book',
-    formPrivacyText: 'Your data is safe. Read our privacy policy.',
-    guarantee1: 'Verified scientific research',
-    guarantee2: '2025 Update',
-    guarantee3: 'Safe advice',
-    faqTitle: 'Frequently Asked Questions',
   }
 };
 
 // Wspólna klasa tła
-const containerClass = "min-h-screen bg-white";
+const containerClass = 'min-h-screen bg-white';
 
-// Komponent Toast Notification
+// ───────────────────────────────────────────────────────────────────────────
+// Toast Notification
+// ───────────────────────────────────────────────────────────────────────────
+
 const ToastNotification = ({
   type = 'success',
   message,
@@ -355,9 +297,7 @@ const ToastNotification = ({
   onClose: () => void;
 }) => {
   useEffect(() => {
-    const timer = setTimeout(() => {
-      onClose();
-    }, 3000);
+    const timer = setTimeout(() => onClose(), 3000);
     return () => clearTimeout(timer);
   }, [onClose]);
 
@@ -370,11 +310,7 @@ const ToastNotification = ({
       }`}
     >
       <div className={`flex-shrink-0 w-5 h-5 ${type === 'success' ? 'text-green-500' : 'text-red-500'}`}>
-        {type === 'success' ? (
-          <Check className="w-5 h-5" />
-        ) : (
-          <X className="w-5 h-5" />
-        )}
+        {type === 'success' ? <Check className="w-5 h-5" /> : <X className="w-5 h-5" />}
       </div>
       <p className="text-sm font-medium">{message}</p>
       <button
@@ -387,7 +323,10 @@ const ToastNotification = ({
   );
 };
 
-// Komponent dialogu potwierdzającego
+// ───────────────────────────────────────────────────────────────────────────
+// ConfirmDialog
+// ───────────────────────────────────────────────────────────────────────────
+
 const ConfirmDialog = ({
   isOpen,
   title,
@@ -431,21 +370,24 @@ const ConfirmDialog = ({
   );
 };
 
+// ───────────────────────────────────────────────────────────────────────────
 // Główny komponent strony podglądu
+// ───────────────────────────────────────────────────────────────────────────
+
 const PreviewPageContent = ({ t, lang }: { t: typeof translations.pl; lang: 'pl' | 'en' }) => {
   const params = useParams();
   const searchParams = useSearchParams();
   const { data: session, status } = useSession();
 
-  const token = Array.isArray(params.token) ? params.token[0] : params.token as string;
+  const token = Array.isArray(params.token) ? params.token[0] : (params.token as string);
   const isPreviewMode = searchParams.get('view_mode') === 'preview';
   const editMode = searchParams.get('mode') === 'edit';
 
   const [pageData, setPageData] = useState<PageData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [currentColorScheme, setCurrentColorScheme] = useState<keyof typeof colorSchemes>('harmonia');
-  const [originalColorScheme, setOriginalColorScheme] = useState<keyof typeof colorSchemes>('harmonia');
+  const [currentColorScheme, setCurrentColorScheme] = useState<keyof typeof colorSchemes>('light');
+  const [originalColorScheme, setOriginalColorScheme] = useState<keyof typeof colorSchemes>('light');
   const [isSaving, setIsSaving] = useState(false);
   const [isChangingStatus, setIsChangingStatus] = useState(false);
   const [isTextEditMode, setIsTextEditMode] = useState(false);
@@ -455,7 +397,7 @@ const PreviewPageContent = ({ t, lang }: { t: typeof translations.pl; lang: 'pl'
   const [hasLocalColorChange, setHasLocalColorChange] = useState(false);
 
   // Stan dla powiadomień toast
-  const [toast, setToast] = useState<{type: 'success' | 'error', text: string} | null>(null);
+  const [toast, setToast] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // Stany dla obsługi dialogów
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
@@ -472,7 +414,7 @@ const PreviewPageContent = ({ t, lang }: { t: typeof translations.pl; lang: 'pl'
   const editModeContext = useEditMode();
   const useContextMode = !!editModeContext;
 
-  // Przycisk kolorystyki — styl spójny z przyciskami akcji
+  // Przycisk kolorystyki
   const ColorSchemeButton = ({
     scheme,
     currentScheme,
@@ -480,12 +422,11 @@ const PreviewPageContent = ({ t, lang }: { t: typeof translations.pl; lang: 'pl'
     colorName,
     disabled
   }: {
-    scheme: string,
-    currentScheme: string,
-    onClick: (scheme: string) => void,
-    colorName: string,
-    color?: string,
-    disabled?: boolean
+    scheme: string;
+    currentScheme: string;
+    onClick: (scheme: string) => void;
+    colorName: string;
+    disabled?: boolean;
   }) => {
     const isActive = currentScheme === scheme;
     return (
@@ -495,9 +436,7 @@ const PreviewPageContent = ({ t, lang }: { t: typeof translations.pl; lang: 'pl'
           isActive
             ? 'bg-gray-800 text-white'
             : 'bg-gray-100 text-gray-600 hover:bg-gray-200 hover:text-gray-800'
-        } ${
-          disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
-        }`}
+        } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
         aria-label={`${t.changeColorSchemeTo} ${colorName}`}
         disabled={disabled}
       >
@@ -507,40 +446,34 @@ const PreviewPageContent = ({ t, lang }: { t: typeof translations.pl; lang: 'pl'
   };
 
   // Baner trybu podglądu
-  const PreviewModeBanner = ({ onClose }: { onClose: () => void }) => {
-    return (
-      <>
-        {/* Wodoznak informujący o trybie podglądu */}
-        <div className="fixed inset-0 pointer-events-none z-30 flex items-center justify-center">
-          <div className="text-gray-200 text-9xl font-bold opacity-5 transform -rotate-45 select-none">
-            {t.previewModeWatermark}
+  const PreviewModeBanner = ({ onClose }: { onClose: () => void }) => (
+    <>
+      <div className="fixed inset-0 pointer-events-none z-30 flex items-center justify-center">
+        <div className="text-gray-200 text-9xl font-bold opacity-5 transform -rotate-45 select-none">
+          {t.previewModeWatermark}
+        </div>
+      </div>
+
+      <div className="fixed bottom-0 left-0 right-0 z-50 bg-indigo-700/90 backdrop-blur-sm py-3 px-4 text-white flex justify-between items-center shadow-lg">
+        <div className="flex items-center">
+          <AlertTriangle className="h-6 w-6 mr-3 text-yellow-300" />
+          <div>
+            <span className="font-bold block text-sm sm:text-base">{t.previewModeTitle}</span>
+            <span className="text-indigo-200 text-xs sm:text-sm">{t.previewModeDesc}</span>
           </div>
         </div>
+        <button
+          onClick={onClose}
+          className="flex items-center bg-white text-indigo-700 px-3 py-2 rounded text-sm font-medium hover:bg-indigo-50 transition-colors ml-2 cursor-pointer"
+        >
+          <X className="h-4 w-4 mr-1" />
+          {t.closePreview}
+        </button>
+      </div>
+    </>
+  );
 
-        {/* Główny baner na dole ekranu */}
-        <div className="fixed bottom-0 left-0 right-0 z-50 bg-indigo-700/90 backdrop-blur-sm py-3 px-4 text-white flex justify-between items-center shadow-lg">
-          <div className="flex items-center">
-            <AlertTriangle className="h-6 w-6 mr-3 text-yellow-300" />
-            <div>
-              <span className="font-bold block text-sm sm:text-base">{t.previewModeTitle}</span>
-              <span className="text-indigo-200 text-xs sm:text-sm">
-                {t.previewModeDesc}
-              </span>
-            </div>
-          </div>
-          <button
-            onClick={onClose}
-            className="flex items-center bg-white text-indigo-700 px-3 py-2 rounded text-sm font-medium hover:bg-indigo-50 transition-colors ml-2 cursor-pointer"
-          >
-            <X className="h-4 w-4 mr-1" />
-            {t.closePreview}
-          </button>
-        </div>
-      </>
-    );
-  };
-
-  // Komponent ładowania
+  // Komponenty stanu
   const LoadingState = () => (
     <div className={`${containerClass} flex items-center justify-center h-screen`}>
       <div className="text-center">
@@ -550,8 +483,7 @@ const PreviewPageContent = ({ t, lang }: { t: typeof translations.pl; lang: 'pl'
     </div>
   );
 
-  // Komponent błędu
-  const ErrorState = ({ message, onRetry }: { message: string, onRetry?: () => void }) => (
+  const ErrorState = ({ message, onRetry }: { message: string; onRetry?: () => void }) => (
     <div className={`${containerClass} flex items-center justify-center h-screen`}>
       <div className="text-center max-w-md p-6 bg-red-50 rounded-lg border border-red-200">
         <div className="flex justify-center mb-4">
@@ -579,31 +511,9 @@ const PreviewPageContent = ({ t, lang }: { t: typeof translations.pl; lang: 'pl'
     </div>
   );
 
-  // DEBUG - logowanie sesji
-  useEffect(() => {
-    console.log('=== DEBUG SESSION ===');
-    console.log('Session status:', status);
-    console.log('Session user:', session?.user);
-    console.log('User role:', (session?.user as any)?.role);
-    console.log('=====================');
-  }, [status, session]);
-
-  // TEMPORARY DEBUG - wymuś tryb edycji
-  useEffect(() => {
-    if (!isPreviewMode && pageData) {
-      console.log('=== FORCING EDIT MODE ===');
-      setIsTextEditMode(true);
-      if (useContextMode) {
-        editModeContext.setTextEditMode(true);
-      }
-      console.log('FORCED edit mode ON');
-    }
-  }, [pageData, isPreviewMode, useContextMode]);
-
   // Funkcja zamykania podglądu
   const closePreview = () => {
     window.close();
-
     setTimeout(() => {
       if (!window.closed) {
         const confirmation = window.confirm(t.closeTabConfirm);
@@ -614,72 +524,48 @@ const PreviewPageContent = ({ t, lang }: { t: typeof translations.pl; lang: 'pl'
     }, 300);
   };
 
-  // Funkcja pomocnicza do określania czy można edytować stronę
-  const canEdit = () => {
-      if (isPreviewMode) return false;
-      if (!pageData || status !== 'authenticated' || !session?.user) return false;
+  // Czy użytkownik może edytować
+  const canEdit = useCallback((): boolean => {
+    if (isPreviewMode) return false;
+    if (!pageData || status !== 'authenticated' || !session?.user) return false;
+    if (editMode) return true;
 
-      // Jeśli przyszedł z linku ?mode=edit, zawsze pozwól na edycję
-      if (editMode) return true;
+    const userRole = (session.user as any)?.role?.toUpperCase() || 'USER';
+    const userId = session.user.id;
+    const isAdmin = userRole === 'ADMIN';
+    const isOwner = pageData.userId === userId;
 
-      const userRole = (session.user as any)?.role?.toUpperCase() || 'USER';
-      const userId = session.user.id;
-      const isAdmin = userRole === 'ADMIN';
-      const isOwner = pageData.userId === userId;
+    if (isAdmin) return true;
+    if (isOwner) return pageData.status === 'draft' || pageData.status === 'pending';
+    return false;
+  }, [isPreviewMode, pageData, status, session, editMode]);
 
-      // Admini mogą zawsze edytować
-      if (isAdmin) return true;
+  // Czy są niezapisane zmiany
+  const hasAnyChanges = () =>
+    useContextMode
+      ? editModeContext.hasPendingChanges
+      : Object.keys(localTextChanges).length > 0 || hasLocalColorChange;
 
-      // Właściciel strony może edytować jeśli strona jest w statusie draft lub pending
-      if (isOwner) {
-        return pageData.status === 'draft' || pageData.status === 'pending';
-      }
-
-      // Inne przypadki = brak dostępu
-      return false;
-    };
-
-  // Funkcja sprawdzająca czy są jakiekolwiek niezapisane zmiany
-  const hasAnyChanges = () => {
-    if (useContextMode) {
-      return editModeContext.hasPendingChanges;
-    } else {
-      return Object.keys(localTextChanges).length > 0 || hasLocalColorChange;
-    }
-  };
-
-  // Funkcja pomocnicza do określania możliwości zmiany statusu
-  // src/app/preview/[token]/page.tsx
-
-// Zamień całą starą funkcję na tę poniżej:
-const getStatusChangeInfo = () => {
-    // 1. Podstawowa weryfikacja - bez zmian
+  // Info o zmianie statusu
+  const getStatusChangeInfo = () => {
     if (!pageData || status !== 'authenticated' || !session?.user || isPreviewMode) {
       return { enabled: false, buttonText: '', newStatus: null };
     }
 
-    // 2. Kluczowa zmiana: Sprawdzamy uprawnienia do edycji zamiast roli
     const canUserEdit = canEdit();
     const currentStatus = pageData.status || 'draft';
 
-    // Jeśli użytkownik nie ma uprawnień do edycji, nic nie może zrobić
     if (!canUserEdit) {
       return { enabled: false, buttonText: t.statusNoPermission, newStatus: null };
     }
 
-    // 3. Uproszczona logika dla każdego, kto może edytować
     switch (currentStatus) {
       case 'draft':
       case 'pending':
-        // Jeśli strona jest wersją roboczą lub czeka na akceptację, można ją opublikować
         return { enabled: true, buttonText: t.statusPublish, newStatus: 'published' };
-
       case 'published':
-        // Jeśli strona jest opublikowana, można ją cofnąć do edycji
         return { enabled: true, buttonText: t.statusRevertToDraft, newStatus: 'draft' };
-
       default:
-        // Domyślny stan, na wszelki wypadek
         return { enabled: false, buttonText: t.statusChangeButton, newStatus: null };
     }
   };
@@ -711,95 +597,96 @@ const getStatusChangeInfo = () => {
           cognitoSub: (session?.user as any)?.cognitoSub
         };
 
-        // Capture changes before save (saveAllChanges clears pendingChanges)
+        // Zarejestruj zmiany przed save (saveAllChanges czyści pendingChanges)
         const savedTextChanges = { ...editModeContext.pendingChanges };
         const savedColorChange = editModeContext.pendingColorChange;
 
-        await editModeContext.saveAllChanges(pageData.id, credentials);
+        const success = await editModeContext.saveAllChanges(pageData.id, credentials);
+        if (!success) return;
 
-        // Merge saved values into pageData so display reflects new state
+        // Merge zapisanych zmian do pageData (path-based update jsonb)
         setPageData(prev => {
           if (!prev) return null;
-          return {
-            ...prev,
-            ...savedTextChanges,
-            ...(savedColorChange ? { color: savedColorChange } : {}),
-          };
-        });
+          const updated: PageData = { ...prev };
 
-        setToast({
-          type: 'success',
-          text: t.changesSaved
+          // Klonowanie deep żeby nie mutować pierwotnego obiektu
+          if (prev.pageContent) {
+            const clonedContent = JSON.parse(JSON.stringify(prev.pageContent));
+            for (const [path, value] of Object.entries(savedTextChanges)) {
+              if (path.includes('.')) {
+                setByPath(clonedContent, path, value);
+              } else {
+                // Page-level field (np. headline na 'pages.headline')
+                (updated as any)[path] = value;
+              }
+            }
+            updated.pageContent = clonedContent;
+          }
+
+          if (savedColorChange) {
+            updated.color = savedColorChange;
+          }
+
+          return updated;
         });
       } else {
-        // Przygotuj dane do zapisania
-        const changes: Record<string, any> = {
-          ...localTextChanges
-        };
-
-        if (hasLocalColorChange) {
-          changes.color = currentColorScheme;
-        }
+        // Tryb bez kontekstu — wysyła wszystko jednym requestem (legacy)
+        const changes: Record<string, any> = { ...localTextChanges };
+        if (hasLocalColorChange) changes.color = currentColorScheme;
 
         const response = await fetch(`/api/pages/${pageData.id}`, {
           method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(changes)
         });
 
-        if (!response.ok) {
-          throw new Error(t.errorSaving);
-        }
+        if (!response.ok) throw new Error(t.errorSaving);
 
         const updatedPage = await response.json();
-        setPageData(updatedPage);
+        setPageData(prev => (prev ? { ...prev, ...updatedPage } : null));
 
         setLocalTextChanges({});
         setHasLocalColorChange(false);
         setOriginalColorScheme(currentColorScheme);
 
-        setToast({
-          type: 'success',
-          text: t.changesSaved
-        });
-
+        setToast({ type: 'success', text: t.changesSaved });
       }
     } catch (error) {
       console.error('Błąd podczas zapisywania zmian:', error);
       setToast({
         type: 'error',
-        text: (error instanceof Error) ? error.message : t.errorSaving
+        text: error instanceof Error ? error.message : t.errorSaving
       });
     } finally {
       setIsSaving(false);
     }
   };
 
-  // Funkcja aktualizująca tekst lokalnie
+  // Funkcja aktualizująca tekst lokalnie (gdy nie używamy kontekstu)
+  // Konwencja fieldName: "hero.headline_l1", "benefits.items.2.title" itd.
   const handleTextUpdate = (fieldName: string, newValue: string) => {
     if (isPreviewMode) return;
 
     if (useContextMode) {
       editModeContext.handleTextChange(fieldName, newValue);
-    } else {
-      const originalValue = pageData?.[fieldName as keyof PageData];
+      return;
+    }
 
-      if (originalValue === newValue) {
-        const updatedChanges = { ...localTextChanges };
-        delete updatedChanges[fieldName];
-        setLocalTextChanges(updatedChanges);
-      } else {
-        setLocalTextChanges(prev => ({
-          ...prev,
-          [fieldName]: newValue
-        }));
-      }
+    // Lokalny tracking — sprawdź oryginał po ścieżce
+    const originalValue = fieldName.includes('.')
+      ? lookupByPath(pageData?.pageContent, fieldName)
+      : (pageData as any)?.[fieldName];
+
+    if (originalValue === newValue) {
+      const updatedChanges = { ...localTextChanges };
+      delete updatedChanges[fieldName];
+      setLocalTextChanges(updatedChanges);
+    } else {
+      setLocalTextChanges(prev => ({ ...prev, [fieldName]: newValue }));
     }
   };
 
-  // Funkcja inicjująca zmianę statusu z potwierdzeniem
+  // Funkcja inicjująca zmianę statusu
   const initiateStatusChange = () => {
     if (isPreviewMode) return;
 
@@ -810,11 +697,10 @@ const getStatusChangeInfo = () => {
         confirmText: t.saveChanges,
         cancelText: t.cancel,
         onConfirm: async () => {
-                await saveChanges();
-                // KLUCZOWA LINIA - zamknij dialog po zapisie
-                setShowConfirmDialog(false);
-            }
-        });
+          await saveChanges();
+          setShowConfirmDialog(false);
+        }
+      });
       setShowConfirmDialog(true);
       return;
     }
@@ -830,7 +716,6 @@ const getStatusChangeInfo = () => {
       onConfirm: () => executeStatusChange(statusInfo.newStatus!)
     };
 
-    // Dostosowanie komunikatu dla konkretnych przypadków
     if (pageData?.status === 'draft' && statusInfo.newStatus === 'pending') {
       dialogConfig = {
         title: t.sendToApproval,
@@ -853,13 +738,8 @@ const getStatusChangeInfo = () => {
 
       if (isAdmin) {
         setIsTextEditMode(true);
-        if (useContextMode) {
-          editModeContext.setTextEditMode(true);
-        }
-        setToast({
-          type: 'success',
-          text: t.editModeEnabled
-        });
+        if (useContextMode) editModeContext.setTextEditMode(true);
+        setToast({ type: 'success', text: t.editModeEnabled });
         setShowConfirmDialog(false);
         return;
       } else {
@@ -887,164 +767,137 @@ const getStatusChangeInfo = () => {
   };
 
   // Funkcja wykonująca faktyczną zmianę statusu
+  const executeStatusChange = async (status: string) => {
+    if (isPreviewMode || !token || !pageData) return;
 
-    const executeStatusChange = async (status: string) => {
-      if (isPreviewMode || !token || !pageData) return;
+    setIsChangingStatus(true);
 
-      setIsChangingStatus(true);
+    try {
+      // ─── Sprawdzenie subskrypcji przed publikacją ────────────────────
+      if (status === 'published') {
+        const userRole = (session?.user as any)?.role?.toUpperCase() || 'USER';
+        const isAdmin = userRole === 'ADMIN';
 
-      try {
-        // ============================================
-        // 🔒 SPRAWDZENIE SUBSKRYPCJI PRZED PUBLIKACJĄ
-        // ============================================
-        if (status === 'published') {
-          const userRole = (session?.user as any)?.role?.toUpperCase() || 'USER';
-          const isAdmin = userRole === 'ADMIN';
+        if (!isAdmin) {
+          const subscriptionCheck = await fetch('/api/user/subscription-status');
+          const subData = await subscriptionCheck.json();
 
-          // Admini mogą publikować bez sprawdzania
-          if (!isAdmin) {
-            console.log('🔍 Checking subscription status before publish...');
+          if (!subData.canPublish) {
+            setShowConfirmDialog(false);
+            setIsChangingStatus(false);
 
-            const subscriptionCheck = await fetch('/api/user/subscription-status');
-            const subData = await subscriptionCheck.json();
+            setTimeout(() => {
+              setConfirmDialogConfig({
+                title: subData.action === 'VERIFY_PAYMENT'
+                  ? t.paymentVerificationRequired
+                  : t.subscriptionRequired,
+                message: subData.reason,
+                confirmText: subData.action === 'VERIFY_PAYMENT'
+                  ? t.verifyPayment
+                  : t.subscribe,
+                cancelText: t.cancel,
+                onConfirm: () => {
+                  setShowConfirmDialog(false);
+                  const redirectUrl = subData.action === 'VERIFY_PAYMENT'
+                    ? '/verify-payment'
+                    : '/subscribe';
+                  window.location.href = redirectUrl;
+                }
+              });
+              setShowConfirmDialog(true);
+            }, 100);
 
-            console.log('🔍 Subscription check result:', subData);
-
-            if (!subData.canPublish) {
-              // Zamknij obecny dialog
-              setShowConfirmDialog(false);
-              setIsChangingStatus(false);
-
-              // UŻYJ setTimeout aby React zdążył zamknąć poprzedni dialog
-              setTimeout(() => {
-                // Pokaż dialog z informacją o wymaganej subskrypcji
-                setConfirmDialogConfig({
-                  title: subData.action === 'VERIFY_PAYMENT'
-                    ? t.paymentVerificationRequired
-                    : t.subscriptionRequired,
-                  message: subData.reason,
-                  confirmText: subData.action === 'VERIFY_PAYMENT'
-                    ? t.verifyPayment
-                    : t.subscribe,
-                  cancelText: t.cancel,
-                  onConfirm: () => {
-                    setShowConfirmDialog(false); // Zamknij ten dialog
-                    // Przekieruj do odpowiedniej strony
-                    const redirectUrl = subData.action === 'VERIFY_PAYMENT'
-                      ? '/verify-payment'
-                      : '/subscribe';
-                    window.location.href = redirectUrl;
-                  }
-                });
-
-                setShowConfirmDialog(true);
-              }, 100); // 100ms opóźnienia
-
-              return; // STOP - nie publikuj
-            }
-
-            console.log('✅ Subscription check passed - proceeding with publish');
+            return;
           }
         }
-        // ============================================
+      }
 
-        const updateData: Record<string, any> = { status };
+      const updateData: Record<string, any> = { status };
 
-        // Jeśli publikujemy stronę, generujemy publiczny URL
-        if (status === 'published') {
-          const creatorName = pageData.author_display_name || 'autor';
-          const title = pageData.x_amz_meta_title || 'ebook';
+      // Generowanie publicznego URL przy publikacji
+      if (status === 'published') {
+        const creatorName = pageData.authorDisplayName || 'autor';
+        const title = pageData.title || 'ebook';
 
-          const sanitize = (text: string) => text
-            .toLowerCase().trim()
+        const sanitize = (text: string) =>
+          text.toLowerCase().trim()
             .replace(/ł/g, 'l').replace(/ą/g, 'a').replace(/ę/g, 'e')
             .replace(/ś/g, 's').replace(/ć/g, 'c').replace(/ń/g, 'n')
             .replace(/ó/g, 'o').replace(/ż/g, 'z').replace(/ź/g, 'z')
             .replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
 
-          const sanitizedCreator = sanitize(creatorName);
-          const sanitizedTitle = sanitize(title);
-          const uniqueIndex = pageData.id.slice(-3);
-          const pathUrl = `/ebookpage/by-${sanitizedCreator}/${sanitizedTitle}-${uniqueIndex}`;
-          const fullUrl = `${window.location.origin}${pathUrl}`;
+        const sanitizedCreator = sanitize(creatorName);
+        const sanitizedTitle = sanitize(title);
+        const uniqueIndex = pageData.id.slice(-3);
+        const pathUrl = `/ebookpage/by-${sanitizedCreator}/${sanitizedTitle}-${uniqueIndex}`;
+        const fullUrl = `${window.location.origin}${pathUrl}`;
 
-          updateData.url = fullUrl;
-        }
-
-        const response = await fetch(`/api/pages/${pageData.id}`, {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(updateData)
-        });
-
-        if (!response.ok) {
-          throw new Error(`${t.statusChangeError} ${status}`);
-        }
-
-        const updatedPage = await response.json();
-        setPageData(prevData => {
-          if (!prevData) return null;
-          return {
-            ...prevData,
-            status: status,
-            url: updatedPage.url || prevData.url,
-          };
-        });
-
-        let statusText = '';
-        let additionalMessage = '';
-
-        switch (status) {
-          case 'pending':
-            statusText = t.statusPending;
-            break;
-          case 'published':
-            statusText = t.statusPublished;
-            additionalMessage = updatedPage?.url
-              ? t.statusPublicLink.replace('{url}', updatedPage.url)
-              : t.statusPublicLinkGeneric;
-            break;
-          case 'draft':
-            statusText = t.statusDraft;
-            setIsTextEditMode(true);
-            if (useContextMode) {
-              editModeContext.setTextEditMode(true);
-            }
-            break;
-          default:
-            statusText = status;
-        }
-
-        setToast({
-          type: 'success',
-          text: t.statusChanged.replace('{status}', statusText) + additionalMessage
-        });
-
-        if (status === 'published') {
-          if (updatedPage?.url) {
-            await navigator.clipboard.writeText(updatedPage.url);
-            // Mały toast, że skopiowano
-            setToast({ type: 'success', text: t.linkCopied });
-          }
-
-          setTimeout(() => {
-            window.location.href = '/landings';
-          }, 1500);
-        }
-
-      } catch (error) {
-        console.error('Błąd podczas zmiany statusu:', error);
-        setToast({
-          type: 'error',
-          text: t.statusChangeError
-        });
-      } finally {
-        setIsChangingStatus(false);
-        setShowConfirmDialog(false);
+        updateData.url = fullUrl;
       }
-    };
+
+      const response = await fetch(`/api/pages/${pageData.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updateData)
+      });
+
+      if (!response.ok) throw new Error(`${t.statusChangeError} ${status}`);
+
+      const updatedPage = await response.json();
+      setPageData(prevData => {
+        if (!prevData) return null;
+        return {
+          ...prevData,
+          status,
+          url: updatedPage.url || prevData.url,
+        };
+      });
+
+      let statusText = '';
+      let additionalMessage = '';
+
+      switch (status) {
+        case 'pending':
+          statusText = t.statusPending;
+          break;
+        case 'published':
+          statusText = t.statusPublished;
+          additionalMessage = updatedPage?.url
+            ? t.statusPublicLink.replace('{url}', updatedPage.url)
+            : t.statusPublicLinkGeneric;
+          break;
+        case 'draft':
+          statusText = t.statusDraft;
+          setIsTextEditMode(true);
+          if (useContextMode) editModeContext.setTextEditMode(true);
+          break;
+        default:
+          statusText = status;
+      }
+
+      setToast({
+        type: 'success',
+        text: t.statusChanged.replace('{status}', statusText) + additionalMessage
+      });
+
+      if (status === 'published') {
+        if (updatedPage?.url) {
+          await navigator.clipboard.writeText(updatedPage.url);
+          setToast({ type: 'success', text: t.linkCopied });
+        }
+
+        setTimeout(() => {
+          window.location.href = '/landings';
+        }, 1500);
+      }
+    } catch (error) {
+      console.error('Błąd podczas zmiany statusu:', error);
+      setToast({ type: 'error', text: t.statusChangeError });
+    } finally {
+      setIsChangingStatus(false);
+      setShowConfirmDialog(false);
+    }
+  };
 
   // Pobieranie danych strony
   const fetchData = useCallback(async () => {
@@ -1054,25 +907,23 @@ const getStatusChangeInfo = () => {
       setLoading(true);
       setError(null);
 
-      console.log('Wywołanie API z trybem podglądu:', isPreviewMode);
-
-      const response = await fetch(`/api/pages/preview/${token}?${isPreviewMode ? 'view_mode=preview' : ''}`);
+      const response = await fetch(
+        `/api/pages/preview/${token}?${isPreviewMode ? 'view_mode=preview' : ''}`,
+        { credentials: 'include' }
+      );
 
       if (!response.ok) {
         let errorMsg = t.errorFetchingData;
-        if (response.status === 404) {
-          errorMsg = t.errorNotFound;
-        } else if (response.status === 401) {
-          errorMsg = t.errorUnauthorized;
-        }
+        if (response.status === 404) errorMsg = t.errorNotFound;
+        else if (response.status === 401) errorMsg = t.errorUnauthorized;
         throw new Error(errorMsg);
       }
 
       const data = await response.json();
-      setPageData(data);
-    } catch (error) {
-      console.error('Błąd podczas pobierania danych:', error);
-      setError((error instanceof Error) ? error.message : t.errorUnknown);
+      setPageData(data as PageData);
+    } catch (err) {
+      console.error('Błąd podczas pobierania danych:', err);
+      setError(err instanceof Error ? err.message : t.errorUnknown);
     } finally {
       setLoading(false);
     }
@@ -1082,22 +933,20 @@ const getStatusChangeInfo = () => {
     fetchData();
   }, [fetchData]);
 
-  // Efekt, który ustawi kolorystykę po załadowaniu danych strony
+  // Ustaw kolorystykę po załadowaniu danych
   useEffect(() => {
-    if (pageData && pageData.color) {
+    if (pageData?.color) {
       const isValidColorScheme = Object.keys(colorSchemes).includes(pageData.color);
-
       if (isValidColorScheme) {
         setCurrentColorScheme(pageData.color as keyof typeof colorSchemes);
         setOriginalColorScheme(pageData.color as keyof typeof colorSchemes);
-        console.log(`Wczytano kolorystykę z bazy danych: ${pageData.color}`);
       } else {
-        console.warn(`Nieznana kolorystyka w bazie danych: ${pageData.color}, używam domyślnej`);
+        console.warn(`Nieznana kolorystyka w bazie: ${pageData.color}, używam domyślnej`);
       }
     }
   }, [pageData]);
 
-  // Automatycznie włącz tryb edycji gdy strona jest w trybie draft lub gdy przyszliśmy z przycisku "Edytuj"
+  // Automatyczne włączenie trybu edycji
   useEffect(() => {
     if (isPreviewMode) return;
 
@@ -1108,262 +957,116 @@ const getStatusChangeInfo = () => {
 
       if (shouldEnableEditMode) {
         setIsTextEditMode(true);
-        if (useContextMode) {
-          editModeContext.setTextEditMode(true);
-        }
-
-        console.log('Automatycznie włączono tryb edycji tekstu:', {
-          isDraft: pageData.status === 'draft',
-          isEditMode: editMode,
-          isAdmin: isAdmin
-        });
+        if (useContextMode) editModeContext.setTextEditMode(true);
       }
     }
   }, [pageData, editMode, useContextMode, session, isPreviewMode, canEdit]);
 
-  // Jeśli używamy kontekstu, zaktualizuj stan trybu edycji
+  // Synchronizacja z kontekstem
   useEffect(() => {
     if (useContextMode) {
       editModeContext.setTextEditMode(isTextEditMode);
     }
   }, [isTextEditMode, useContextMode]);
 
-  // Dodanie stylów animacji
+  // Style animacji
   useEffect(() => {
     const style = document.createElement('style');
     style.innerHTML = `
-      @keyframes fadeIn {
-        from { opacity: 0; }
-        to { opacity: 1; }
-      }
-      @keyframes scaleIn {
-        from { transform: scale(0.95); opacity: 0; }
-        to { transform: scale(1); opacity: 1; }
-      }
-      @keyframes slideIn {
-        from { transform: translateX(100%); opacity: 0; }
-        to { transform: translateX(0); opacity: 1; }
-      }
-      .animate-fadeIn {
-        animation: fadeIn 0.2s ease-out forwards;
-      }
-      .animate-scaleIn {
-        animation: scaleIn 0.2s ease-out forwards;
-      }
-      .animate-slideIn {
-        animation: slideIn 0.3s ease-out forwards;
-      }
+      @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+      @keyframes scaleIn { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+      @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+      .animate-fadeIn { animation: fadeIn 0.2s ease-out forwards; }
+      .animate-scaleIn { animation: scaleIn 0.2s ease-out forwards; }
+      .animate-slideIn { animation: slideIn 0.3s ease-out forwards; }
     `;
     document.head.appendChild(style);
-
-    return () => {
-      document.head.removeChild(style);
-    };
+    return () => { document.head.removeChild(style); };
   }, []);
 
-  // Funkcja walidacji danych strony ebook
-  const validatePageData = (data: PageData | null) => {
+  // ─── Walidacja danych ─────────────────────────────────────────────────
+  // Strona jest "kompletna" gdy ma id i wygenerowaną treść (pageContent)
+  const validatePageData = (data: PageData | null): boolean => {
     if (!data) return false;
-
-    const requiredFields = [
-      'x_amz_meta_title',
-      'pagecontent_hero_headline',
-      'pagecontent_hero_subheadline',
-      'pagecontent_hero_description'
-    ];
-
-    const validFieldsCount = requiredFields.filter(field =>
-      data[field as keyof PageData]
-    ).length;
-
-    return validFieldsCount >= Math.floor(requiredFields.length * 0.7);
-  };
-
-  // Formatowanie danych dla komponentu DemoView
-  const formatPageContent = (): PageContent | null => {
-    if (!validatePageData(pageData)) {
-      return null;
-    }
-
-    return {
-      s3_file_key: pageData?.s3_file_key || "",
-      hero: {
-        headline: pageData?.pagecontent_hero_headline || "",
-        subheadline: pageData?.pagecontent_hero_subheadline || "",
-        description: pageData?.pagecontent_hero_description || "",
-        buttonText: t.heroButtonText,
-        stats: []
-      },
-      benefits: {
-        title: t.benefitsTitle,
-        items: [
-          {
-            title: pageData?.pagecontent_benefits_items_0_title || "",
-            text: pageData?.pagecontent_benefits_items_0_text || ""
-          },
-          {
-            title: pageData?.pagecontent_benefits_items_1_title || "",
-            text: pageData?.pagecontent_benefits_items_1_text || ""
-          },
-          {
-            title: pageData?.pagecontent_benefits_items_2_title || "",
-            text: pageData?.pagecontent_benefits_items_2_text || ""
-          },
-          {
-            title: pageData?.pagecontent_benefits_items_3_title || "",
-            text: pageData?.pagecontent_benefits_items_3_text || ""
-          }
-        ]
-      },
-      testimonials: {
-        title: t.testimonialsTitle,
-        items: [
-          {
-            avatar: "/avatar1.jpg",
-            text: pageData?.pagecontent_testimonials_items_0_text || "",
-            author: pageData?.pagecontent_testimonials_items_0_author || "",
-            role: pageData?.pagecontent_testimonials_items_0_role || "",
-            rating: 5
-          },
-          {
-            avatar: "/avatar2.jpg",
-            text: pageData?.pagecontent_testimonials_items_1_text || "",
-            author: pageData?.pagecontent_testimonials_items_1_author || "",
-            role: pageData?.pagecontent_testimonials_items_1_role || "",
-            rating: 5
-          },
-          {
-            avatar: "/avatar3.jpg",
-            text: pageData?.pagecontent_testimonials_items_2_text || "",
-            author: pageData?.pagecontent_testimonials_items_2_author || "",
-            role: pageData?.pagecontent_testimonials_items_2_role || "",
-            rating: 5
-          }
-        ]
-      },
-      content: {
-        title: t.contentTitle,
-        chapters: [
-          {
-            number: "01",
-            title: pageData?.pagecontent_content_chapters_0_title || "",
-            description: pageData?.pagecontent_content_chapters_0_description || ""
-          },
-          {
-            number: "02",
-            title: pageData?.pagecontent_content_chapters_1_title || "",
-            description: pageData?.pagecontent_content_chapters_1_description || ""
-          },
-          {
-            number: "03",
-            title: pageData?.pagecontent_content_chapters_2_title || "",
-            description: pageData?.pagecontent_content_chapters_2_description || ""
-          }
-        ]
-      },
-      form: {
-        title: pageData?.pagecontent_form_title || t.formTitle,
-        subtitle: t.formSubtitle,
-        namePlaceholder: t.formNamePlaceholder,
-        emailPlaceholder: t.formEmailPlaceholder,
-        phonePlaceholder: t.formPhonePlaceholder,
-        buttonText: t.formButtonText,
-        privacyText: t.formPrivacyText
-      },
-      guarantees: {
-        items: [
-          { text: t.guarantee1 },
-          { text: t.guarantee2 },
-          { text: t.guarantee3 }
-        ]
-      },
-      faq: {
-        title: t.faqTitle,
-        items: [
-          {
-            question: pageData?.pagecontent_faq_items_0_question || "",
-            answer: pageData?.pagecontent_faq_items_0_answer || ""
-          },
-          {
-            question: pageData?.pagecontent_faq_items_1_question || "",
-            answer: pageData?.pagecontent_faq_items_1_answer || ""
-          },
-          {
-            question: pageData?.pagecontent_faq_items_2_question || "",
-            answer: pageData?.pagecontent_faq_items_2_answer || ""
-          }
-        ]
-      }
-    };
+    if (!data.id) return false;
+    const pageType = data.type || 'ebook';
+    if (pageType === 'ebook' && !data.pageContent) return false;
+    return true;
   };
 
   // Obsługa ponownej próby
-  const handleRetry = () => {
-    fetchData();
-  };
+  const handleRetry = () => fetchData();
 
-  // Przygotuj zawartość komponentu
+  // ─── Render ────────────────────────────────────────────────────────────
   const renderContent = () => {
-    if (loading) {
-      return <LoadingState />;
-    }
+    if (loading) return <LoadingState />;
+    if (error) return <ErrorState message={error} onRetry={handleRetry} />;
+    if (!pageData) return <ErrorState message={t.errorNoData} onRetry={handleRetry} />;
 
-    if (error) {
-      return <ErrorState message={error} onRetry={handleRetry} />;
-    }
-
-    if (!pageData) {
-      return <ErrorState message={t.errorNoData} onRetry={handleRetry} />;
-    }
-
-    const pageType = pageData.x_amz_meta_page_type || pageData.type || 'ebook';
+    const pageType = pageData.type || 'ebook';
 
     if (pageType === 'ebook' && !validatePageData(pageData)) {
       return <ErrorState message={t.errorIncompleteData} />;
     }
 
-    const formattedContent = formatPageContent();
-    if (!formattedContent) {
-      return <ErrorState message={t.errorProcessingData} />;
-    }
-
     const statusInfo = getStatusChangeInfo();
     const canEditPage = canEdit();
 
-    console.log('=== RENDER DEBUG ===');
-    console.log('canEditPage:', canEditPage);
-    console.log('isTextEditMode:', isTextEditMode);
-    console.log('pageData status:', pageData.status);
-    console.log('editMode param:', editMode);
-    console.log('DemoView will receive isTextEditMode:', isTextEditMode && canEditPage);
-    console.log('==================');
+    // EbookMeta zbudowane z pageData.ebook (z naszego API)
+    const ebookMeta = pageData.ebook
+      ? {
+          chapterCount: pageData.ebook.chapterCount,
+          estimatedPages: pageData.ebook.estimatedPages,
+          chapters: pageData.ebook.chapters,
+        }
+      : undefined;
 
     return (
       <div className={containerClass}>
         <div className="pb-24">
-          <DemoView
-            pageContent={formattedContent}
-            colorSchemeName={currentColorScheme}
-            language={lang}
-            ebookMeta={pageData?.ebookMeta}
-            partnerName={pageData.author_display_name || "Autor"}
-            visitors={pageData.visitors || 0}
-            pageId={pageData.id}
-            pageData={pageData}
-            isPreviewMode={isPreviewMode}
-            isTextEditMode={isTextEditMode && canEditPage}
-            onTextUpdate={useContextMode ? undefined : handleTextUpdate}
-          />
+          {pageType === 'ebook' ? (
+            <DemoView
+              pageContent={pageData.pageContent as any}
+              colorSchemeName={currentColorScheme}
+              language={lang}
+              ebookMeta={ebookMeta}
+              partnerName={pageData.authorDisplayName || 'Autor'}
+              partnerLogoUrl={buildAssetUrl(pageData.profilePicture)}
+              visitors={pageData.visitors || 0}
+              pageId={pageData.id}
+              pageData={pageData}
+              isPreviewMode={isPreviewMode}
+              isTextEditMode={isTextEditMode && canEditPage}
+              onTextUpdate={useContextMode ? undefined : handleTextUpdate}
+            />
+          ) : (
+            <DemoVideo
+              pageContent={{
+                title: pageData.pageContent?.hero?.headline_l1 || pageData.title || 'Strona wideo',
+                videoEmbedUrl: '',
+                videoProvider: 'vimeo' as const,
+                description: pageData.pageContent?.hero?.subheadline,
+                videoThumbnailUrl: undefined,
+                ctaButtonText: pageData.pageContent?.form?.cta || 'Obejrzyj teraz',
+              }}
+              colorSchemeName={currentColorScheme}
+              partnerName={pageData.authorDisplayName || 'Autor'}
+              pageId={pageData.id}
+              pageData={pageData}
+              isPreviewMode={isPreviewMode}
+            />
+          )}
         </div>
 
-        {/* Panel administracyjny - umieszczony na dole strony - ukryty w trybie podglądu */}
+        {/* Panel administracyjny */}
         {!isPreviewMode && (
           <div className="fixed bottom-0 left-0 right-0 z-40 bg-white shadow-lg py-3 px-4 border-t border-gray-200">
             <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center gap-4">
-
-              {/* Sekcja motywu kolorystycznego */}
+              {/* Motyw kolorystyczny */}
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-xs text-gray-400 font-medium uppercase tracking-wide mr-1">{t.adminThemeLabel}</span>
+                <span className="text-xs text-gray-400 font-medium uppercase tracking-wide mr-1">
+                  {t.adminThemeLabel}
+                </span>
                 {Object.entries(colorSchemes).map(([key, scheme]) => {
                   const nameMap: Record<string, string> = {
                     dark: t.colorSchemeDark,
@@ -1377,7 +1080,7 @@ const getStatusChangeInfo = () => {
                       key={key}
                       scheme={key}
                       currentScheme={currentColorScheme}
-                      onClick={(scheme) => handleColorChange(scheme as keyof typeof colorSchemes)}
+                      onClick={(s) => handleColorChange(s as keyof typeof colorSchemes)}
                       colorName={translatedName}
                       disabled={!canEditPage}
                     />
@@ -1385,10 +1088,8 @@ const getStatusChangeInfo = () => {
                 })}
               </div>
 
-              {/* Separator */}
               <div className="hidden sm:block w-px h-8 bg-gray-200"></div>
 
-              {/* Sekcja akcji */}
               <div className="flex items-center gap-2 flex-wrap sm:ml-auto">
                 <Link
                   href="/landings"
@@ -1405,8 +1106,8 @@ const getStatusChangeInfo = () => {
                     !canEditPage || !hasAnyChanges()
                       ? 'bg-blue-100 text-blue-300 cursor-not-allowed'
                       : isSaving
-                        ? 'bg-blue-400 text-white'
-                        : 'bg-blue-600 text-white hover:bg-blue-700 cursor-pointer'
+                      ? 'bg-blue-400 text-white'
+                      : 'bg-blue-600 text-white hover:bg-blue-700 cursor-pointer'
                   }`}
                 >
                   {isSaving ? (
@@ -1420,7 +1121,9 @@ const getStatusChangeInfo = () => {
                       {t.adminSave}
                       {hasAnyChanges() && (
                         <span className="ml-1.5 bg-white text-blue-600 rounded w-5 h-5 flex items-center justify-center text-xs font-bold">
-                          {useContextMode ? editModeContext.getPendingChangesCount() : (Object.keys(localTextChanges).length + (hasLocalColorChange ? 1 : 0))}
+                          {useContextMode
+                            ? editModeContext.getPendingChangesCount()
+                            : Object.keys(localTextChanges).length + (hasLocalColorChange ? 1 : 0)}
                         </span>
                       )}
                     </>
@@ -1434,10 +1137,10 @@ const getStatusChangeInfo = () => {
                     !statusInfo.enabled
                       ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
                       : isChangingStatus
-                        ? 'bg-green-400 text-white'
-                        : pageData.status === 'pending'
-                          ? 'bg-yellow-500 text-white hover:bg-yellow-600 cursor-pointer'
-                          : 'bg-green-600 text-white hover:bg-green-700 cursor-pointer'
+                      ? 'bg-green-400 text-white'
+                      : pageData.status === 'pending'
+                      ? 'bg-yellow-500 text-white hover:bg-yellow-600 cursor-pointer'
+                      : 'bg-green-600 text-white hover:bg-green-700 cursor-pointer'
                   }`}
                 >
                   {isChangingStatus ? (
@@ -1450,12 +1153,11 @@ const getStatusChangeInfo = () => {
                   )}
                 </button>
               </div>
-
             </div>
           </div>
         )}
 
-        {/* Toast notification */}
+        {/* Toast */}
         {toast && (
           <ToastNotification
             type={toast.type}
@@ -1464,10 +1166,8 @@ const getStatusChangeInfo = () => {
           />
         )}
 
-        {/* Baner podglądu - tylko w trybie podglądu */}
-        {isPreviewMode && (
-          <PreviewModeBanner onClose={closePreview} />
-        )}
+        {/* Baner podglądu */}
+        {isPreviewMode && <PreviewModeBanner onClose={closePreview} />}
 
         {/* Dialog potwierdzający */}
         <ConfirmDialog
@@ -1486,11 +1186,14 @@ const getStatusChangeInfo = () => {
   return renderContent();
 };
 
-// Główny komponent strony podglądu - owinięty w EditModeProvider
+// ───────────────────────────────────────────────────────────────────────────
+// Wrapper z EditModeProvider
+// ───────────────────────────────────────────────────────────────────────────
+
 export default function PreviewPage() {
   const params = useParams();
   const searchParams = useSearchParams();
-  const token = Array.isArray(params.token) ? params.token[0] : params.token as string;
+  const token = Array.isArray(params.token) ? params.token[0] : (params.token as string);
   const isPreviewMode = searchParams.get('view_mode') === 'preview';
   const editMode = searchParams.get('mode') === 'edit';
 
@@ -1508,10 +1211,7 @@ export default function PreviewPage() {
   const t = translations[currentLang];
 
   return (
-    <EditModeProvider
-      initialValues={{}}
-      autoEnableEditMode={autoEnableEditMode}
-    >
+    <EditModeProvider initialValues={{}} autoEnableEditMode={autoEnableEditMode}>
       <PreviewPageContent t={t} lang={currentLang} />
     </EditModeProvider>
   );
