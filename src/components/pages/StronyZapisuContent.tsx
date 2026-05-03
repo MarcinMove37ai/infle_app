@@ -610,16 +610,23 @@ const PagesView = () => {
     if (customDomainId) {
       const domain = availableDomains.find(d => d.id === customDomainId);
       if (domain && domain.status === 'active' && page.url) {
-        // Zachowaj path z oryginalnego URL'a, podmień tylko host.
-        // Original: https://app.inflee.app/ebookpage/by-marcin-lisiak/jak-lowic-dorsze-...
-        // Result:   https://lp.legalgpt.pl/ebookpage/by-marcin-lisiak/jak-lowic-dorsze-...
+        // Custom domain serwuje czysty URL — tylko slug (ostatni segment ścieżki),
+        // bez /ebookpage/by-author/ prefix. Middleware rewrite'uje
+        // <slug> → /ebookpage/<slug>?__host=<domain> wewnętrznie.
+        //
+        // Original: https://app.inflee.app/ebookpage/by-marcin-lisiak/jak-lowic-dorsze-w-norwegii-59e
+        // Result:   https://atlas.legalgpt.pl/jak-lowic-dorsze-w-norwegii-59e
         try {
           const original = new URL(page.url);
-          return `https://${domain.domain}${original.pathname}${original.search}${original.hash}`;
+          // Wyciągnij ostatni niepusty segment ścieżki
+          const segments = original.pathname.split('/').filter(s => s.length > 0);
+          const slug = segments[segments.length - 1] || '';
+          return `https://${domain.domain}/${slug}${original.search}${original.hash}`;
         } catch {
           // page.url nie jest poprawnym URL — fallback do prostego konkatenowania
-          const path = page.url.startsWith('/') ? page.url : `/${page.url}`;
-          return `https://${domain.domain}${path}`;
+          const segments = page.url.split('/').filter(s => s.length > 0);
+          const slug = segments[segments.length - 1] || '';
+          return `https://${domain.domain}/${slug}`;
         }
       }
     }

@@ -95,6 +95,23 @@ export async function middleware(request: NextRequest) {
   const directHost = (request.headers.get('host') || '').toLowerCase().split(':')[0]
   const host = cfHostname || xForwardedHost || directHost
 
+  // DEBUG — pełny dump relevant CF/proxy headers żeby zdiagnozować routing.
+  // Ten log wskaże czy CF for SaaS faktycznie dodaje cf-custom-hostname,
+  // jaki Host forwarduje do origin, oraz inne CF-specific headery.
+  console.log('🔬 [middleware] HEADERS DUMP:', {
+    pathname: request.nextUrl.pathname,
+    'host': directHost,
+    'cf-custom-hostname': cfHostname,
+    'x-forwarded-host': xForwardedHost,
+    'x-forwarded-for': request.headers.get('x-forwarded-for'),
+    'x-forwarded-proto': request.headers.get('x-forwarded-proto'),
+    'cf-connecting-ip': request.headers.get('cf-connecting-ip'),
+    'cf-ray': request.headers.get('cf-ray'),
+    'cf-visitor': request.headers.get('cf-visitor'),
+    'cf-ipcountry': request.headers.get('cf-ipcountry'),
+    'resolved_host_used': host,
+  })
+
   if (cfHostname) {
     console.log('🌐 CF custom hostname detected:', { cfHostname, directHost })
   }
