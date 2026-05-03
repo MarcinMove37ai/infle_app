@@ -13,26 +13,40 @@ type PublicPageProps = {
   }>;
   searchParams: Promise<{
     __host?: string;
+    __landing?: string;
   }>;
 };
 
 const APP_HOST = process.env.APP_HOST || 'app.inflee.app';
 
 /**
- * Resolves the page record from one of two flows:
+ * Resolves the page record from one of three flows:
  *
- *  1) Custom domain flow (rewrite from middleware):
- *     - searchParams.__host is set (passed by middleware rewrite)
- *     - slug is a single segment (just the page-slug, e.g. "dieta-keto-abc")
- *     - We look up the customDomain by host, then fetch the page that belongs
- *       to that user AND whose URL ends with that slug.
+ *  1) Plan B — Landing host flow (CF for SaaS non-Enterprise):
+ *     - searchParams.__landing === '1' (set by middleware rewrite)
+ *     - slug is a single segment (e.g. "dieta-keto-abc123")
+ *     - We can't know which custom domain handles this request because
+ *       Cloudflare for SaaS w trybie SNI nie przekazuje oryginalnej domeny
+ *       klienta do origin (Host jest nadpisany na connect.inflee.app,
+ *       cf-custom-hostname leci tylko do Workers, SNI ginie na Railway proxy).
+ *     - Strategia: znaleźć stronę po slug + customDomainId not null +
+ *       customDomain.status = 'active' + status = 'published'.
+ *       Slug z random suffix (-abc123) gwarantuje unikalność w praktyce.
  *
- *  2) Direct app.inflee.app flow (existing behavior):
- *     - No __host param
- *     - slug is the full segments after /ebookpage/, e.g. ["by-john", "dieta-keto-abc"]
- *     - We match by full path containment, like before.
+ *  2) Custom domain flow (legacy — middleware już nie ustawia __host,
+ *     ale zostawiamy branch dla bezpieczeństwa cache'a):
+ *     - searchParams.__host is set
+ *     - lookup customDomain by host, then page by userId + slug.
+ *
+ *  3) Direct app.inflee.app flow (existing behavior):
+ *     - Brak flag, slug to pełna ścieżka po /ebookpage/.
+ *     - Match po full path containment, jak wcześniej.
  */
-async function getPageData(slug: string[], hostFromRewrite?: string) {
+async function getPageData(
+  slug: string[],
+  hostFromRewrite?: string,
+  isLandingFlow?: boolean,
+) {
   if (!slug || slug.length === 0) {
     return null;
   }
@@ -40,17 +54,70 @@ async function getPageData(slug: string[], hostFromRewrite?: string) {
   try {
     let page;
 
-    if (hostFromRewrite) {
-      // ----- Custom domain flow -----
-      // slug is one segment, look it up under the user owning hostFromRewrite.
-      const pageSlug = slug[slug.length - 1]; // defensive: take last segment
+    if (isLandingFlow) {
+      // ----- Plan B: Landing host flow (CF for SaaS non-Enterprise) -----
+      //
+      // Cloudflare for SaaS w trybie SNI nie przekazuje oryginalnej domeny
+      // klienta (atlas.legalgpt.pl) do origin — Host header jest nadpisany na
+      // connect.inflee.app (custom_origin_server), a `cf-custom-hostname` leci
+      // tylko do Workers, nie do bezpośredniego Node origin. SNI ginie na
+      // Railway proxy. Z tego powodu nie wiemy KTÓRA custom domena obsługuje
+      // ten request — middleware oznaczył tylko `__landing=1`.
+      //
+      // Strategia: zaufać unikalności sluga (każdy slug ma random suffix typu
+      // -abc123, więc kolizje praktycznie niemożliwe) i znaleźć stronę po:
+      //   1. slug w pages.url (contains '/<slug>' bo ścieżka zawiera /by-author/)
+      //   2. customDomainId != null (strona jest podpięta pod jakąś custom domenę)
+      //   3. customDomain.status === 'active' (domena zweryfikowana w CF)
+      //   4. status === 'published'
+      //
+      // Filtr customDomainId not null + status active to zabezpieczenie żeby
+      // bezpośrednie wejście na connect.inflee.app/<slug> NIE pokazało strony
+      // która powinna być serwowana TYLKO pod custom domeną.
+      const pageSlug = slug[slug.length - 1];
+      page = await prisma.pages.findFirst({
+        where: {
+          url: { contains: `/${pageSlug}` },
+          customDomainId: { not: null },
+          status: 'published',
+          customDomain: {
+            status: 'active',
+          },
+        },
+        include: {
+          content: true,
+          user: true,
+          customDomain: { select: { id: true, domain: true, status: true } },
+          ebook: {
+            include: {
+              ebook_chapters: { orderBy: { position: 'asc' } },
+            },
+          },
+        },
+      });
+
+      if (page) {
+        console.log('[ebookpage] LANDING flow matched:', {
+          slug: pageSlug,
+          pageId: page.id,
+          customDomain: (page as any).customDomain?.domain,
+        });
+      } else {
+        console.log('[ebookpage] LANDING flow MISS for slug:', pageSlug);
+      }
+    } else if (hostFromRewrite) {
+      // ----- Legacy custom domain flow -----
+      // Middleware obecnie nie ustawia już __host (zastąpione przez __landing),
+      // ale zostawiamy ten branch na wypadek starego cache'a / przejściowych
+      // requestów w trakcie deployu.
+      const pageSlug = slug[slug.length - 1];
       const customDomain = await prisma.customDomain.findUnique({
         where: { domain: hostFromRewrite.toLowerCase() },
         select: { userId: true, status: true },
       });
 
       if (!customDomain || customDomain.status !== 'active') {
-        return null; // unknown or unverified domain
+        return null;
       }
 
       page = await prisma.pages.findFirst({
@@ -112,7 +179,7 @@ async function getPageData(slug: string[], hostFromRewrite?: string) {
         total_pages: (page.ebook as any).total_pages,
       });
     }
-    console.log('[ebookpage] page.s3_file_key:', page.s3_file_key);
+    console.log('[ebookpage] page.s3_file_key:', (page as any).s3_file_key);
 
     // -----------------------------------------------------------------
     // Buduj ebookMeta na serwerze — identycznie jak preview API
@@ -195,8 +262,8 @@ async function getPrimaryDomainForUser(userId: string): Promise<string | null> {
 
 export async function generateMetadata({ params, searchParams }: PublicPageProps): Promise<Metadata> {
   const { slug } = await params;
-  const { __host } = await searchParams;
-  const pageData = await getPageData(slug, __host);
+  const { __host, __landing } = await searchParams;
+  const pageData = await getPageData(slug, __host, __landing === '1');
 
   if (!pageData || !pageData.content) {
     return { title: 'Strona nie została znaleziona' };
@@ -229,8 +296,8 @@ export async function generateMetadata({ params, searchParams }: PublicPageProps
 
 export default async function PublicPage({ params, searchParams }: PublicPageProps) {
   const { slug } = await params;
-  const { __host } = await searchParams;
-  const pageData = await getPageData(slug, __host);
+  const { __host, __landing } = await searchParams;
+  const pageData = await getPageData(slug, __host, __landing === '1');
 
   if (!pageData) {
     notFound();
@@ -240,10 +307,10 @@ export default async function PublicPage({ params, searchParams }: PublicPagePro
   // Canonical redirect: when the page is hit directly under app.inflee.app
   // and the page owner has an active primary custom domain, 301 the visitor
   // to the canonical URL on their custom domain.
-  // We detect a "direct app.inflee.app hit" by absence of __host (which is
-  // only set when middleware rewrites a custom-host request).
+  // We detect a "direct app.inflee.app hit" by absence of BOTH __host AND
+  // __landing flags (oba ustawiane przez middleware tylko dla custom/landing).
   // ─────────────────────────────────────────────────────────────────
-  if (!__host) {
+  if (!__host && __landing !== '1') {
     const hdrs = await headers();
     const requestHost = (hdrs.get('host') || '').toLowerCase().split(':')[0];
     const isAppHost = requestHost === APP_HOST;

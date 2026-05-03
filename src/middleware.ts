@@ -122,9 +122,20 @@ export async function middleware(request: NextRequest) {
   const isLocalDev = host === 'localhost' || host === '127.0.0.1'
 
   // ==================================================
-  // ⭐ NEW: Custom domain / landing host routing
-  // Locks down everything except whitelisted public paths.
-  // Skips localhost so dev workflow is unaffected.
+  // ⭐ Custom domain / landing host routing (Plan B — lookup by slug)
+  //
+  // CF for SaaS na planie non-Enterprise nie przekazuje oryginalnej domeny
+  // klienta (atlas.legalgpt.pl) do origin. Z custom_origin_server ustawionym
+  // na connect.inflee.app, Host w request headerze JEST connect.inflee.app
+  // (Railway tego wymaga). Nie ma czystego sposobu odzyskania oryginalnej
+  // domeny po stronie Node.
+  //
+  // Strategia: zaufać unikalności sluga (random suffix typu -abc123) i znaleźć
+  // stronę po slug + customDomainId not null + status published. Gdy ktoś
+  // trafi na /<slug> NIE z custom domeny (np. bezpośrednio connect.inflee.app)
+  // ale strona ma przypisaną customDomainId, też pokazujemy — to OK, bo
+  // connect.inflee.app jest fallback originem dla CF for SaaS i nie powinien
+  // być używany bezpośrednio przez ludzi.
   // ==================================================
   if (!isAppHost && !isLocalDev) {
     if (!isPublicLandingPath(pathname)) {
@@ -132,19 +143,19 @@ export async function middleware(request: NextRequest) {
       return new NextResponse('Not found', { status: 404 })
     }
 
-    // Rewrite landing slug into /ebookpage/[slug]?__host=<host>
-    // so the page component can resolve the right user via customDomain table.
-    // Pattern: single-segment path that's not a reserved app route, not /api, not /_next.
+    // Rewrite landing slug into /ebookpage/[slug]?__landing=1
+    // — flaga __landing sygnalizuje page.tsx żeby użyć lookupu po slug
+    // (a nie po host header, który jest bezużyteczny dla CF for SaaS non-Enterprise).
     const slugMatch = pathname.match(/^\/([a-z0-9][a-z0-9-]*)\/?$/)
     if (slugMatch) {
       const slug = slugMatch[1]
       const url = request.nextUrl.clone()
       url.pathname = `/ebookpage/${slug}`
-      url.searchParams.set('__host', host)
+      url.searchParams.set('__landing', '1')
       console.log('🔀 REWRITE on landing host:', {
         host,
         from: pathname,
-        to: `${url.pathname}?__host=${host}`,
+        to: `${url.pathname}?__landing=1`,
       })
       return NextResponse.rewrite(url)
     }
