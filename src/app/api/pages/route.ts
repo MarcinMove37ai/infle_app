@@ -26,6 +26,7 @@ interface PagesApiResponse {
     coverImage: string;
     videoPassword?: string;
     isOwnedByUser: boolean;
+    customDomainId?: string | null;
   }[];
   stats: {
     total: number;
@@ -157,6 +158,7 @@ export async function GET(request: NextRequest) {
         coverImage: page.coverImage || '',
         videoPassword: '',
         isOwnedByUser: page.userId === userId,
+        customDomainId: page.customDomainId,
       };
     });
 
@@ -182,6 +184,7 @@ export async function GET(request: NextRequest) {
         coverImage: page.coverImage || '',
         videoPassword: '',
         isOwnedByUser: page.userId === userId,
+        customDomainId: page.customDomainId,
       };
     });
 

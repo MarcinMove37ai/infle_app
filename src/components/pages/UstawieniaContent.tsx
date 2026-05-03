@@ -15,6 +15,7 @@ import Link from 'next/link';
 import UpgradeModal from '@/components/ui/UpgradeModal';
 import ProfilePictureCropModal from '@/components/ui/ProfilePictureCropModal';
 import BrandLogoModal from '@/components/ui/BrandLogoModal';
+import CustomDomainsSection from '@/components/pages/settings/CustomDomainsSection';
 import { signOut } from 'next-auth/react';
 
 interface Model {
@@ -1192,7 +1193,15 @@ function SubscriptionCard({
       <div className="space-y-6">
 
         {/* === CZĘŚĆ 1: KARTA WIZUALNA === */}
-        <div className="bg-white border border-gray-200 rounded-xl p-5 sm:p-6 shadow-sm relative overflow-hidden">
+        <div>
+          {/* Label nad ramką — analogicznie do CUSTOM DOMAINS / IMAGE SETUP */}
+          <div className="mb-2 px-1">
+            <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+              {lang === 'pl' ? 'Informacje o planie' : 'Plan info'}
+            </label>
+          </div>
+
+          <div className="bg-white border border-gray-200 rounded-xl p-5 sm:p-6 shadow-sm relative overflow-hidden">
 
           {/* KONTENER GŁÓWNY GÓRY */}
           <div className={(!isDemo && !isFree) ? "mb-4" : "mb-0"}>
@@ -1308,106 +1317,115 @@ function SubscriptionCard({
                </div>
             </div>
           )}
+
+          {/* === MANAGE PLAN BUTTON — wewnątrz karty dla planów płatnych === */}
+          {!isFree && (
+            <div className="mt-4 pt-4 border-t border-gray-200">
+              <button
+                onClick={() => { (window as any).openUpgradeModal('manage'); }}
+                className="w-full inline-flex justify-center items-center px-4 py-3 bg-gray-800 text-white text-sm font-medium rounded-xl hover:bg-gray-900 transition-all cursor-pointer shadow-sm hover:shadow-md"
+              >
+                <CreditCard className="w-4 h-4 mr-2" />
+                {t.managePlan}
+              </button>
+            </div>
+          )}
         </div>
+        </div>{/* /Outer wrapper karty + label PLAN INFO */}
 
         {/* === CZĘŚĆ 2: INFORMACJE O WŁAŚCICIELU (Ukryte dla Free/Demo) === */}
         {subscriptionData?.role !== 'free' && subscriptionData?.role !== 'demo' && (
           <div>
-              <p className="text-xs font-medium text-gray-700 mb-2">{t.billingOwner}</p>
-              <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl">
-                {(subscriptionData?.billingPreference === 'company' || (!subscriptionData?.billingPreference && subscriptionData?.companyName)) ? (
-                   <div className="text-sm text-gray-900">
-                     <p className="font-semibold">
-                        {subscriptionData?.companyName} <span className="text-gray-400 font-normal mx-1">|</span> {subscriptionData?.taxId}
-                     </p>
-                     <p className="text-xs text-gray-500 mt-1 whitespace-pre-wrap leading-relaxed">
-                       {formatAddress(subscriptionData?.billingAddress)}
-                     </p>
-                   </div>
-                 ) : (
-                   <div className="text-sm text-gray-900">
-                     <p className="font-semibold">{subscriptionData?.billingName || '---'}</p>
-                     <p className="text-xs text-gray-500 mt-2 whitespace-pre-wrap leading-relaxed">
-                       {formatAddress(subscriptionData?.billingAddress)}
-                     </p>
-                   </div>
-                 )}
-              </div>
+            {/* Label nad ramką — analogicznie do PLAN INFO / CUSTOM DOMAINS / IMAGE SETUP */}
+            <div className="mb-2 px-1">
+              <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                {t.billingOwner}
+              </label>
+            </div>
+
+            {/* Karta — biały bg + border, padding zgodny z innymi kartami Settings */}
+            <div className="bg-white rounded-xl border border-gray-200 px-3 py-4 sm:p-6">
+              {(subscriptionData?.billingPreference === 'company' || (!subscriptionData?.billingPreference && subscriptionData?.companyName)) ? (
+                <div className="text-sm text-gray-900">
+                  <p className="font-semibold">
+                    {subscriptionData?.companyName}
+                    <span className="text-gray-400 font-normal mx-1">|</span>
+                    {subscriptionData?.taxId}
+                  </p>
+                  <p className="text-xs text-gray-500 mt-1 whitespace-pre-wrap leading-relaxed">
+                    {formatAddress(subscriptionData?.billingAddress)}
+                  </p>
+                </div>
+              ) : (
+                <div className="text-sm text-gray-900">
+                  <p className="font-semibold">{subscriptionData?.billingName || '---'}</p>
+                  <p className="text-xs text-gray-500 mt-2 whitespace-pre-wrap leading-relaxed">
+                    {formatAddress(subscriptionData?.billingAddress)}
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
-        {/* === CZĘŚĆ 3: PRZYCISKI AKCJI === */}
-        <div className="pt-2">
-          {subscriptionData?.role === 'free' ? (
-            <>
-              {/* Przycisk z obsługą Loadera */}
-              <button
-                onClick={async () => {
-                  if (lang === 'pl') {
-                    onOpenVerificationModal();
+        {/* === CZĘŚĆ 3: VERIFY IDENTITY (tylko Free) === */}
+        {subscriptionData?.role === 'free' && (
+          <div className="pt-2">
+            {/* Przycisk z obsługą Loadera */}
+            <button
+              onClick={async () => {
+                if (lang === 'pl') {
+                  onOpenVerificationModal();
+                  return;
+                }
+
+                // Dla EN włączamy spinner
+                setIsRedirectingToStripe(true);
+
+                try {
+                  const response = await fetch('/api/stripe/create-trial-checkout-session', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ locale: lang }),
+                  });
+                  const data = await response.json();
+
+                  if (!response.ok) {
+                    console.error('Error:', data.error);
+                    alert('Błąd: ' + (data.error || 'Nie udało się utworzyć sesji'));
+                    setIsRedirectingToStripe(false);
                     return;
                   }
 
-                  // Dla EN włączamy spinner
-                  setIsRedirectingToStripe(true);
+                  window.location.href = data.url;
 
-                  try {
-                    const response = await fetch('/api/stripe/create-trial-checkout-session', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ locale: lang }),
-                    });
-                    const data = await response.json();
-
-                    if (!response.ok) {
-                      console.error('Error:', data.error);
-                      alert('Błąd: ' + (data.error || 'Nie udało się utworzyć sesji'));
-                      setIsRedirectingToStripe(false);
-                      return;
-                    }
-
-                    window.location.href = data.url;
-
-                  } catch (error) {
-                    console.error('Error:', error);
-                    alert('Wystąpił błąd podczas tworzenia sesji płatności');
-                    setIsRedirectingToStripe(false);
-                  }
-                }}
-                disabled={isRedirectingToStripe}
-                className="w-full inline-flex justify-center items-center px-4 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed"
-              >
-                {isRedirectingToStripe ? (
-                  <>
-                    <Loader2 className="w-5 h-5 animate-spin mr-2" />
-                    {lang === 'pl' ? 'Przekierowywanie...' : 'Redirecting...'}
-                  </>
-                ) : (
-                  t.verifyPayment
-                )}
-              </button>
-
-              <div className="mt-4 p-4 bg-emerald-50 border border-emerald-200 rounded-lg flex items-start gap-3">
-                <ShieldCheck className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
-                <p className="text-xs text-emerald-800 leading-relaxed text-justify">
-                  {t.verifyIdentityInfo}
-                </p>
-              </div>
-            </>
-          ) : (
-            <button
-              onClick={() => {
-                // Mode 'manage' (default) → modal otwiera się Z przyciskiem cancel.
-                // To wywołanie z karty Subscription (managePlan) — user może chcieć zarządzać/anulować.
-                (window as any).openUpgradeModal('manage');
+                } catch (error) {
+                  console.error('Error:', error);
+                  alert('Wystąpił błąd podczas tworzenia sesji płatności');
+                  setIsRedirectingToStripe(false);
+                }
               }}
-              className="w-full inline-flex justify-center items-center px-4 py-3 bg-gray-800 text-white text-sm font-medium rounded-xl hover:bg-gray-900 transition-all cursor-pointer shadow-sm hover:shadow-md"
+              disabled={isRedirectingToStripe}
+              className="w-full inline-flex justify-center items-center px-4 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed"
             >
-              <CreditCard className="w-4 h-4 mr-2" />
-              {t.managePlan}
+              {isRedirectingToStripe ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin mr-2" />
+                  {lang === 'pl' ? 'Przekierowywanie...' : 'Redirecting...'}
+                </>
+              ) : (
+                t.verifyPayment
+              )}
             </button>
-          )}
-        </div>
+
+            <div className="mt-4 p-4 bg-emerald-50 border border-emerald-200 rounded-lg flex items-start gap-3">
+              <ShieldCheck className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
+              <p className="text-xs text-emerald-800 leading-relaxed text-justify">
+                {t.verifyIdentityInfo}
+              </p>
+            </div>
+          </div>
+        )}
 
       </div>
     );
@@ -3904,10 +3922,9 @@ export default function SettingsContent() {
             </div>
           </div>
 
-          {/* --- PRAWA KOLUMNA (Subskrypcja) --- */}
+          {/* --- PRAWA KOLUMNA (Subskrypcja + Custom Domains) --- */}
           <div>
-            {/* Subskrypcja - zintegrowana z SubscriptionCard (Przeniesione) */}
-            <div className="lg:pl-12">
+            <div className="lg:pl-12 space-y-6">
               <SubscriptionCard
                 lang={currentLang}
                 t={t}
@@ -3916,6 +3933,12 @@ export default function SettingsContent() {
                 loading={isSubscriptionLoading}
                 setConfirmModal={setConfirmModal}
                 onOpenVerificationModal={() => setIsVerificationModalOpen(true)}
+              />
+
+              {/* Custom Domains — sekcja zarządzania własnymi domenami pod stronami zapisu */}
+              <CustomDomainsSection
+                userRole={subscriptionData?.role}
+                currentLang={currentLang}
               />
             </div>
           </div>

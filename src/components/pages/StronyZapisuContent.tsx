@@ -3,7 +3,8 @@
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { FileText, Search, Plus, Eye, Edit, Trash2, Clock, Check, AlertTriangle,
-         BookOpen, ShoppingCart, Copy, X, Video, QrCode, Lock, Sparkles, ImageIcon, Film } from 'lucide-react';
+         BookOpen, ShoppingCart, Copy, X, Video, QrCode, Lock, Sparkles, ImageIcon, Film,
+         Globe, Loader2 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { useAuth } from '@/hooks/useAuth';
 import { useReelSessionState, clearReelSession } from '@/hooks/useReelSessionState';
@@ -28,6 +29,9 @@ interface PageItem {
   x_amz_meta_title?: string;
   videoPassword?: string;
   isOwnedByUser?: boolean;
+  // Custom domain assignment — jeśli ustawione, page jest serwowana spod custom domeny.
+  // Backend GET /api/pages musi zwracać to pole (jeśli nie zwraca, dodamy w Kroku 7).
+  customDomainId?: string | null;
 }
 
 interface SupervisorDescription {
@@ -47,6 +51,14 @@ interface PageStats {
 interface PagesApiResponse {
   pages: PageItem[];
   stats: PageStats;
+}
+
+// Aktywna custom domena usera — dostępna do podpinania pod stronę.
+// Zwracana z GET /api/domains, filtrowana na froncie po status === 'active'.
+interface CustomDomain {
+  id: string;
+  domain: string;
+  status: 'pending' | 'verifying' | 'active' | 'failed';
 }
 
 // ─── Translations ────────────────────────────────────────────────────────────
@@ -143,6 +155,16 @@ const translations = {
     ctaCommentTemplate: 'Skomentuj',
     noCtaOptions: 'Brak wariantów CTA dla tej strony',
     ttsPreview: 'Tekst do odczytania (TTS)',
+    // Domain selector
+    domainSelectorTitle: 'Wybierz domenę',
+    domainSelectorDefault: 'Domyślna',
+    domainSelectorDefaultHost: 'app.inflee.app',
+    domainSelectorActive: 'Aktywna',
+    domainSelectorAssigning: 'Zapisywanie...',
+    domainSelectorAssignError: 'Nie udało się zapisać. Spróbuj ponownie.',
+    domainSelectorTooltip: 'Wybierz domenę',
+    domainSelectorEmpty: 'Brak własnych domen',
+    domainSelectorEmptyHint: 'Dodaj domenę w Ustawieniach',
   },
   en: {
     allPages: 'All Pages',
@@ -235,7 +257,162 @@ const translations = {
     ctaCommentTemplate: 'Comment',
     noCtaOptions: 'No CTA variants for this page',
     ttsPreview: 'Text to read (TTS)',
+    // Domain selector
+    domainSelectorTitle: 'Choose domain',
+    domainSelectorDefault: 'Default',
+    domainSelectorDefaultHost: 'app.inflee.app',
+    domainSelectorActive: 'Active',
+    domainSelectorAssigning: 'Saving...',
+    domainSelectorAssignError: 'Failed to save. Please try again.',
+    domainSelectorTooltip: 'Choose domain',
+    domainSelectorEmpty: 'No custom domains',
+    domainSelectorEmptyHint: 'Add a domain in Settings',
   }
+};
+
+// ════════════════════════════════════════════════════════════════════════
+// DomainSelector — popover z listą custom domen + opcji "Default".
+// Klik na ikonę Globe → otwiera popover. Wybór → wywołuje onSelect(domainId|null).
+// Komponent stateless — parent zarządza otwieraniem/zamykaniem przez `isOpen`,
+// loading state przez `isAssigning`, błąd przez `error`.
+// ════════════════════════════════════════════════════════════════════════
+interface DomainSelectorProps {
+  pageId: string;
+  currentDomainId: string | null | undefined;
+  availableDomains: Array<{ id: string; domain: string; status: string }>;
+  isOpen: boolean;
+  onToggle: () => void;
+  onSelect: (domainId: string | null) => void;
+  isAssigning: boolean;
+  error: string | null;
+  t: typeof translations['pl'];
+}
+
+const DomainSelector: React.FC<DomainSelectorProps> = ({
+  pageId, currentDomainId, availableDomains, isOpen, onToggle, onSelect,
+  isAssigning, error, t,
+}) => {
+  const popoverRef = useRef<HTMLDivElement>(null);
+
+  // Zamknij popover gdy klik poza
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleClickOutside = (event: MouseEvent) => {
+      if (popoverRef.current && !popoverRef.current.contains(event.target as Node)) {
+        onToggle();
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isOpen, onToggle]);
+
+  return (
+    <div className="relative inline-flex">
+      {/* Trigger — ikona Globe spójna z QR/Copy */}
+      <button
+        onClick={onToggle}
+        className={`p-1 rounded cursor-pointer transition-colors ${
+          currentDomainId
+            ? 'text-emerald-600 hover:text-emerald-700'
+            : 'text-gray-500 hover:text-sky-600'
+        }`}
+        title={t.domainSelectorTooltip}
+      >
+        {isAssigning ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : (
+          <Globe className="h-4 w-4" />
+        )}
+      </button>
+
+      {/* Popover */}
+      {isOpen && (
+        <div
+          ref={popoverRef}
+          className="absolute right-0 bottom-full mb-2 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-30 overflow-hidden"
+        >
+          <div className="px-3 py-2 border-b border-gray-100 bg-gray-50">
+            <p className="text-[0.65rem] font-semibold text-gray-500 uppercase tracking-wider">
+              {t.domainSelectorTitle}
+            </p>
+          </div>
+
+          <div className="py-1 max-h-64 overflow-y-auto">
+            {/* "Default" — app.inflee.app */}
+            <button
+              onClick={() => onSelect(null)}
+              disabled={isAssigning}
+              className={`w-full px-3 py-2 text-left flex items-center justify-between gap-2 hover:bg-gray-50 transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 ${
+                !currentDomainId ? 'bg-blue-50' : ''
+              }`}
+            >
+              <div className="flex items-center gap-2 min-w-0 flex-1">
+                <Globe className="h-3.5 w-3.5 text-gray-400 flex-shrink-0" />
+                <div className="min-w-0">
+                  <div className="text-xs font-medium text-gray-900 truncate">
+                    {t.domainSelectorDefault}
+                  </div>
+                  <div className="text-[0.65rem] text-gray-500 truncate font-mono">
+                    {t.domainSelectorDefaultHost}
+                  </div>
+                </div>
+              </div>
+              {!currentDomainId && (
+                <Check className="h-3.5 w-3.5 text-blue-600 flex-shrink-0" />
+              )}
+            </button>
+
+            {/* Aktywne custom domeny */}
+            {availableDomains.length === 0 ? (
+              <div className="px-3 py-3 text-center">
+                <p className="text-xs text-gray-500 mb-0.5">{t.domainSelectorEmpty}</p>
+                <p className="text-[0.65rem] text-gray-400">{t.domainSelectorEmptyHint}</p>
+              </div>
+            ) : (
+              availableDomains.map(d => {
+                const isSelected = d.id === currentDomainId;
+                return (
+                  <button
+                    key={d.id}
+                    onClick={() => onSelect(d.id)}
+                    disabled={isAssigning}
+                    className={`w-full px-3 py-2 text-left flex items-center justify-between gap-2 hover:bg-gray-50 transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 ${
+                      isSelected ? 'bg-emerald-50' : ''
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <Globe className={`h-3.5 w-3.5 flex-shrink-0 ${
+                        isSelected ? 'text-emerald-600' : 'text-gray-400'
+                      }`} />
+                      <div className="min-w-0">
+                        <div className="text-xs font-medium text-gray-900 truncate font-mono">
+                          {d.domain}
+                        </div>
+                        <div className="text-[0.65rem] text-emerald-600 truncate inline-flex items-center gap-0.5">
+                          <Check className="h-2.5 w-2.5" />
+                          {t.domainSelectorActive}
+                        </div>
+                      </div>
+                    </div>
+                    {isSelected && (
+                      <Check className="h-3.5 w-3.5 text-emerald-600 flex-shrink-0" />
+                    )}
+                  </button>
+                );
+              })
+            )}
+          </div>
+
+          {/* Error */}
+          {error && (
+            <div className="px-3 py-2 border-t border-red-100 bg-red-50">
+              <p className="text-[0.65rem] text-red-700">{error}</p>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
 };
 
 const PagesView = () => {
@@ -262,6 +439,18 @@ const PagesView = () => {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [reelUrls, setReelUrls] = useState<Record<string, string>>({});
+
+  // Lista aktywnych custom domen usera — dostępna do przypisywania stronom.
+  // Pobierana raz przy załadowaniu komponentu, refetchowana po sukcesie PATCH.
+  const [availableDomains, setAvailableDomains] = useState<CustomDomain[]>([]);
+
+  // Domain selector — popover state'y dla per-page domain assignment.
+  // openDomainSelectorPageId: id strony której popover jest aktualnie otwarty (lub null).
+  // assigningDomainPageId: id strony dla której PATCH jest w trakcie (loading state).
+  // domainSelectorError: globalny error message dla wszystkich popoverów.
+  const [openDomainSelectorPageId, setOpenDomainSelectorPageId] = useState<string | null>(null);
+  const [assigningDomainPageId, setAssigningDomainPageId] = useState<string | null>(null);
+  const [domainSelectorError, setDomainSelectorError] = useState<string | null>(null);
 
   // Reel Modal State
   const [reelModalOpen, setReelModalOpen] = useState(false);
@@ -308,6 +497,25 @@ const PagesView = () => {
       setCurrentLang(savedLang);
     }
   }, []);
+
+  // Fetch listy aktywnych custom domen usera. Używamy istniejącego endpointu
+  // GET /api/domains (zwraca wszystkie domeny usera z różnymi statusami)
+  // i filtrujemy po status='active' — tylko aktywne mogą być podpinane do stron.
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const fetchDomains = async () => {
+      try {
+        const res = await fetch('/api/domains');
+        if (!res.ok) return;
+        const data = await res.json();
+        const allDomains: CustomDomain[] = data.domains || [];
+        setAvailableDomains(allDomains.filter(d => d.status === 'active'));
+      } catch (err) {
+        console.error('Failed to load custom domains:', err);
+      }
+    };
+    fetchDomains();
+  }, [isAuthenticated]);
 
   const t = translations[currentLang];
 
@@ -371,6 +579,76 @@ const PagesView = () => {
     }
     return `/api/assets/uploads/${coverImagePath}`;
   };
+
+  // ─── Helper: zwraca URL strony do wyświetlenia user'owi ──────────────
+  // Jeśli strona ma przypisaną aktywną custom domenę → zwraca https://<domain>
+  // (cała strona serwowana spod custom domeny, bez dodatkowej ścieżki — middleware
+  // mapuje host → page przez pages.customDomainId).
+  // Inaczej → zwraca page.url tak jak jest w bazie (np. app.inflee.app/ebookpage/...).
+  //
+  // Wykorzystywany przez:
+  //  - link na karcie strony (wyświetlany pod tytułem)
+  //  - QR code (zakodowany URL)
+  //  - copy-to-clipboard
+  //  - link do podglądu strony w nowej karcie
+  const getDisplayUrl = useCallback((page: PageItem): string => {
+    // Sprawdź czy strona ma przypisaną aktywną domenę
+    const customDomainId = (page as any).customDomainId;
+    if (customDomainId) {
+      const domain = availableDomains.find(d => d.id === customDomainId);
+      if (domain && domain.status === 'active' && page.url) {
+        // Zachowaj path z oryginalnego URL'a, podmień tylko host.
+        // Original: https://app.inflee.app/ebookpage/by-marcin-lisiak/jak-lowic-dorsze-...
+        // Result:   https://lp.legalgpt.pl/ebookpage/by-marcin-lisiak/jak-lowic-dorsze-...
+        try {
+          const original = new URL(page.url);
+          return `https://${domain.domain}${original.pathname}${original.search}${original.hash}`;
+        } catch {
+          // page.url nie jest poprawnym URL — fallback do prostego konkatenowania
+          const path = page.url.startsWith('/') ? page.url : `/${page.url}`;
+          return `https://${domain.domain}${path}`;
+        }
+      }
+    }
+    // Fallback: oryginalny URL z bazy
+    return page.url || '';
+  }, [availableDomains]);
+
+  // ─── Handler: przypisz custom domain do strony ──────────────────────
+  // domainId === null → odpinamy domenę (strona wraca do app.inflee.app).
+  // domainId !== null → przypisujemy daną domenę.
+  // Po sukcesie aktualizujemy lokalnie pages[].customDomainId — UI od razu pokazuje
+  // nowy URL (przez getDisplayUrl), bez czekania na refetch /api/pages.
+  const handleAssignDomain = useCallback(async (pageId: string, domainId: string | null) => {
+    setAssigningDomainPageId(pageId);
+    setDomainSelectorError(null);
+
+    try {
+      const res = await fetch(`/api/pages/${pageId}/domain`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ customDomainId: domainId }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.message || data.error || 'unknown_error');
+      }
+
+      // Optimistic update — modyfikujemy lokalny state pages bez refetch'a
+      setPages(prev => prev.map(p =>
+        p.id === pageId ? { ...p, customDomainId: domainId } : p
+      ));
+
+      // Zamknij popover po sukcesie
+      setOpenDomainSelectorPageId(null);
+    } catch (err) {
+      console.error('Failed to assign domain:', err);
+      setDomainSelectorError(t.domainSelectorAssignError);
+    } finally {
+      setAssigningDomainPageId(null);
+    }
+  }, [t]);
 
   const PlaceholderCard = () => (
     <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden animate-pulse">
@@ -800,7 +1078,51 @@ const PagesView = () => {
                             </div>
                             <div className="mt-auto pt-4">
                                 <div className="bg-gray-50 rounded-lg p-2.5 border border-gray-100">
-                                    {page.url && (<div className="flex items-center relative"><p className="text-xs text-gray-500 truncate flex-grow"><span className="text-sky-600 font-medium">{page.url}</span></p><div className="flex items-center ml-2 flex-shrink-0"><button onClick={() => openQrCode(page.url, page.headline || page.title, page.creator)} className="p-1 text-gray-500 hover:text-sky-600 rounded cursor-pointer" title="Generate QR Code"><QrCode className="h-4 w-4" /></button><button onClick={() => copyUrlToClipboard(page.id, page.url)} className="p-1 text-gray-500 hover:text-sky-600 rounded cursor-pointer" title="Copy link"><Copy className="h-4 w-4" /></button></div>{copiedUrl === page.id && <div className="absolute right-0 -top-7 bg-green-100 text-green-800 px-2 py-1 rounded-md text-xs z-10">{t.copied}</div>}</div>)}
+                                    {page.url && (() => {
+                                      const displayUrl = getDisplayUrl(page);
+                                      return (
+                                        <div className="flex items-center relative">
+                                          <p className="text-xs text-gray-500 truncate flex-grow">
+                                            <span className="text-sky-600 font-medium">{displayUrl}</span>
+                                          </p>
+                                          <div className="flex items-center ml-2 flex-shrink-0 gap-0.5">
+                                            <DomainSelector
+                                              pageId={page.id}
+                                              currentDomainId={page.customDomainId}
+                                              availableDomains={availableDomains}
+                                              isOpen={openDomainSelectorPageId === page.id}
+                                              onToggle={() => {
+                                                setOpenDomainSelectorPageId(prev => prev === page.id ? null : page.id);
+                                                setDomainSelectorError(null);
+                                              }}
+                                              onSelect={(domainId) => handleAssignDomain(page.id, domainId)}
+                                              isAssigning={assigningDomainPageId === page.id}
+                                              error={openDomainSelectorPageId === page.id ? domainSelectorError : null}
+                                              t={t}
+                                            />
+                                            <button
+                                              onClick={() => openQrCode(displayUrl, page.headline || page.title, page.creator)}
+                                              className="p-1 text-gray-500 hover:text-sky-600 rounded cursor-pointer"
+                                              title="Generate QR Code"
+                                            >
+                                              <QrCode className="h-4 w-4" />
+                                            </button>
+                                            <button
+                                              onClick={() => copyUrlToClipboard(page.id, displayUrl)}
+                                              className="p-1 text-gray-500 hover:text-sky-600 rounded cursor-pointer"
+                                              title="Copy link"
+                                            >
+                                              <Copy className="h-4 w-4" />
+                                            </button>
+                                          </div>
+                                          {copiedUrl === page.id && (
+                                            <div className="absolute right-0 -top-7 bg-green-100 text-green-800 px-2 py-1 rounded-md text-xs z-10">
+                                              {t.copied}
+                                            </div>
+                                          )}
+                                        </div>
+                                      );
+                                    })()}
                                     {page.status === 'pending' && <div className="text-amber-600 flex items-center text-sm mt-2"><Clock size={16} className="mr-2" />{t.awaitingModeration}</div>}
                                 </div>
                             </div>
@@ -839,7 +1161,52 @@ const PagesView = () => {
                             </div>
                             <div className="mt-auto pt-4">
                                 <div className="bg-gray-50 rounded-lg p-2.5 border border-gray-100">
-                                    {page.url && (<div className="flex items-center relative"><p className="text-xs text-gray-500 truncate flex-grow"><span className="text-gray-400 mr-1">{t.link}</span><span className="text-sky-600 font-medium">{page.url}</span></p><div className="flex items-center ml-2 flex-shrink-0"><button onClick={() => openQrCode(page.url, page.headline || page.title, page.creator)} className="p-1 text-gray-500 hover:text-sky-600 rounded cursor-pointer" title="Generate QR Code"><QrCode className="h-4 w-4" /></button><button onClick={() => copyUrlToClipboard(page.id, page.url)} className="p-1 text-gray-500 hover:text-sky-600 rounded cursor-pointer" title="Copy link"><Copy className="h-4 w-4" /></button></div>{copiedUrl === page.id && <div className="absolute right-0 -top-7 bg-green-100 text-green-800 px-2 py-1 rounded-md text-xs z-10">{t.copied}</div>}</div>)}
+                                    {page.url && (() => {
+                                      const displayUrl = getDisplayUrl(page);
+                                      return (
+                                        <div className="flex items-center relative">
+                                          <p className="text-xs text-gray-500 truncate flex-grow">
+                                            <span className="text-gray-400 mr-1">{t.link}</span>
+                                            <span className="text-sky-600 font-medium">{displayUrl}</span>
+                                          </p>
+                                          <div className="flex items-center ml-2 flex-shrink-0 gap-0.5">
+                                            <DomainSelector
+                                              pageId={page.id}
+                                              currentDomainId={page.customDomainId}
+                                              availableDomains={availableDomains}
+                                              isOpen={openDomainSelectorPageId === page.id}
+                                              onToggle={() => {
+                                                setOpenDomainSelectorPageId(prev => prev === page.id ? null : page.id);
+                                                setDomainSelectorError(null);
+                                              }}
+                                              onSelect={(domainId) => handleAssignDomain(page.id, domainId)}
+                                              isAssigning={assigningDomainPageId === page.id}
+                                              error={openDomainSelectorPageId === page.id ? domainSelectorError : null}
+                                              t={t}
+                                            />
+                                            <button
+                                              onClick={() => openQrCode(displayUrl, page.headline || page.title, page.creator)}
+                                              className="p-1 text-gray-500 hover:text-sky-600 rounded cursor-pointer"
+                                              title="Generate QR Code"
+                                            >
+                                              <QrCode className="h-4 w-4" />
+                                            </button>
+                                            <button
+                                              onClick={() => copyUrlToClipboard(page.id, displayUrl)}
+                                              className="p-1 text-gray-500 hover:text-sky-600 rounded cursor-pointer"
+                                              title="Copy link"
+                                            >
+                                              <Copy className="h-4 w-4" />
+                                            </button>
+                                          </div>
+                                          {copiedUrl === page.id && (
+                                            <div className="absolute right-0 -top-7 bg-green-100 text-green-800 px-2 py-1 rounded-md text-xs z-10">
+                                              {t.copied}
+                                            </div>
+                                          )}
+                                        </div>
+                                      );
+                                    })()}
                                     {page.status === 'pending' && <div className="text-amber-600 flex items-center text-sm mt-2"><Clock size={16} className="mr-2" />{t.awaitingPublication}</div>}
                                 </div>
                             </div>

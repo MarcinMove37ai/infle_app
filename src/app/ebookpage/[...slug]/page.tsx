@@ -2,7 +2,8 @@
 
 import React from 'react';
 import { Metadata } from 'next';
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
+import { headers } from 'next/headers';
 import { prisma } from '@/lib/prisma';
 import PublicPageClient from './PublicPageClient';
 
@@ -10,33 +11,83 @@ type PublicPageProps = {
   params: Promise<{
     slug: string[];
   }>;
+  searchParams: Promise<{
+    __host?: string;
+  }>;
 };
 
-async function getPageData(slug: string[]) {
+const APP_HOST = process.env.APP_HOST || 'app.inflee.app';
+
+/**
+ * Resolves the page record from one of two flows:
+ *
+ *  1) Custom domain flow (rewrite from middleware):
+ *     - searchParams.__host is set (passed by middleware rewrite)
+ *     - slug is a single segment (just the page-slug, e.g. "dieta-keto-abc")
+ *     - We look up the customDomain by host, then fetch the page that belongs
+ *       to that user AND whose URL ends with that slug.
+ *
+ *  2) Direct app.inflee.app flow (existing behavior):
+ *     - No __host param
+ *     - slug is the full segments after /ebookpage/, e.g. ["by-john", "dieta-keto-abc"]
+ *     - We match by full path containment, like before.
+ */
+async function getPageData(slug: string[], hostFromRewrite?: string) {
   if (!slug || slug.length === 0) {
     return null;
   }
 
-  const fullPath = `/ebookpage/${slug.join('/')}`;
-
   try {
-    const page = await prisma.pages.findFirst({
-      where: {
-        url: {
-          contains: fullPath,
+    let page;
+
+    if (hostFromRewrite) {
+      // ----- Custom domain flow -----
+      // slug is one segment, look it up under the user owning hostFromRewrite.
+      const pageSlug = slug[slug.length - 1]; // defensive: take last segment
+      const customDomain = await prisma.customDomain.findUnique({
+        where: { domain: hostFromRewrite.toLowerCase() },
+        select: { userId: true, status: true },
+      });
+
+      if (!customDomain || customDomain.status !== 'active') {
+        return null; // unknown or unverified domain
+      }
+
+      page = await prisma.pages.findFirst({
+        where: {
+          userId: customDomain.userId,
+          url: { contains: `/${pageSlug}` },
+          status: 'published',
         },
-        status: 'published',
-      },
-      include: {
-        content: true,
-        user: true,
-        ebook: {
-          include: {
-            ebook_chapters: { orderBy: { position: 'asc' } },
+        include: {
+          content: true,
+          user: true,
+          ebook: {
+            include: {
+              ebook_chapters: { orderBy: { position: 'asc' } },
+            },
           },
         },
-      },
-    });
+      });
+    } else {
+      // ----- Direct app.inflee.app flow (unchanged) -----
+      const fullPath = `/ebookpage/${slug.join('/')}`;
+      page = await prisma.pages.findFirst({
+        where: {
+          url: { contains: fullPath },
+          status: 'published',
+        },
+        include: {
+          content: true,
+          user: true,
+          ebook: {
+            include: {
+              ebook_chapters: { orderBy: { position: 'asc' } },
+            },
+          },
+        },
+      });
+    }
 
     if (!page) return null;
 
@@ -124,9 +175,28 @@ async function getPageData(slug: string[]) {
   }
 }
 
-export async function generateMetadata({ params }: PublicPageProps): Promise<Metadata> {
+/**
+ * Resolve the canonical primary domain for the page owner, if any.
+ * Used to 301-redirect direct hits on app.inflee.app to the user's custom domain.
+ */
+async function getPrimaryDomainForUser(userId: string): Promise<string | null> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      primaryDomain: { select: { domain: true, status: true } },
+    },
+  });
+  const pd = user?.primaryDomain;
+  if (pd && pd.status === 'active') {
+    return pd.domain;
+  }
+  return null;
+}
+
+export async function generateMetadata({ params, searchParams }: PublicPageProps): Promise<Metadata> {
   const { slug } = await params;
-  const pageData = await getPageData(slug);
+  const { __host } = await searchParams;
+  const pageData = await getPageData(slug, __host);
 
   if (!pageData || !pageData.content) {
     return { title: 'Strona nie została znaleziona' };
@@ -157,12 +227,38 @@ export async function generateMetadata({ params }: PublicPageProps): Promise<Met
   };
 }
 
-export default async function PublicPage({ params }: PublicPageProps) {
+export default async function PublicPage({ params, searchParams }: PublicPageProps) {
   const { slug } = await params;
-  const pageData = await getPageData(slug);
+  const { __host } = await searchParams;
+  const pageData = await getPageData(slug, __host);
 
   if (!pageData) {
     notFound();
   }
+
+  // ─────────────────────────────────────────────────────────────────
+  // Canonical redirect: when the page is hit directly under app.inflee.app
+  // and the page owner has an active primary custom domain, 301 the visitor
+  // to the canonical URL on their custom domain.
+  // We detect a "direct app.inflee.app hit" by absence of __host (which is
+  // only set when middleware rewrites a custom-host request).
+  // ─────────────────────────────────────────────────────────────────
+  if (!__host) {
+    const hdrs = await headers();
+    const requestHost = (hdrs.get('host') || '').toLowerCase().split(':')[0];
+    const isAppHost = requestHost === APP_HOST;
+
+    if (isAppHost) {
+      const primaryDomain = await getPrimaryDomainForUser((pageData as any).userId);
+      if (primaryDomain) {
+        // Last segment of slug is the page-slug used on the custom domain
+        const pageSlug = slug[slug.length - 1];
+        const target = `https://${primaryDomain}/${pageSlug}`;
+        console.log('[ebookpage] 301 redirect to canonical custom domain:', target);
+        redirect(target);
+      }
+    }
+  }
+
   return <PublicPageClient initialPageData={JSON.parse(JSON.stringify(pageData))} />;
 }
