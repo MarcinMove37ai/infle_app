@@ -153,6 +153,22 @@ const PublicPageClient = ({ initialPageData }: { initialPageData: any }) => {
     resolvedMockupUrl: mockupUrl,
   };
 
+  // ─── Header configuration z Settings → Landing Page Header Setup ──────
+  // user może mieć null w bazie (legacy users przed dodaniem headerStyle).
+  // Fallback: jeśli null → 'profile' gdy istnieje jakieś zdjęcie, inaczej 'none'.
+  // To zachowuje aktualne zachowanie dla starych kont, dopóki nie wejdą w Settings.
+  const userHeaderStyle = initialPageData.user?.headerStyle as 'profile' | 'logo' | 'none' | null;
+  const userActiveSource = initialPageData.user?.activeProfileSource as 'custom' | 'google' | null;
+  const hasAnyProfilePic = !!initialPageData.user?.profilePicture || !!initialPageData.user?.customProfilePicture;
+  const resolvedHeaderStyle: 'profile' | 'logo' | 'none' = userHeaderStyle ?? (hasAnyProfilePic ? 'profile' : 'none');
+
+  // Brand logo URL — pełne jak authorLogoUrl
+  const brandLogoUrl = buildAssetUrl(initialPageData.user?.authorLogoUrl);
+
+  // Profile picture URLs — oba osobno, DemoView wybierze jaki pokazać wg activeProfileSource
+  const googleProfilePicture = buildAssetUrl(initialPageData.user?.profilePicture);
+  const customProfilePicture = buildAssetUrl(initialPageData.user?.customProfilePicture);
+
   // ─── Render ────────────────────────────────────────────────────────────
   return (
     <>
@@ -163,11 +179,17 @@ const PublicPageClient = ({ initialPageData }: { initialPageData: any }) => {
           language={language}
           colorSchemeName={colorSchemeName}
           partnerName={partnerName}
-          partnerLogoUrl={buildAssetUrl(initialPageData.user?.profilePicture)}
+          partnerLogoUrl={googleProfilePicture}
           visitors={initialPageData.visits || 0}
           pageId={initialPageData.id}
           pageData={processedPageData}
           isPreviewMode={false}
+          // ─── NOWE: header config z user settings ──────────────────────
+          headerStyle={resolvedHeaderStyle}
+          activeProfileSource={userActiveSource ?? 'google'}
+          googleProfilePicture={googleProfilePicture}
+          customProfilePicture={customProfilePicture}
+          brandLogoUrl={brandLogoUrl}
         />
       ) : (
         <DemoVideo

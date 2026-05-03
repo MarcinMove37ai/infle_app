@@ -6,11 +6,15 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import {
   User, Key, Eye, EyeOff, Save, Trash2, CheckCircle, AlertCircle, Loader2,
   Palette, Type, ChevronDown, Check, Image as ImageIcon, X, AlertTriangle, FolderOpen,
-  Shield, CreditCard, ShieldCheck, Smartphone, RotateCcw // <--- DODANO RotateCcw
+  Shield, CreditCard, ShieldCheck, Smartphone, RotateCcw,
+  // Landing Page Header Setup — nowa sekcja
+  Camera, Upload, Sparkles, Lock, Info, Crop
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import Link from 'next/link';
 import UpgradeModal from '@/components/ui/UpgradeModal';
+import ProfilePictureCropModal from '@/components/ui/ProfilePictureCropModal';
+import BrandLogoModal from '@/components/ui/BrandLogoModal';
 import { signOut } from 'next-auth/react';
 
 interface Model {
@@ -48,6 +52,7 @@ interface ApiKey {
 interface AuthorSettings {
   authorDisplayName: string | null;
   authorLogoUrl: string | null;
+  authorLogoOriginalUrl: string | null;  // raw original do re-edycji w BrandLogoModal
   fallbackName: string;
   textAiProvider: string | null;
   textAiModel: string | null;
@@ -87,6 +92,7 @@ interface ConfirmModal {
   title: string;
   message: string;
   onConfirm: () => void;
+  confirmLabel?: string;  // opcjonalny custom label (domyślnie t.confirmRemove)
 }
 
 // --- Komponent BillingChoiceModal (Wymuszenie wyboru właściciela) ---
@@ -245,6 +251,96 @@ function BillingChoiceModal({ isOpen, subscriptionData, onSave, t }: BillingChoi
     </div>
   );
 }
+
+// ════════════════════════════════════════════════════════════════════════
+// HEADER PREVIEW THEMES — wycinek z demo.tsx (tylko tokeny używane
+// w mini-headerze: bg, border, shadow, text colors, CTA, divider).
+// Nazwy 1:1 z colorSchemes w src/components/views/demo.tsx żeby preview
+// pozostał wierny po zmianach motywu w pliku źródłowym.
+// ════════════════════════════════════════════════════════════════════════
+interface HeaderPreviewTheme {
+  key: 'light' | 'dark' | 'earth' | 'frost';
+  label: string;          // wyświetlana nazwa w switcherze
+  pageBg: string;         // tło strony (otoczenie headera)
+  pageText: string;
+  pageSubtext: string;
+  headerBg: string;
+  headerBorder: string;
+  headerShadow: string;
+  cardBorder: string;     // border okręgu avatara
+  ctaBg: string;
+  ctaText: string;
+  ctaShadow: string;
+  divider: string;
+  accent: string;
+}
+
+const HEADER_PREVIEW_THEMES: HeaderPreviewTheme[] = [
+  {
+    key: 'light',
+    label: 'Light',
+    pageBg: '#FAFBFC',
+    pageText: '#1E293B',
+    pageSubtext: '#64748B',
+    headerBg: 'rgba(255,255,255,0.85)',
+    headerBorder: 'rgba(0,0,0,0.06)',
+    headerShadow: '0 1px 12px rgba(0,0,0,0.06)',
+    cardBorder: 'rgba(0,0,0,0.06)',
+    ctaBg: 'linear-gradient(135deg, #6366F1, #4F46E5)',
+    ctaText: '#FFFFFF',
+    ctaShadow: '0 6px 20px rgba(99,102,241,0.30)',
+    divider: 'rgba(0,0,0,0.06)',
+    accent: '#6366F1',
+  },
+  {
+    key: 'dark',
+    label: 'Dark',
+    pageBg: '#0A0A0F',
+    pageText: '#E2E8F0',
+    pageSubtext: '#94A3B8',
+    headerBg: 'rgba(10, 10, 15, 0.70)',
+    headerBorder: 'rgba(255,255,255,0.08)',
+    headerShadow: '0 1px 24px rgba(0,0,0,0.4)',
+    cardBorder: 'rgba(255,255,255,0.08)',
+    ctaBg: 'linear-gradient(135deg, #8B5CF6, #6366F1)',
+    ctaText: '#FFFFFF',
+    ctaShadow: '0 8px 24px rgba(139,92,246,0.35)',
+    divider: 'rgba(255,255,255,0.06)',
+    accent: '#A78BFA',
+  },
+  {
+    key: 'earth',
+    label: 'Earth',
+    pageBg: '#FAF6F1',
+    pageText: '#3D2E1E',
+    pageSubtext: '#7C6A56',
+    headerBg: 'rgba(250,246,241,0.85)',
+    headerBorder: 'rgba(60,46,30,0.08)',
+    headerShadow: '0 1px 12px rgba(60,46,30,0.06)',
+    cardBorder: 'rgba(60,46,30,0.08)',
+    ctaBg: 'linear-gradient(135deg, #2E7D6E, #1D6B5D)',
+    ctaText: '#FFFFFF',
+    ctaShadow: '0 6px 20px rgba(46,125,110,0.30)',
+    divider: 'rgba(60,46,30,0.08)',
+    accent: '#2E7D6E',
+  },
+  {
+    key: 'frost',
+    label: 'Frost',
+    pageBg: '#0C1222',
+    pageText: '#CBD5E1',
+    pageSubtext: '#64748B',
+    headerBg: 'rgba(12,18,34,0.75)',
+    headerBorder: 'rgba(148,163,184,0.08)',
+    headerShadow: '0 1px 24px rgba(0,0,0,0.5)',
+    cardBorder: 'rgba(148,163,184,0.10)',
+    ctaBg: 'linear-gradient(135deg, #0EA5E9, #0284C7)',
+    ctaText: '#FFFFFF',
+    ctaShadow: '0 8px 24px rgba(14,165,233,0.30)',
+    divider: 'rgba(148,163,184,0.06)',
+    accent: '#38BDF8',
+  },
+];
 
 // --- Tłumaczenia ---
 const translations = {
@@ -426,7 +522,64 @@ const translations = {
     modelDescImagen4: 'Wysoka jakość ($0.04) - wymaga własnego klucza API',
     modelDescImagen4Ultra: 'Najwyższa jakość ($0.06) - wymaga własnego klucza API',
     modelDescDalle3: 'Standard - nie wymaga klucza',
-    modelDescGptImage1: 'Premium ($0.19) - wymaga klucza'
+    modelDescGptImage1: 'Premium ($0.19) - wymaga klucza',
+
+    // ─── Landing Page Header Setup ─────────────────────────────────────
+    headerSetupTitle:           'Wygląd nagłówka strony zapisu',
+    headerSetupSubtitle:        'Dostosuj nagłówek widoczny na każdej Twojej stronie zapisu',
+
+    // Preview — symulacja headera landing page'a
+    headerPreviewLabel:         'Podgląd nagłówka',
+    headerImageSetupLabel:      'Ustawienia obrazu',
+    headerImageSetupInfo:       'Ustawienia obrazu mają zastosowanie do wszystkich Twoich stron zapisu',
+    headerPreviewMadeBy:        'stworzone przez',
+    headerPreviewWith:          'z',
+    headerPreviewCta:           'Pobierz e-book',           // hardcoded jak navCta w demo.tsx
+    headerPreviewThemeLabel:    'Motyw:',
+    headerPreviewThemeInfo:     'Motyw jest tylko poglądowy — nie ma wpływu na istniejące ani przyszłe strony zapisu',
+    headerAuthorNameInfo:       'Nazwa jest również widoczna w stopce każdej strony Twojego e-booka',
+
+    // Author Name (tutejszy label, identyczny jak Author Profile)
+    headerAuthorNameLabel:      'Nazwa autora',
+    headerAuthorNamePlaceholder:'Wpisz swoją nazwę',
+
+    // Profile picture column
+    headerPicTitle:             'Zdjęcie profilowe',
+    headerPicEnabled:           'Aktywne',
+    headerPicDisabled:          'Wyłączone',
+    headerToggleTurnOn:         'Włącz',
+    headerToggleTurnOff:        'Wyłącz',
+    headerToggleLockedHint:     'Dostępne w planach Creator i Unlimited',
+    headerPicSourceGoogle:      'z Google',
+    headerPicSourceCustom:      'Custom',
+    headerPicSourceNone:        'Brak zdjęcia',
+    headerPicChangeBtn:         'Zmień zdjęcie',
+    headerPicUploadBtn:         'Wgraj zdjęcie',
+    headerPicGoogleBtn:         'Zdjęcie z Google',
+    headerPicAddBtn:            'Dodaj zdjęcie',
+    headerPicRemoveBtn:         'Usuń',
+    headerPicUpdated:           'Zdjęcie profilowe zaktualizowane',
+    headerPicUploadError:       'Nie udało się zapisać zdjęcia',
+    headerPicRemoved:           'Zdjęcie usunięte',
+    headerPicRemoveError:       'Nie udało się usunąć zdjęcia',
+    headerPicToggleError:       'Nie udało się zmienić ustawienia',
+
+    // Brand logo column
+    headerBrandTitle:           'Logo brandu',
+    headerBrandEnabled:         'Aktywne',
+    headerBrandDisabled:        'Wyłączone',
+    headerBrandStatusActive:    'Twoje logo',
+    headerBrandStatusNone:      'Nie ustawione',
+    headerBrandStatusLocked:    'Plan PLUS',
+    headerBrandUploadBtn:       'Wgraj logo',
+    headerBrandChangeBtn:       'Zmień',
+    headerBrandEditBtn:         'Edytuj',
+    headerBrandRemoveBtn:       'Usuń',
+    headerBrandLockedHint:      'Zastąp podpis własnym logo brandu',
+    headerBrandUnlockBtn:       'Zaktualizuj plan',
+
+    // Mutual exclusion
+    headerMutualExclusionInfo:  'Aktywne może być tylko jedno: zdjęcie LUB logo brandu',
   },
   en: {
     // Komunikaty (Toast)
@@ -605,7 +758,64 @@ const translations = {
     modelDescImagen4: 'High quality ($0.04) - requires your own API key',
     modelDescImagen4Ultra: 'Highest quality ($0.06) - requires your own API key',
     modelDescDalle3: 'Standard - no key needed',
-    modelDescGptImage1: 'Premium ($0.19) - key required'
+    modelDescGptImage1: 'Premium ($0.19) - key required',
+
+    // ─── Landing Page Header Setup ─────────────────────────────────────
+    headerSetupTitle:           'Landing Page Header Setup',
+    headerSetupSubtitle:        'Customize the header visible on every landing page you create',
+
+    // Preview — landing page header simulation
+    headerPreviewLabel:         'Header preview',
+    headerImageSetupLabel:      'Image setup',
+    headerImageSetupInfo:       'Image setup will be applied for all your Landing Pages',
+    headerPreviewMadeBy:        'made by',
+    headerPreviewWith:          'with',
+    headerPreviewCta:           'Get the e-book',          // hardcoded same as navCta in demo.tsx
+    headerPreviewThemeLabel:    'Theme:',
+    headerPreviewThemeInfo:     'Header preview only — theme setup here has no impact on existing or future landing pages',
+    headerAuthorNameInfo:       'This name is also visible in the footer of every page of your e-books',
+
+    // Author Name (local label, mirrors Author Profile)
+    headerAuthorNameLabel:      'Author name',
+    headerAuthorNamePlaceholder:'Enter your name',
+
+    // Profile picture column
+    headerPicTitle:             'Profile picture',
+    headerPicEnabled:           'Active',
+    headerPicDisabled:          'Disabled',
+    headerToggleTurnOn:         'Turn on',
+    headerToggleTurnOff:        'Turn off',
+    headerToggleLockedHint:     'Available at Creator and Unlimited Plan',
+    headerPicSourceGoogle:      'from Google',
+    headerPicSourceCustom:      'Custom',
+    headerPicSourceNone:        'No picture',
+    headerPicChangeBtn:         'Change photo',
+    headerPicUploadBtn:         'Upload photo',
+    headerPicGoogleBtn:         'Google profile picture',
+    headerPicAddBtn:            'Add picture',
+    headerPicRemoveBtn:         'Remove',
+    headerPicUpdated:           'Profile picture updated',
+    headerPicUploadError:       'Failed to save picture',
+    headerPicRemoved:           'Picture removed',
+    headerPicRemoveError:       'Failed to remove picture',
+    headerPicToggleError:       'Failed to update setting',
+
+    // Brand logo column
+    headerBrandTitle:           'Brand logo',
+    headerBrandEnabled:         'Active',
+    headerBrandDisabled:        'Disabled',
+    headerBrandStatusActive:    'Your logo',
+    headerBrandStatusNone:      'Not set',
+    headerBrandStatusLocked:    'PLUS plan',
+    headerBrandUploadBtn:       'Upload logo',
+    headerBrandChangeBtn:       'Change',
+    headerBrandEditBtn:         'Edit',
+    headerBrandRemoveBtn:       'Remove',
+    headerBrandLockedHint:      'Replace the signature with your brand logo',
+    headerBrandUnlockBtn:       'Upgrade plan',
+
+    // Mutual exclusion
+    headerMutualExclusionInfo:  'Only one can be active: picture OR brand logo',
   }
 };
 
@@ -1187,7 +1397,9 @@ function SubscriptionCard({
           ) : (
             <button
               onClick={() => {
-                (window as any).openUpgradeModal();
+                // Mode 'manage' (default) → modal otwiera się Z przyciskiem cancel.
+                // To wywołanie z karty Subscription (managePlan) — user może chcieć zarządzać/anulować.
+                (window as any).openUpgradeModal('manage');
               }}
               className="w-full inline-flex justify-center items-center px-4 py-3 bg-gray-800 text-white text-sm font-medium rounded-xl hover:bg-gray-900 transition-all cursor-pointer shadow-sm hover:shadow-md"
             >
@@ -1227,7 +1439,7 @@ function SubscriptionCard({
         {/* Action Buttons */}
         <div className="pt-4 border-t border-gray-200">
           <button
-            onClick={() => { (window as any).openUpgradeModal(); }}
+            onClick={() => { (window as any).openUpgradeModal('manage'); }}
             className="w-full inline-flex justify-center items-center px-4 py-2 bg-gray-600 text-white text-sm font-medium rounded-lg hover:bg-gray-700 transition-colors cursor-pointer"
           >
             <CreditCard className="w-4 h-4 mr-2" />
@@ -1246,9 +1458,14 @@ export default function SettingsContent() {
   const { user, userRole } = useAuth();
   console.log("DEBUG: ROLA UŻYTKOWNIKA:", userRole, "CAŁY UŻYTKOWNIK:", user);
 
-  // Globalna funkcja do otwierania modala (Krok 37)
+  // Globalna funkcja do otwierania modala (Krok 37) — przyjmuje opcjonalny mode.
+  // Bez argumentu (lub z 'manage') → tryb zarządzania subskrypcją (cancel widoczny).
+  // Z 'upgrade' → tryb upgrade only (cancel ukryty, np. z karty Brand logo).
   useEffect(() => {
-    const openModal = () => setIsUpgradeModalOpen(true);
+    const openModal = (mode: 'upgrade' | 'manage' = 'manage') => {
+      setUpgradeModalMode(mode);
+      setIsUpgradeModalOpen(true);
+    };
     (window as any).openUpgradeModal = openModal;
 
     // Cleanup
@@ -1347,6 +1564,8 @@ export default function SettingsContent() {
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
+  // Mode upgrade modala — 'upgrade' (z innego CTA, ukrywamy cancel) | 'manage' (z karty subscription, pokazujemy cancel)
+  const [upgradeModalMode, setUpgradeModalMode] = useState<'upgrade' | 'manage'>('manage');
   const [isActivatingPlan, setIsActivatingPlan] = useState(false);
   // Stan dla modala weryfikacji (PL)
   const [isVerificationModalOpen, setIsVerificationModalOpen] = useState(false);
@@ -1825,6 +2044,9 @@ export default function SettingsContent() {
               imageProvider: authorSettings.imageAiProvider || 'google',
               imageModel: authorSettings.imageAiModel || 'imagen-3'
             }));
+
+            // Sync original URL (raw, do re-edycji w modalu)
+            setBrandLogoOriginalUrl(authorSettings.authorLogoOriginalUrl || null);
 
             setLastSavedUsername(authorSettings.authorDisplayName || authorSettings.fallbackName);
 
@@ -2402,6 +2624,407 @@ export default function SettingsContent() {
     }
   }, [isDeletingAvatar, settings.logo, resetImageAspectRatio, t, defaultAppLogoUrl]);
 
+  // ════════════════════════════════════════════════════════════════════════
+  // Landing Page Header Setup — state + handlery
+  // ════════════════════════════════════════════════════════════════════════
+
+  // Settings zwracane przez GET /api/user/profile-picture
+  // headerStyle wymusza mutual exclusion z brand logo (typ enum, nie boolean).
+  // activeProfileSource — gdy headerStyle='profile' i user ma OBA źródła (Google + custom),
+  // to pole decyduje które pokazać. Switch nie usuwa custom z bazy.
+  interface ProfilePictureSettings {
+    profilePicture: string | null;            // Google original (read-only)
+    customProfilePicture: string | null;      // wgrane przez usera
+    headerStyle: 'profile' | 'logo' | 'none';
+    activeProfileSource: 'custom' | 'google';
+    resolvedUrl: string | null;               // co się pokazuje teraz w headerze
+    hasGoogleOriginal: boolean;
+    hasCustomPicture: boolean;
+    authProvider: string | null;
+  }
+
+  const [profilePicSettings, setProfilePicSettings] = useState<ProfilePictureSettings | null>(null);
+  const [isLoadingProfilePic, setIsLoadingProfilePic] = useState(false);
+  const [isSavingProfilePic, setIsSavingProfilePic] = useState(false);
+  const [isCropModalOpen, setIsCropModalOpen] = useState(false);
+  const [cropImageSrc, setCropImageSrc] = useState<string | null>(null);
+  const profilePicFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Brand logo — derived state z settings.logo (synchronizowane z authorLogoUrl w bazie).
+  // settings.logo === defaultAppLogoUrl → brak własnego logo (domyślne Inflee'owe).
+  // Aktywny/wyłączony brand logo wynika z headerStyle === 'logo' (mutual exclusion).
+  const hasBrandLogo = !!settings.logo && settings.logo !== defaultAppLogoUrl;
+
+  // Brand logo modal state
+  const [isBrandLogoModalOpen, setIsBrandLogoModalOpen] = useState(false);
+  const [brandLogoImageSrc, setBrandLogoImageSrc] = useState<string | null>(null);
+  const [isSavingBrandLogo, setIsSavingBrandLogo] = useState(false);
+  const brandLogoFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Original raw URL — używany przez handleBrandLogoEdit do otwarcia modala z oryginałem.
+  // Pobierany z author-settings GET response (authorLogoOriginalUrl).
+  const [brandLogoOriginalUrl, setBrandLogoOriginalUrl] = useState<string | null>(null);
+
+  // Raw oryginał z dysku usera — track'ujemy od momentu wybrania pliku w pickerze do save w modalu.
+  // Jeśli !== null przy save → fresh upload (wysyłamy do backendu w field 'avatarOriginal').
+  // Jeśli null → Edit mode (oryginał już na serwerze, nie nadpisujemy).
+  const [brandLogoOriginalFile, setBrandLogoOriginalFile] = useState<File | null>(null);
+  // UWAGA: handlery brand logo (handleBrandLogoFileSelect/Save/Remove) zdefiniowane PONIŻEJ
+  // — po `handleHeaderStyleChange` żeby uniknąć TDZ (Temporal Dead Zone) erroru przy useCallback deps.
+
+  // Theme preview — TYLKO podgląd w settings, NIC się nie zapisuje do bazy
+  const [previewThemeKey, setPreviewThemeKey] = useState<HeaderPreviewTheme['key']>('light');
+  const previewTheme = useMemo(
+    () => HEADER_PREVIEW_THEMES.find(th => th.key === previewThemeKey) || HEADER_PREVIEW_THEMES[0],
+    [previewThemeKey]
+  );
+
+  // ─── Pobierz aktualny stan zdjęcia profilowego z serwera ───────────────
+  const loadProfilePictureSettings = useCallback(async () => {
+    if (!user?.id) return;
+    setIsLoadingProfilePic(true);
+    try {
+      const response = await fetch('/api/user/profile-picture');
+      if (response.ok) {
+        const data = await response.json();
+        setProfilePicSettings(data.profilePictureSettings);
+      } else {
+        console.error('❌ Error fetching profile-picture settings:', response.status);
+      }
+    } catch (error) {
+      console.error('❌ Network error fetching profile-picture:', error);
+    } finally {
+      setIsLoadingProfilePic(false);
+    }
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (user?.id) {
+      loadProfilePictureSettings();
+    }
+  }, [user?.id, loadProfilePictureSettings]);
+
+  // ─── Zmiana headerStyle (mutual exclusion wymuszone przez enum) ────────
+  // Jedno źródło prawdy: 'profile' | 'logo' | 'none'. Klik na toggle pic ON
+  // gdy aktualnie 'logo'/'none' → ustaw 'profile' (auto-wyłącza logo).
+  // Klik na toggle pic OFF gdy 'profile' → ustaw 'none'.
+  // Klik na toggle logo ON → ustaw 'logo' (auto-wyłącza profile).
+  // Klik na toggle logo OFF gdy 'logo' → ustaw 'none'.
+  const handleHeaderStyleChange = useCallback(async (newStyle: 'profile' | 'logo' | 'none') => {
+    if (isSavingProfilePic || !profilePicSettings) return;
+    if (profilePicSettings.headerStyle === newStyle) return; // brak zmiany
+
+    setIsSavingProfilePic(true);
+    try {
+      const response = await fetch('/api/user/profile-picture', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ headerStyle: newStyle }),
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setProfilePicSettings(data.profilePictureSettings);
+      } else {
+        const errorData = await response.json();
+        setMessage({ type: 'error', text: errorData.error || t.headerPicToggleError });
+      }
+    } catch (error) {
+      console.error('❌ Network error changing headerStyle:', error);
+      setMessage({ type: 'error', text: t.serverError });
+    } finally {
+      setIsSavingProfilePic(false);
+      setTimeout(() => setMessage(null), 3000);
+    }
+  }, [isSavingProfilePic, profilePicSettings, t]);
+
+  // Handler dla toggle profile picture — flip między 'profile' a 'none'
+  const handleProfilePicToggle = useCallback(() => {
+    if (!profilePicSettings) return;
+    const newStyle = profilePicSettings.headerStyle === 'profile' ? 'none' : 'profile';
+    handleHeaderStyleChange(newStyle);
+  }, [profilePicSettings, handleHeaderStyleChange]);
+
+  // ─── Switch między custom a Google (bez usuwania custom z bazy) ────────
+  // Wywołuje PUT z activeProfileSource — backend zmienia tylko to pole, custom zostaje.
+  const handleSwitchProfileSource = useCallback(async (source: 'custom' | 'google') => {
+    if (isSavingProfilePic || !profilePicSettings) return;
+    if (profilePicSettings.activeProfileSource === source) return; // brak zmiany
+    // Jeśli przy okazji headerStyle nie był 'profile' — aktywujemy też (user świadomie klika thumbnail)
+    const needsHeaderActivation = profilePicSettings.headerStyle !== 'profile';
+
+    setIsSavingProfilePic(true);
+    try {
+      const body: { activeProfileSource: string; headerStyle?: string } = { activeProfileSource: source };
+      if (needsHeaderActivation) body.headerStyle = 'profile';
+
+      const response = await fetch('/api/user/profile-picture', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setProfilePicSettings(data.profilePictureSettings);
+      } else {
+        const errorData = await response.json();
+        setMessage({ type: 'error', text: errorData.error || t.headerPicToggleError });
+      }
+    } catch (error) {
+      console.error('❌ Network error switching profile source:', error);
+      setMessage({ type: 'error', text: t.serverError });
+    } finally {
+      setIsSavingProfilePic(false);
+      setTimeout(() => setMessage(null), 3000);
+    }
+  }, [isSavingProfilePic, profilePicSettings, t]);
+
+  // ════════════════════════════════════════════════════════════════════════
+  // Brand logo handlers — po handleHeaderStyleChange (TDZ-safe)
+  // ════════════════════════════════════════════════════════════════════════
+
+  // ─── Wybór pliku z dysku → otwórz modal cropu ──────────────────────────
+  // Track'ujemy raw File w state — zostanie wysłany do backendu jako 'avatarOriginal'
+  // przy save w modalu (zachowuje się jako pixel-perfect oryginał na serwerze).
+  const handleBrandLogoFileSelect = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setMessage({ type: 'error', text: t.headerPicUploadError });
+      return;
+    }
+    setBrandLogoOriginalFile(file);  // zachowaj raw File do wysłania jako avatarOriginal
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const dataUrl = e.target?.result as string;
+      setBrandLogoImageSrc(dataUrl);
+      setIsBrandLogoModalOpen(true);
+    };
+    reader.readAsDataURL(file);
+    if (event.target) event.target.value = '';
+  }, [t]);
+
+  // ─── Zapis zcropowanego logo (z modala) ────────────────────────────────
+  // Endpoint: PUT /api/user/author-settings (FormData "avatar") — istniejący endpoint dla logo.
+  const handleBrandLogoSave = useCallback(async (croppedFile: File) => {
+    setIsBrandLogoModalOpen(false);
+    setBrandLogoImageSrc(null);
+    setIsSavingBrandLogo(true);
+    // Snapshot raw File z state — czyścimy state OD RAZU (przed setIsSavingBrandLogo to było reset),
+    // żeby kolejne Save w modalu (po Edit) nie odziedziczyło starego File.
+    const rawOriginal = brandLogoOriginalFile;
+    setBrandLogoOriginalFile(null);
+    try {
+      const formData = new FormData();
+      formData.append('avatar', croppedFile);
+      // Wyślij raw oryginał TYLKO przy fresh upload (rawOriginal !== null).
+      // Edit mode → rawOriginal === null → backend nie ruszy istniejącego _ORIG na serwerze.
+      if (rawOriginal) {
+        formData.append('avatarOriginal', rawOriginal);
+        console.log('📦 Wysyłam raw oryginał:', rawOriginal.name, rawOriginal.size, 'bytes');
+      } else {
+        console.log('🔄 Edit mode — oryginał zostaje na serwerze bez zmian');
+      }
+      const response = await fetch('/api/user/author-settings', {
+        method: 'PUT',
+        body: formData,
+      });
+      if (response.ok) {
+        const data = await response.json();
+        const authorSettings: AuthorSettings = data.authorSettings;
+        // Cache busting: backend nadpisuje plik pod tym samym URL'em
+        const cacheBust = (url: string | null): string | null => {
+          if (!url) return url;
+          const sep = url.includes('?') ? '&' : '?';
+          return `${url}${sep}t=${Date.now()}`;
+        };
+        const newLogoUrl = cacheBust(authorSettings.authorLogoUrl);
+        const newOrigUrl = cacheBust(authorSettings.authorLogoOriginalUrl);
+        setSettings(prev => ({ ...prev, logo: newLogoUrl }));
+        // Sync original URL — bez tego Edit później nie będzie miał skąd brać oryginału
+        setBrandLogoOriginalUrl(newOrigUrl);
+        // Auto-aktywacja: po wgraniu logo, ustaw headerStyle = 'logo'
+        await handleHeaderStyleChange('logo');
+        setMessage({ type: 'success', text: currentLang === 'pl' ? 'Logo brandu zaktualizowane' : 'Brand logo updated' });
+      } else {
+        const errorData = await response.json();
+        setMessage({ type: 'error', text: errorData.error || (currentLang === 'pl' ? 'Nie udało się zapisać logo' : 'Failed to save logo') });
+      }
+    } catch (error) {
+      console.error('❌ Network error uploading brand logo:', error);
+      setMessage({ type: 'error', text: t.serverError });
+    } finally {
+      setIsSavingBrandLogo(false);
+      setTimeout(() => setMessage(null), 3000);
+    }
+  }, [currentLang, handleHeaderStyleChange, t, brandLogoOriginalFile]);
+
+  // ─── Edycja istniejącego logo (otwiera modal z oryginałem RAW) ─────────
+  // Pobiera oryginał (authorLogoOriginalUrl), konwertuje na dataUrl i otwiera modal.
+  // Save w modalu wywołuje handleBrandLogoSave — nadpisze finalny crop bez psucia oryginału.
+  const handleBrandLogoEdit = useCallback(async () => {
+    if (!brandLogoOriginalUrl) {
+      // Legacy user który ma logo z czasów PRZED feature'em zachowywania oryginału
+      setMessage({
+        type: 'error',
+        text: currentLang === 'pl'
+          ? 'Edycja niedostępna — wgraj logo ponownie aby aktywować edycję'
+          : 'Edit unavailable — re-upload the logo to enable editing'
+      });
+      setTimeout(() => setMessage(null), 4000);
+      return;
+    }
+    try {
+      // Fetch original z usuniętym query string'iem cache-busting (żeby uniknąć potencjalnych issue z reqestem przez fetch)
+      const cleanUrl = brandLogoOriginalUrl.split('?')[0];
+      const response = await fetch(cleanUrl);
+      if (!response.ok) throw new Error(`Fetch failed: ${response.status}`);
+      const blob = await response.blob();
+      // Konwersja blob → dataUrl (modal oczekuje dataUrl jako imageSrc — taki sam format jak FileReader.readAsDataURL)
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = () => reject(new Error('FileReader failed'));
+        reader.readAsDataURL(blob);
+      });
+      // Edit mode — oryginał JUŻ JEST na serwerze, NIE wysyłamy go ponownie przy save
+      setBrandLogoOriginalFile(null);
+      setBrandLogoImageSrc(dataUrl);
+      setIsBrandLogoModalOpen(true);
+    } catch (error) {
+      console.error('❌ Error loading original brand logo for edit:', error);
+      setMessage({
+        type: 'error',
+        text: currentLang === 'pl'
+          ? 'Nie udało się załadować oryginału — spróbuj ponownie wgrać logo'
+          : 'Failed to load original — try re-uploading the logo'
+      });
+      setTimeout(() => setMessage(null), 4000);
+    }
+  }, [brandLogoOriginalUrl, currentLang]);
+
+  // ─── Usuń brand logo (powrót do default Inflee logo) ───────────────────
+  const handleBrandLogoRemove = useCallback(async () => {
+    if (isSavingBrandLogo) return;
+    setIsSavingBrandLogo(true);
+    try {
+      const response = await fetch('/api/user/author-settings', {
+        method: 'DELETE',
+      });
+      if (response.ok) {
+        setSettings(prev => ({ ...prev, logo: defaultAppLogoUrl }));
+        // Sync original URL — backend usunął _ORIG plik i wyzerował pole authorLogoOriginalUrl
+        setBrandLogoOriginalUrl(null);
+        // Wyłącz brand logo w headerze (jeśli był aktywny)
+        if (profilePicSettings?.headerStyle === 'logo') {
+          await handleHeaderStyleChange('none');
+        }
+        setMessage({ type: 'success', text: currentLang === 'pl' ? 'Logo brandu usunięte' : 'Brand logo removed' });
+      } else {
+        const errorData = await response.json();
+        setMessage({ type: 'error', text: errorData.error || (currentLang === 'pl' ? 'Nie udało się usunąć logo' : 'Failed to remove logo') });
+      }
+    } catch (error) {
+      console.error('❌ Network error removing brand logo:', error);
+      setMessage({ type: 'error', text: t.serverError });
+    } finally {
+      setIsSavingBrandLogo(false);
+      setTimeout(() => setMessage(null), 3000);
+    }
+  }, [isSavingBrandLogo, currentLang, profilePicSettings, handleHeaderStyleChange, defaultAppLogoUrl, t]);
+
+  // Handler dla toggle brand logo — flip między 'logo' a 'none'
+  const handleBrandLogoToggle = useCallback(() => {
+    if (!profilePicSettings || !hasBrandLogo) return;
+    const newStyle = profilePicSettings.headerStyle === 'logo' ? 'none' : 'logo';
+    handleHeaderStyleChange(newStyle);
+  }, [profilePicSettings, hasBrandLogo, handleHeaderStyleChange]);
+
+  // ─── Wybór pliku z dysku → otwórz modal cropu ──────────────────────────
+  const handleProfilePicFileSelect = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setMessage({ type: 'error', text: t.headerPicUploadError });
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const dataUrl = e.target?.result as string;
+      setCropImageSrc(dataUrl);
+      setIsCropModalOpen(true);
+    };
+    reader.readAsDataURL(file);
+    if (event.target) event.target.value = '';
+  }, [t]);
+
+  // ─── Zapis zcropowanego zdjęcia (z modala) ─────────────────────────────
+  // Cache busting: backend nadpisuje plik na dysku pod tym samym URL'em
+  // (USER_xxx_PROFILE.png) → przeglądarka serwuje stary obraz z cache.
+  // Po sukcesie dopisujemy `?t={timestamp}` do URL-i żeby wymusić re-fetch.
+  const handleCroppedImageSave = useCallback(async (croppedFile: File) => {
+    setIsCropModalOpen(false);
+    setCropImageSrc(null);
+    setIsSavingProfilePic(true);
+    try {
+      const formData = new FormData();
+      formData.append('profilePicture', croppedFile);
+      const response = await fetch('/api/user/profile-picture', {
+        method: 'PUT',
+        body: formData,
+      });
+      if (response.ok) {
+        const data = await response.json();
+        const settings = data.profilePictureSettings;
+        const cacheBust = (url: string | null): string | null => {
+          if (!url) return url;
+          const sep = url.includes('?') ? '&' : '?';
+          return `${url}${sep}t=${Date.now()}`;
+        };
+        // Dopisz timestamp tylko do customProfilePicture i resolvedUrl (Google URL nie wymaga — zewnętrzny CDN)
+        setProfilePicSettings({
+          ...settings,
+          customProfilePicture: cacheBust(settings.customProfilePicture),
+          resolvedUrl: cacheBust(settings.resolvedUrl),
+        });
+        setMessage({ type: 'success', text: t.headerPicUpdated });
+      } else {
+        const errorData = await response.json();
+        setMessage({ type: 'error', text: errorData.error || t.headerPicUploadError });
+      }
+    } catch (error) {
+      console.error('❌ Network error uploading profile-picture:', error);
+      setMessage({ type: 'error', text: t.serverError });
+    } finally {
+      setIsSavingProfilePic(false);
+      setTimeout(() => setMessage(null), 3000);
+    }
+  }, [t]);
+
+  // ─── Usuń custom (wraca do Google jeśli istnieje) ──────────────────────
+  const handleProfilePicRemove = useCallback(async () => {
+    if (isSavingProfilePic) return;
+    setIsSavingProfilePic(true);
+    try {
+      const response = await fetch('/api/user/profile-picture', {
+        method: 'DELETE',
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setProfilePicSettings(data.profilePictureSettings);
+        setMessage({ type: 'success', text: t.headerPicRemoved });
+      } else {
+        const errorData = await response.json();
+        setMessage({ type: 'error', text: errorData.error || t.headerPicRemoveError });
+      }
+    } catch (error) {
+      console.error('❌ Network error removing profile-picture:', error);
+      setMessage({ type: 'error', text: t.serverError });
+    } finally {
+      setIsSavingProfilePic(false);
+      setTimeout(() => setMessage(null), 3000);
+    }
+  }, [isSavingProfilePic, t]);
+
   const handleSaveUsername = useCallback(async () => {
     if (isSavingUsername || settings.username.trim() === '' || settings.username === lastSavedUsername) return;
 
@@ -2472,15 +3095,8 @@ export default function SettingsContent() {
 
   return (
     <div className="space-y-8">
-      {/* Author Profile */}
+      {/* Landing Page Header Setup (zastępuje stary nagłówek "Author Profile") */}
       <div className="bg-white rounded-xl border border-gray-200 px-3 py-4 sm:p-6">
-        <div className="flex items-center mb-6">
-          <User className="h-5 w-5 text-blue-600 mr-2" />
-          <h2 className="text-xl font-bold text-gray-900">{t.authorProfile}</h2>
-          {isLoadingAuthorSettings && (
-            <Loader2 className="h-4 w-4 text-gray-400 ml-2 animate-spin" />
-          )}
-        </div>
 
         {/* === ZMIANA (Task 1): Nowy układ pulpitu === */}
         {/* ZMIANA: Na desktopie (lg) zerujemy gap, bo odstępy zrobimy paddingiem przy linii */}
@@ -2489,151 +3105,802 @@ export default function SettingsContent() {
           {/* --- LEWA KOLUMNA (Nazwa + Logo) --- */}
           {/* ZMIANA: Dodano delikatną linię po prawej (border-r) i duży padding (pr-8 lub pr-12) dla oddechu */}
           <div className="space-y-6 lg:border-r lg:border-gray-200 lg:pr-12">
-            {/* Nazwa Autora */}
+
+            {/* ═══════════════════════════════════════════════════════════ */}
+            {/* Landing Page Header Setup — preview na górze                */}
+            {/* ═══════════════════════════════════════════════════════════ */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">{t.authorName}</label>
-              <div className="relative">
-                <input
-                  type="text"
-                  value={settings.username}
-                  onChange={(e) => setSettings(prev => ({ ...prev, username: e.target.value }))}
-                  placeholder={t.usernamePlaceholder}
-                  // ZMIANA: bg-gray-50 (kolor Ownera), border-gray-200 i rounded-xl (styl ramki Current Plan)
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-500 pr-28 transition-colors"
-                />
-                {settings.username !== lastSavedUsername && settings.username.trim() !== '' && (
-                  <button
-                    onClick={handleSaveUsername}
-                    disabled={isSavingUsername}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center px-3 py-1.5 bg-blue-600 text-white text-xs font-bold rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all cursor-pointer"
-                  >
-                    {isSavingUsername ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <>
-                        <Save className="h-4 w-4 mr-1.5" />
-                        {t.save}
-                      </>
-                    )}
-                  </button>
-                )}
+              {/* Header bar — label HEADER PREVIEW po lewej (analogiczny do AUTHOR NAME),
+                  theme tabs po prawej (przylegające do prawej krawędzi ramki preview). */}
+              <div className="flex items-end justify-between gap-3">
+                <label className="text-xs font-medium text-gray-500 uppercase tracking-wide block mb-2">
+                  {t.headerPreviewLabel}
+                </label>
+
+                {/* Theme tabs — aktywny ma czarne tło + brak dolnego bordera (przylega do ramki preview). */}
+                <div className="flex items-end gap-0.5" role="group" aria-label={t.headerPreviewThemeLabel}>
+                  <span className="text-[0.6rem] font-semibold uppercase tracking-wider text-gray-400 mr-1.5 mb-2">
+                    {t.headerPreviewThemeLabel}
+                  </span>
+                  {HEADER_PREVIEW_THEMES.map(th => {
+                    const isActive = th.key === previewThemeKey;
+                    return (
+                      <button
+                        key={th.key}
+                        onClick={() => setPreviewThemeKey(th.key)}
+                        className={`px-3 py-1.5 text-xs font-medium rounded-t-md transition-all cursor-pointer border border-b-0 ${
+                          isActive
+                            ? 'bg-gray-900 text-white border-gray-900 shadow-sm relative -mb-px z-10'
+                            : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
+                        }`}
+                        title={th.label}
+                      >
+                        {th.label}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
 
-            {/* Logo Autora */}
-            {/* Logo Autora */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">{t.authorLogo}</label>
-              <div className="relative group">
-                {settings.logo || isUploadingAvatar ? (
-                  <div
-                    className={`relative border border-gray-200 rounded-xl overflow-hidden flex items-center justify-center bg-white shadow-sm h-auto min-h-[120px] sm:h-[200px] ${canCustomizeLogo ? 'cursor-pointer hover:border-gray-300' : 'cursor-not-allowed'}`}
+              {/* ──────────────────────────────────────────────────────── */}
+              {/* LIVE PREVIEW — mini-header z demo.tsx (full width, no nav) */}
+              {/* ──────────────────────────────────────────────────────── */}
+              <div
+                className="rounded-xl rounded-tr-none overflow-hidden border transition-colors"
+                style={{
+                  borderColor: previewTheme.headerBorder,
+                  backgroundColor: previewTheme.pageBg,
+                  boxShadow: previewTheme.headerShadow,
+                }}
+              >
+                {/* Header bar — replikuje strukturę z demo.tsx (lewy CTA, prawy podpis/logo) */}
+                <div
+                  className="flex items-center justify-between gap-3 px-4 py-3"
+                  style={{
+                    backgroundColor: previewTheme.headerBg,
+                    borderBottom: `1px solid ${previewTheme.headerBorder}`,
+                    backdropFilter: 'blur(16px)',
+                    WebkitBackdropFilter: 'blur(16px)',
+                  }}
+                >
+                  {/* LEWA — CTA pill (hardcoded label jak navCta w demo.tsx) */}
+                  <span
+                    className="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-semibold flex-shrink-0"
                     style={{
-                      width: '100%',
-                      padding: '16px'
+                      background: previewTheme.ctaBg,
+                      color: previewTheme.ctaText,
+                      boxShadow: previewTheme.ctaShadow,
                     }}
-                    onClick={triggerFileInput}
                   >
-                    {isUploadingAvatar ? (
-                      <div className="flex flex-col items-center justify-center text-gray-500">
-                        <Loader2 className="h-8 w-8 animate-spin mb-2" />
-                        <span className="text-sm font-medium">{t.processing}</span>
-                      </div>
-                    ) : (
+                    {t.headerPreviewCta}
+                  </span>
+
+                  {/* PRAWA — brand logo jeśli aktywne ('logo'), inaczej podpis + avatar (dla 'profile' i 'none') */}
+                  {profilePicSettings?.headerStyle === 'logo' && hasBrandLogo && settings.logo ? (
+                    /* Brand logo — wyświetlamy realny <img>, max-h ograniczony do wysokości headera */
+                    <div className="flex items-center justify-end flex-1 min-w-0">
                       <img
-                        src={settings.logo!}
-                        alt="Logo"
-                        className="max-w-full max-h-full"
-                        style={{
-                          objectFit: 'contain',
-                          width: 'auto',
-                          height: 'auto',
-                          maxWidth: '100%',
-                          maxHeight: '100%'
-                        }}
                         key={settings.logo}
-                        onLoad={handleImageLoad}
-                        onError={(e) => {
-                          console.error('❌ Error loading image:', settings.logo);
-                          resetImageAspectRatio();
-                        }}
+                        src={settings.logo}
+                        alt="Brand logo"
+                        className="max-h-8 max-w-[60%] object-contain"
                       />
-                    )}
-                    {isDeletingAvatar && (
-                      <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-                        <Loader2 className="h-6 w-6 text-white animate-spin" />
+                    </div>
+                  ) : (
+                    /* Podpis + avatar — dla 'profile' i 'none' (avatar tylko gdy 'profile') */
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className="flex flex-col items-end justify-center min-w-0">
+                        <span className="text-xs leading-tight truncate" style={{ color: previewTheme.pageSubtext }}>
+                          {t.headerPreviewMadeBy}{' '}
+                          <span style={{ color: previewTheme.pageText, opacity: 0.85 }}>
+                            {settings.username || '—'}
+                          </span>
+                        </span>
+                        <span className="text-[0.65rem] leading-tight mt-0.5" style={{ color: previewTheme.pageSubtext }}>
+                          {t.headerPreviewWith}{' '}
+                          <span style={{ color: previewTheme.pageText, opacity: 0.85 }}>inflee.app</span>
+                        </span>
                       </div>
+                      {/* Avatar — tylko gdy headerStyle === 'profile' && resolvedUrl
+                          key={resolvedUrl} → React re-mountuje <div> + <img> przy każdej zmianie URL. */}
+                      {profilePicSettings?.headerStyle === 'profile' && profilePicSettings?.resolvedUrl && (
+                        <div
+                          key={profilePicSettings.resolvedUrl}
+                          className="w-9 h-9 rounded-full overflow-hidden flex-shrink-0"
+                          style={{ border: `1.5px solid ${previewTheme.cardBorder}` }}
+                        >
+                          <img
+                            src={profilePicSettings.resolvedUrl}
+                            alt="Preview"
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+                {/* Pasek strony pod headerem — sygnalizuje że to kontekst LP */}
+                <div className="h-3" style={{ backgroundColor: previewTheme.pageBg }}></div>
+              </div>
+
+              {/* Stały monit informacyjny — tylko podgląd, nie wpływa na konfigurację LP.
+                  Subtelny pasek w tonacji emerald (zgodny z innymi info-msgami w aplikacji).
+                  inline-flex + max-w-fit — szerokość dopasowana do tekstu, nie rozciąga się na cały kontener. */}
+              <div className="inline-flex items-start gap-2 mt-2 px-3 py-2 bg-emerald-50/60 border border-emerald-100 rounded-md max-w-fit">
+                <Info className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0 mt-0.5" />
+                <p className="text-[0.7rem] text-emerald-800 leading-relaxed">
+                  {t.headerPreviewThemeInfo}
+                </p>
+              </div>
+
+              {/* ──────────────────────────────────────────────────────── */}
+              {/* AUTHOR NAME — full width pod preview, ze stałym monitem    */}
+              {/* ──────────────────────────────────────────────────────── */}
+              <div className="mt-5 pt-5 border-t border-gray-200">
+                <label className="text-xs font-medium text-gray-500 mb-2 uppercase tracking-wide block">
+                  {t.authorName}
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={settings.username}
+                    onChange={(e) => setSettings(prev => ({ ...prev, username: e.target.value }))}
+                    placeholder={t.usernamePlaceholder}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-md bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm text-gray-900 placeholder-gray-500 pr-24 transition-colors"
+                  />
+                  {settings.username !== lastSavedUsername && settings.username.trim() !== '' && (
+                    <button
+                      onClick={handleSaveUsername}
+                      disabled={isSavingUsername}
+                      className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center px-2.5 py-1 bg-blue-600 text-white text-[0.7rem] font-bold rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all cursor-pointer"
+                    >
+                      {isSavingUsername ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <>
+                          <Save className="h-3 w-3 mr-1" />
+                          {t.save}
+                        </>
+                      )}
+                    </button>
+                  )}
+                </div>
+
+                {/* Stały monit pod inputem — emerald, ten sam styl co pod preview.
+                    inline-flex + max-w-fit — szerokość dopasowana do tekstu. */}
+                <div className="inline-flex items-start gap-2 mt-2 px-3 py-2 bg-emerald-50/60 border border-emerald-100 rounded-md max-w-fit">
+                  <Info className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0 mt-0.5" />
+                  <p className="text-[0.7rem] text-emerald-800 leading-relaxed">
+                    {t.headerAuthorNameInfo}
+                  </p>
+                </div>
+              </div>
+
+              {/* ──────────────────────────────────────────────────────── */}
+              {/* SEPARATOR + IMAGE SETUP label nad 2 kolumnami              */}
+              {/* ──────────────────────────────────────────────────────── */}
+              <div className="mt-6 pt-5 border-t border-gray-200">
+                <label className="text-xs font-medium text-gray-500 uppercase tracking-wide block mb-3">
+                  {t.headerImageSetupLabel}
+                </label>
+
+                {/* ──────────────────────────────────────────────────── */}
+                {/* DWIE KOLUMNY: Profile picture / Brand logo            */}
+                {/* ──────────────────────────────────────────────────── */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+
+                {/* ═══ KOLUMNA 1: Profile picture ═══════════════════════ */}
+                <div
+                  className={`rounded-xl border p-3 transition-all ${
+                    profilePicSettings?.headerStyle === 'profile'
+                      ? 'border-blue-200 bg-blue-50/40'
+                      : 'border-gray-200 bg-gray-50/60'
+                  }`}
+                >
+                  {/* Header rzędu — tytuł + toggle pill (ZAWSZE klikalny, NIE pokrywany blurem) */}
+                  <div className="flex items-center justify-between mb-3 gap-2">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <Camera className={`w-3.5 h-3.5 flex-shrink-0 ${
+                        profilePicSettings?.headerStyle === 'profile' ? 'text-blue-600' : 'text-gray-400'
+                      }`} />
+                      <span className="text-xs font-semibold text-gray-900 truncate">
+                        {t.headerPicTitle}
+                      </span>
+                    </div>
+                    {/* Toggle group — etykieta + pill.
+                        Etykieta widoczna TYLKO gdy toggle aktywny (da się go kliknąć).
+                        Disabled toggle (brak źródła) → bez etykiety, sam pill mówi "nic do robienia". */}
+                    {(() => {
+                      const isToggleActive = profilePicSettings?.headerStyle === 'profile';
+                      const hasAnySource = profilePicSettings?.hasGoogleOriginal || profilePicSettings?.hasCustomPicture;
+                      const isToggleDisabled = isSavingProfilePic || isLoadingProfilePic || !hasAnySource;
+                      return (
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          {hasAnySource && (
+                            <span className="text-[0.65rem] font-medium uppercase tracking-wider text-gray-400">
+                              {isToggleActive ? t.headerToggleTurnOff : t.headerToggleTurnOn}
+                            </span>
+                          )}
+                          <button
+                            onClick={handleProfilePicToggle}
+                            disabled={isToggleDisabled}
+                            className={`relative w-9 h-5 rounded-full transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-40 ${
+                              isToggleActive ? 'bg-blue-600' : 'bg-gray-300'
+                            }`}
+                            aria-label={t.headerPicTitle}
+                            title={isToggleActive ? t.headerPicEnabled : t.headerPicDisabled}
+                          >
+                            <span
+                              className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${
+                                isToggleActive ? 'translate-x-4' : 'translate-x-0'
+                              }`}
+                            ></span>
+                          </button>
+                        </div>
+                      );
+                    })()}
+                  </div>
+
+                  {/* Wrapper blur — pokrywa hero thumbnail + przyciski gdy karta nieaktywna (toggle OFF).
+                      pointer-events-none → klik nie reaguje, opacity + blur → wizualne wyciszenie. */}
+                  <div className={`transition-all duration-200 ${
+                    profilePicSettings?.headerStyle === 'profile'
+                      ? ''
+                      : 'blur-[2px] opacity-50 pointer-events-none select-none'
+                  }`}>
+
+                  {/* ──────────────────────────────────────────────────
+                      Hero thumbnail block — pokazuje co user ma w bazie.
+                      4 stany w zależności od źródeł zdjęcia:
+                       1) Google + custom  → 2 thumbnaile side-by-side, klik = switch
+                       2) Tylko Google     → 1 thumbnail (full-width centered)
+                       3) Tylko custom     → 1 thumbnail (full-width centered)
+                       4) Brak żadnego     → placeholder z ikoną Camera
+
+                      Active state (gdy headerStyle === 'profile'):
+                       - aktywne źródło: niebieski ring-2 ring-blue-500, opacity-100, label kolorowy
+                       - drugie źródło: ring-1 ring-gray-200, opacity-60, label szary
+                      Inactive state (headerStyle === 'logo' lub 'none'):
+                       - oba thumbnaile: opacity-50 (sygnalizuje wyłączone)
+
+                      Klik na nie-aktywny thumbnail → switch (analogicznie jak przyciski niżej).
+                  ────────────────────────────────────────────────── */}
+                  <div className="bg-white rounded-lg border border-gray-200 py-4 px-3 mb-3">
+                    {(() => {
+                      const hasGoogle = profilePicSettings?.hasGoogleOriginal;
+                      const hasCustom = profilePicSettings?.hasCustomPicture;
+                      const isHeaderActive = profilePicSettings?.headerStyle === 'profile';
+                      const isActiveSource = (source: 'google' | 'custom') => {
+                        if (!isHeaderActive) return false;
+                        if (source === 'google') {
+                          return (profilePicSettings?.activeProfileSource === 'google' || !hasCustom) && hasGoogle;
+                        }
+                        return profilePicSettings?.activeProfileSource === 'custom' && hasCustom;
+                      };
+                      const dimWhenInactive = !isHeaderActive ? 'opacity-50' : '';
+
+                      // Reusable klasa ramki 50/50
+                      const frameClass = (active: boolean) => `flex-1 flex flex-col items-center gap-2 p-3 rounded-lg border-2 transition-all cursor-pointer disabled:cursor-default ${
+                        active
+                          ? 'border-blue-500 bg-blue-50/50'
+                          : 'border-gray-200 bg-gray-50/40 hover:border-gray-300 hover:bg-gray-50'
+                      } ${dimWhenInactive}`;
+
+                      // ──────────────────────────────────────────────────
+                      // Brak Google'a → 1 ramka 100% (custom albo placeholder, bez labelu "Custom")
+                      // ──────────────────────────────────────────────────
+                      if (!hasGoogle) {
+                        if (hasCustom) {
+                          // Custom istnieje — pełnoszerokościowy thumbnail z X-em do usunięcia
+                          const customActive = isActiveSource('custom');
+                          return (
+                            <div className="relative">
+                              <div className={`flex flex-col items-center gap-2 p-3 rounded-lg border-2 ${
+                                customActive
+                                  ? 'border-blue-500 bg-blue-50/50'
+                                  : 'border-gray-200 bg-gray-50/40'
+                              } ${dimWhenInactive}`}>
+                                <div
+                                  key={profilePicSettings!.customProfilePicture!}
+                                  className={`w-16 h-16 rounded-full overflow-hidden transition-all ${
+                                    customActive
+                                      ? 'ring-2 ring-blue-500 ring-offset-1 ring-offset-blue-50 opacity-100'
+                                      : 'opacity-70'
+                                  }`}
+                                >
+                                  <img
+                                    src={profilePicSettings!.customProfilePicture!}
+                                    alt="Custom"
+                                    className="w-full h-full object-cover"
+                                  />
+                                </div>
+                              </div>
+                              {/* X w prawym górnym rogu */}
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setConfirmModal({
+                                    isOpen: true,
+                                    title: currentLang === 'pl' ? 'Usuń zdjęcie' : 'Remove picture',
+                                    message: currentLang === 'pl'
+                                      ? 'Czy na pewno chcesz usunąć wgrane zdjęcie?'
+                                      : 'Are you sure you want to remove the uploaded picture?',
+                                    confirmLabel: currentLang === 'pl' ? 'Usuń zdjęcie' : 'Remove picture',
+                                    onConfirm: async () => {
+                                      setConfirmModal({ isOpen: false, title: '', message: '', onConfirm: () => {} });
+                                      await handleProfilePicRemove();
+                                    },
+                                  });
+                                }}
+                                disabled={isSavingProfilePic}
+                                className="absolute top-1.5 right-1.5 w-5 h-5 flex items-center justify-center rounded-full bg-white/80 hover:bg-red-50 text-gray-400 hover:text-red-600 border border-gray-200 hover:border-red-300 transition-all opacity-60 hover:opacity-100 cursor-pointer disabled:cursor-not-allowed disabled:opacity-30"
+                                title={t.headerPicRemoveBtn}
+                                aria-label={t.headerPicRemoveBtn}
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+                          );
+                        }
+                        // Brak Google + brak custom → placeholder na 100% (bez labelu)
+                        return (
+                          <div className="flex flex-col items-center gap-2 p-3 rounded-lg border-2 border-dashed border-gray-300 bg-gray-50/40">
+                            <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center">
+                              <Camera className="w-6 h-6 text-gray-300" />
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      // ──────────────────────────────────────────────────
+                      // Mamy Google'a → ZAWSZE 2 sloty 50/50 (custom albo placeholder)
+                      // ──────────────────────────────────────────────────
+                      const googleActive = isActiveSource('google');
+                      const customActive = isActiveSource('custom');
+
+                      // Symetryczne wrappery: oba sloty są <div flex-1> — gwarantuje 50/50 niezależnie od zawartości.
+                      // Zmiana frameClass dla wewnętrznych buttonów (usunięte flex-1, dodane w-full + h-full).
+                      const innerFrameClass = (active: boolean) => `w-full h-full flex flex-col items-center gap-2 p-3 rounded-lg border-2 transition-all cursor-pointer disabled:cursor-default ${
+                        active
+                          ? 'border-blue-500 bg-blue-50/50'
+                          : 'border-gray-200 bg-gray-50/40 hover:border-gray-300 hover:bg-gray-50'
+                      } ${dimWhenInactive}`;
+
+                      return (
+                        <div className="flex items-stretch justify-center gap-3">
+                          {/* LEWA: Google — wrapper flex-1 dla symetrii */}
+                          <div className="flex-1">
+                            <button
+                              onClick={() => handleSwitchProfileSource('google')}
+                              disabled={isSavingProfilePic || isLoadingProfilePic || googleActive}
+                              className={innerFrameClass(googleActive)}
+                              title={googleActive ? t.headerPicSourceGoogle : t.headerPicGoogleBtn}
+                            >
+                              <div
+                                key={profilePicSettings!.profilePicture!}
+                                className={`w-14 h-14 rounded-full overflow-hidden transition-all ${
+                                  googleActive
+                                    ? 'ring-2 ring-blue-500 ring-offset-1 ring-offset-blue-50 opacity-100'
+                                    : 'opacity-70'
+                                }`}
+                              >
+                                <img
+                                  src={profilePicSettings!.profilePicture!}
+                                  alt="Google"
+                                  className="w-full h-full object-cover"
+                                />
+                              </div>
+                              <span className={`text-[0.6rem] font-semibold uppercase tracking-wider ${
+                                googleActive ? 'text-blue-600' : 'text-gray-500'
+                              }`}>
+                                Google
+                              </span>
+                            </button>
+                          </div>
+
+                          {/* PRAWA: Custom albo placeholder gdy brak custom */}
+                          {hasCustom ? (
+                            <div className="flex-1 relative">
+                              <button
+                                onClick={() => handleSwitchProfileSource('custom')}
+                                disabled={isSavingProfilePic || isLoadingProfilePic || customActive}
+                                className={innerFrameClass(customActive)}
+                                title={customActive ? t.headerPicSourceCustom : t.headerPicUploadedBtn}
+                              >
+                                <div
+                                  key={profilePicSettings!.customProfilePicture!}
+                                  className={`w-14 h-14 rounded-full overflow-hidden transition-all ${
+                                    customActive
+                                      ? 'ring-2 ring-blue-500 ring-offset-1 ring-offset-blue-50 opacity-100'
+                                      : 'opacity-70'
+                                  }`}
+                                >
+                                  <img
+                                    src={profilePicSettings!.customProfilePicture!}
+                                    alt="Custom"
+                                    className="w-full h-full object-cover"
+                                  />
+                                </div>
+                                <span className={`text-[0.6rem] font-semibold uppercase tracking-wider ${
+                                  customActive ? 'text-blue-600' : 'text-gray-500'
+                                }`}>
+                                  {t.headerPicSourceCustom}
+                                </span>
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setConfirmModal({
+                                    isOpen: true,
+                                    title: currentLang === 'pl' ? 'Usuń zdjęcie' : 'Remove picture',
+                                    message: currentLang === 'pl'
+                                      ? 'Czy na pewno chcesz usunąć wgrane zdjęcie? Jeśli masz zdjęcie z Google, ono pozostanie aktywne.'
+                                      : 'Are you sure you want to remove the uploaded picture? If you have a Google picture, it will remain active.',
+                                    confirmLabel: currentLang === 'pl' ? 'Usuń zdjęcie' : 'Remove picture',
+                                    onConfirm: async () => {
+                                      setConfirmModal({ isOpen: false, title: '', message: '', onConfirm: () => {} });
+                                      await handleProfilePicRemove();
+                                    },
+                                  });
+                                }}
+                                disabled={isSavingProfilePic}
+                                className="absolute top-1.5 right-1.5 w-5 h-5 flex items-center justify-center rounded-full bg-white/80 hover:bg-red-50 text-gray-400 hover:text-red-600 border border-gray-200 hover:border-red-300 transition-all opacity-60 hover:opacity-100 cursor-pointer disabled:cursor-not-allowed disabled:opacity-30"
+                                title={t.headerPicRemoveBtn}
+                                aria-label={t.headerPicRemoveBtn}
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+                          ) : (
+                            /* Placeholder dla Custom — wrapper flex-1 dla symetrii z lewą ramką */
+                            <div className="flex-1">
+                              <button
+                                onClick={() => profilePicFileInputRef.current?.click()}
+                                disabled={isSavingProfilePic}
+                                className={`w-full h-full flex flex-col items-center gap-2 p-3 rounded-lg border-2 border-dashed transition-all cursor-pointer disabled:cursor-not-allowed ${dimWhenInactive} border-gray-300 bg-gray-50/40 hover:border-gray-400 hover:bg-gray-50`}
+                                title={t.headerPicUploadBtn}
+                              >
+                                <div className="w-14 h-14 rounded-full bg-gray-100 flex items-center justify-center">
+                                  <Camera className="w-5 h-5 text-gray-300" />
+                                </div>
+                                <span className="text-[0.6rem] font-semibold uppercase tracking-wider text-gray-500">
+                                  {t.headerPicSourceCustom}
+                                </span>
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
+                  </div>
+
+
+
+                  {/* Action buttons — równoważne (flex-1) gdy 2 przyciski:
+                      • "Uploaded picture" (klik → upload nowego custom)
+                      • "Google profile picture" (klik → restore z Google jeśli ma custom)
+                      Conditional logic na 4 stany:
+                       1) brak Google + brak custom → tylko "Add picture"
+                       2) tylko Google → tylko "Google profile picture" (active) + "Upload yours" (gray)
+                       3) tylko custom → "Uploaded picture" (active) + "Remove" (red)
+                       4) Google + custom → "Uploaded picture" (active) + "Google profile picture" (gray)
+                  */}
+                  <div className="flex gap-1.5">
+                    {/* STAN 1: Brak żadnego zdjęcia — pojedynczy "Add" full width */}
+                    {!profilePicSettings?.hasGoogleOriginal && !profilePicSettings?.hasCustomPicture && (
+                      <button
+                        onClick={() => profilePicFileInputRef.current?.click()}
+                        disabled={isSavingProfilePic}
+                        className="flex-1 inline-flex items-center justify-center gap-1 px-2.5 py-1.5 bg-blue-600 text-white text-[0.7rem] font-medium rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
+                      >
+                        {isSavingProfilePic ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
+                        {t.headerPicAddBtn}
+                      </button>
                     )}
 
-                    {/* OVERLAY BLOKADY - BEZ PRZYCISKU */}
-                    {!canCustomizeLogo && (
-                      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center p-4">
-                        <div className="text-center space-y-2">
-                          <AlertTriangle className="w-8 h-8 text-amber-400 mx-auto" />
-                          <p className="text-white text-sm font-medium">{t.logoRestrictedTitle}</p>
-                          {/* Przycisk został całkowicie usunięty */}
-                        </div>
-                      </div>
+                    {/* STAN 2/3/4: Mamy jakieś zdjęcie — 2 równoważne przyciski (50/50)
+                        Kolejność: GOOGLE (lewy) | UPLOADED (prawy) — pasuje do thumbnaili nad nimi.
+                        "Google profile picture" — switch przez activeProfileSource (custom zostaje w bazie).
+                        "Twoje zdjęcie" — albo aktywne (custom), albo otwiera upload modal jeśli nie ma custom. */}
+                    {(profilePicSettings?.hasGoogleOriginal || profilePicSettings?.hasCustomPicture) && (
+                      <>
+                        {/* Lewy: "Google profile picture" — primary gdy Google jest faktycznie wyświetlany.
+                            Faktyczny stan = aktywny gdy:
+                            • activeProfileSource === 'google' (świadomy switch), LUB
+                            • custom nie istnieje (resolver i tak fallbackuje do Google) */}
+                        {profilePicSettings?.hasGoogleOriginal && (() => {
+                          const googleIsActive = profilePicSettings?.activeProfileSource === 'google'
+                            || !profilePicSettings?.hasCustomPicture;
+                          return (
+                            <button
+                              onClick={() => handleSwitchProfileSource('google')}
+                              disabled={isSavingProfilePic || googleIsActive}
+                              className={`flex-1 inline-flex items-center justify-center gap-1 px-2.5 py-1.5 text-[0.7rem] font-medium rounded-md transition-colors disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed ${
+                                googleIsActive
+                                  ? 'bg-blue-600 text-white hover:bg-blue-700'
+                                  : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                              }`}
+                              title={t.headerPicGoogleBtn}
+                            >
+                              <RotateCcw className="h-3 w-3" />
+                              <span className="truncate">{t.headerPicGoogleBtn}</span>
+                            </button>
+                          );
+                        })()}
+
+                        {/* Prawy: "Change photo" / "Upload photo" — conditional label
+                            • hasCustomPicture: button label = "Change photo" (zmień istniejące custom)
+                            • !hasCustomPicture: label = "Upload photo" (wgraj pierwsze)
+                            Klik:
+                            • custom istnieje ale nieaktywny → switch na 'custom'
+                            • custom aktywny LUB brak custom → upload nowego pliku */}
+                        <button
+                          onClick={() => {
+                            if (profilePicSettings?.hasCustomPicture && profilePicSettings?.activeProfileSource !== 'custom') {
+                              handleSwitchProfileSource('custom');
+                            } else {
+                              profilePicFileInputRef.current?.click();
+                            }
+                          }}
+                          disabled={isSavingProfilePic}
+                          className={`flex-1 inline-flex items-center justify-center gap-1 px-2.5 py-1.5 text-[0.7rem] font-medium rounded-md transition-colors disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed ${
+                            profilePicSettings?.activeProfileSource === 'custom' && profilePicSettings?.hasCustomPicture
+                              ? 'bg-blue-600 text-white hover:bg-blue-700'
+                              : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                          }`}
+                          title={profilePicSettings?.hasCustomPicture ? t.headerPicChangeBtn : t.headerPicUploadBtn}
+                        >
+                          {isSavingProfilePic ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
+                          <span className="truncate">
+                            {profilePicSettings?.hasCustomPicture ? t.headerPicChangeBtn : t.headerPicUploadBtn}
+                          </span>
+                        </button>
+
+                        {/* Remove — gdy ma TYLKO custom bez Google'a, drobny ikonowy button po prawej */}
+                        {profilePicSettings?.hasCustomPicture && !profilePicSettings?.hasGoogleOriginal && (
+                          <button
+                            onClick={handleProfilePicRemove}
+                            disabled={isSavingProfilePic}
+                            className="inline-flex items-center justify-center gap-1 px-2.5 py-1.5 bg-white text-red-700 text-[0.7rem] font-medium border border-red-300 rounded-md hover:bg-red-50 transition-colors disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed flex-shrink-0"
+                            title={t.headerPicRemoveBtn}
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        )}
+                      </>
                     )}
                   </div>
-                ) : (
-                  <label
-                    onClick={triggerFileInput}
-                    className={`w-full h-40 sm:h-48 bg-white border-2 border-dashed border-gray-200 rounded-xl ${canCustomizeLogo ? 'cursor-pointer hover:border-gray-400 hover:bg-gray-100' : 'cursor-not-allowed'} transition-colors flex flex-col items-center justify-center relative`}>
-                    {isUploadingAvatar ? (
-                      <>
-                        <Loader2 className="h-8 w-8 text-gray-400 mb-2 animate-spin" />
-                        <span className="text-sm font-medium text-gray-600">{t.uploading}</span>
-                        <span className="text-xs text-gray-500">{t.processingAvatar}</span>
-                      </>
+
+                  <input
+                    ref={profilePicFileInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleProfilePicFileSelect}
+                    className="hidden"
+                    disabled={isSavingProfilePic}
+                  />
+                  </div>{/* /wrapper blur Profile picture */}
+                </div>
+
+                {/* ═══ KOLUMNA 2: Brand logo (locked dla niższych planów) ═ */}
+                <div
+                  className={`rounded-xl border p-3 transition-all relative ${
+                    canCustomizeLogo
+                      ? profilePicSettings?.headerStyle === 'logo' && hasBrandLogo
+                        ? 'border-blue-200 bg-blue-50/40'
+                        : 'border-gray-200 bg-gray-50/60'
+                      : 'border-gray-200 bg-gradient-to-br from-amber-50/40 via-white to-gray-50/40'
+                  }`}
+                >
+                  {/* Header rzędu — tytuł + toggle (lub PLUS badge) */}
+                  <div className="flex items-center justify-between mb-3 gap-2">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <ImageIcon className={`w-3.5 h-3.5 flex-shrink-0 ${
+                        canCustomizeLogo && profilePicSettings?.headerStyle === 'logo' && hasBrandLogo ? 'text-blue-600' : 'text-gray-400'
+                      }`} />
+                      <span className="text-xs font-semibold text-gray-900 truncate">
+                        {t.headerBrandTitle}
+                      </span>
+                    </div>
+
+                    {canCustomizeLogo ? (
+                      /* Toggle group — etykieta + pill (analogiczne do Profile picture).
+                          Etykieta widoczna TYLKO gdy hasBrandLogo (da się kliknąć toggle). */
+                      (() => {
+                        const isToggleActive = profilePicSettings?.headerStyle === 'logo' && hasBrandLogo;
+                        const isToggleDisabled = !hasBrandLogo || isSavingProfilePic || isLoadingProfilePic;
+                        return (
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            {hasBrandLogo && (
+                              <span className="text-[0.65rem] font-medium uppercase tracking-wider text-gray-400">
+                                {isToggleActive ? t.headerToggleTurnOff : t.headerToggleTurnOn}
+                              </span>
+                            )}
+                            <button
+                              onClick={handleBrandLogoToggle}
+                              disabled={isToggleDisabled}
+                              className={`relative w-9 h-5 rounded-full transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-40 ${
+                                isToggleActive ? 'bg-blue-600' : 'bg-gray-300'
+                              }`}
+                              aria-label={t.headerBrandTitle}
+                              title={isToggleActive ? t.headerBrandEnabled : t.headerBrandDisabled}
+                            >
+                              <span
+                                className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${
+                                  isToggleActive ? 'translate-x-4' : 'translate-x-0'
+                                }`}
+                              ></span>
+                            </button>
+                          </div>
+                        );
+                      })()
+                    ) : (
+                      /* Plan locked — etykieta info w nagłówku (CTA "Upgrade plan" jest pod kartą poza blurem) */
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-100 text-amber-700 text-[0.6rem] font-semibold rounded flex-shrink-0 leading-tight">
+                        <Lock className="w-2.5 h-2.5 flex-shrink-0" />
+                        <span className="truncate">{t.headerToggleLockedHint}</span>
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Wrapper blur — analogiczny do Profile picture.
+                      Aktywne (clear, bez blur) TYLKO gdy:
+                      • headerStyle === 'logo' AND hasBrandLogo (toggle ON i logo wgrane)
+                      Plan locked → BLUR + pointer-events-none → X w rogu też zablokowany. */}
+                  <div className={`transition-all duration-200 ${
+                    canCustomizeLogo && profilePicSettings?.headerStyle === 'logo' && hasBrandLogo
+                      ? ''
+                      : 'blur-[2px] opacity-50 pointer-events-none select-none'
+                  }`}>
+
+                  {/* Hero ramka — STRUKTURA 1:1 z Profile picture (outer wrapper + inner frame).
+                      Inner frame ma flex-1 jak sloty Profile picture, dzięki czemu wysokości są identyczne. */}
+                  <div className="bg-white rounded-lg border border-gray-200 py-4 px-3 mb-3">
+                    <div className="flex items-stretch justify-center">
+                      {hasBrandLogo ? (
+                        /* Logo wgrane — slot z X-em w rogu.
+                            Container: w-full + max-h-14 — logo skaluje się do pełnej szerokości ramki
+                            zachowując proporcje (object-contain). */
+                        <div className="flex-1 relative">
+                          <div className={`w-full h-full flex flex-col items-center gap-2 p-3 rounded-lg border-2 transition-all ${
+                            profilePicSettings?.headerStyle === 'logo'
+                              ? 'border-blue-500 bg-blue-50/50'
+                              : 'border-gray-200 bg-gray-50/40 opacity-60'
+                          }`}>
+                            <div className="w-full h-14 flex items-center justify-center">
+                              <img
+                                key={settings.logo!}
+                                src={settings.logo!}
+                                alt="Brand logo"
+                                className="max-w-full max-h-full object-contain"
+                              />
+                            </div>
+                            <span className={`text-[0.6rem] font-semibold uppercase tracking-wider ${
+                              profilePicSettings?.headerStyle === 'logo' ? 'text-blue-600' : 'text-gray-500'
+                            }`}>
+                              {t.headerBrandTitle}
+                            </span>
+                          </div>
+                          {/* X w prawym górnym rogu — usuwa logo z bazy (DELETE /api/user/author-settings) */}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setConfirmModal({
+                                isOpen: true,
+                                title: currentLang === 'pl' ? 'Usuń logo brandu' : 'Remove brand logo',
+                                message: currentLang === 'pl'
+                                  ? 'Czy na pewno chcesz usunąć logo brandu? Ta akcja nie wpływa na zdjęcie profilowe.'
+                                  : 'Are you sure you want to remove the brand logo? This action does not affect the profile picture.',
+                                confirmLabel: currentLang === 'pl' ? 'Usuń logo' : 'Remove logo',
+                                onConfirm: async () => {
+                                  setConfirmModal({ isOpen: false, title: '', message: '', onConfirm: () => {} });
+                                  await handleBrandLogoRemove();
+                                },
+                              });
+                            }}
+                            disabled={isSavingBrandLogo}
+                            className="absolute top-1.5 right-1.5 w-5 h-5 flex items-center justify-center rounded-full bg-white/80 hover:bg-red-50 text-gray-400 hover:text-red-600 border border-gray-200 hover:border-red-300 transition-all opacity-60 hover:opacity-100 cursor-pointer disabled:cursor-not-allowed disabled:opacity-30"
+                            title={t.headerBrandRemoveBtn}
+                            aria-label={t.headerBrandRemoveBtn}
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ) : (
+                        /* Brak logo — placeholder dashed (analogiczny do Custom placeholder w Profile picture) */
+                        <div className="flex-1 flex flex-col items-center gap-2 p-3 rounded-lg border-2 border-dashed border-gray-300 bg-gray-50/40">
+                          <div className="w-14 h-14 rounded-md bg-gray-100 flex items-center justify-center">
+                            <ImageIcon className="w-5 h-5 text-gray-300" />
+                          </div>
+                          <span className="text-[0.6rem] font-semibold uppercase tracking-wider text-gray-500">
+                            {t.headerBrandTitle}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Hidden file input — trigger przez button niżej */}
+                  <input
+                    ref={brandLogoFileInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleBrandLogoFileSelect}
+                    className="hidden"
+                    disabled={isSavingBrandLogo}
+                  />
+                  </div>{/* /wrapper blur Brand logo */}
+
+                  {/* Action buttons — POZA wrapper blur (klikalne nawet gdy plan locked).
+                      Układ:
+                      • Brak logo:   [Upload (full)]
+                      • Logo wgrane: [Change] [Edit]
+                      • Plan locked: [Upgrade plan (full)] */}
+                  <div className="flex gap-1.5">
+                    {!canCustomizeLogo ? (
+                      /* Locked — przycisk Upgrade plan pełna szerokość. Klikalny POZA blur'em.
+                          Mode 'upgrade' → modal otwiera się BEZ przycisku cancel (user przyszedł upgradować, nie anulować). */
+                      <button
+                        onClick={() => (window as any).openUpgradeModal?.('upgrade')}
+                        className="flex-1 inline-flex items-center justify-center gap-1 px-2.5 py-1.5 bg-amber-500 text-white text-[0.7rem] font-medium rounded-md hover:bg-amber-600 transition-colors cursor-pointer"
+                      >
+                        <Lock className="h-3 w-3" />
+                        {t.headerBrandUnlockBtn}
+                      </button>
                     ) : (
                       <>
-                        <div className="p-3 bg-gray-50 rounded-full mb-3">
-                           <ImageIcon className="h-6 w-6 text-gray-400" />
-                        </div>
-                        <span className="text-sm font-medium text-gray-900">{t.addLogo}</span>
-                        <span className="text-xs text-gray-500 mt-1">{t.logoFormats}</span>
+                        {/* Upload (gdy brak) / Change (gdy wgrane) — klik otwiera picker plików.
+                            LEWY — primary blue, prowadzi do wgrania nowego pliku z dysku. */}
+                        <button
+                          onClick={() => brandLogoFileInputRef.current?.click()}
+                          disabled={isSavingBrandLogo}
+                          className="flex-1 inline-flex items-center justify-center gap-1 px-2.5 py-1.5 bg-blue-600 text-white text-[0.7rem] font-medium rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
+                          title={hasBrandLogo ? t.headerBrandChangeBtn : t.headerBrandUploadBtn}
+                        >
+                          {isSavingBrandLogo ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
+                          <span className="truncate">
+                            {hasBrandLogo ? t.headerBrandChangeBtn : t.headerBrandUploadBtn}
+                          </span>
+                        </button>
+
+                        {/* Edit — tylko gdy logo istnieje. Otwiera modal z oryginałem RAW (handleBrandLogoEdit).
+                            Disabled gdy brak brandLogoOriginalUrl (legacy user'y bez oryginału).
+                            PRAWY — secondary white, modyfikuje istniejący oryginał (proporcje/zoom). */}
+                        {hasBrandLogo && (
+                          <button
+                            onClick={handleBrandLogoEdit}
+                            disabled={isSavingBrandLogo || !brandLogoOriginalUrl}
+                            className="flex-1 inline-flex items-center justify-center gap-1 px-2.5 py-1.5 bg-white text-gray-700 text-[0.7rem] font-medium border border-gray-300 rounded-md hover:bg-gray-50 transition-colors disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
+                            title={
+                              !brandLogoOriginalUrl
+                                ? (currentLang === 'pl'
+                                    ? 'Edycja niedostępna — wgraj logo ponownie'
+                                    : 'Edit unavailable — re-upload to enable')
+                                : (currentLang === 'pl' ? 'Edytuj proporcje' : 'Edit proportions')
+                            }
+                          >
+                            <Crop className="h-3 w-3" />
+                            <span className="truncate">{t.headerBrandEditBtn}</span>
+                          </button>
+                        )}
                       </>
                     )}
+                  </div>
+                </div>
 
-                    {/* OVERLAY BLOKADY (Stan pusty) - BEZ PRZYCISKU */}
-                    {!canCustomizeLogo && (
-                      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm opacity-0 hover:opacity-100 transition-opacity duration-200 flex items-center justify-center p-4 rounded-xl">
-                        <div className="text-center space-y-2">
-                          <AlertTriangle className="w-8 h-8 text-amber-400 mx-auto" />
-                          <p className="text-white text-sm font-medium">{t.logoRestrictedTitle}</p>
-                          {/* Przycisk został całkowicie usunięty */}
-                        </div>
-                      </div>
-                    )}
-                  </label>
-                )}
+              </div>{/* /grid 2 kolumny Profile picture + Brand logo */}
+
+              {/* Stały monit pod gridem — info że ustawienia obrazu wpływają na wszystkie LP.
+                  Styl emerald + inline-flex + max-w-fit identyczny jak inne monity w tej sekcji
+                  (pod theme preview i pod Author Name). Szerokość dopasowana do tekstu. */}
+              <div className="inline-flex items-start gap-2 mt-3 px-3 py-2 bg-emerald-50/60 border border-emerald-100 rounded-md max-w-fit">
+                <Info className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0 mt-0.5" />
+                <p className="text-[0.7rem] text-emerald-800 leading-relaxed">
+                  {t.headerImageSetupInfo}
+                </p>
               </div>
-              {canCustomizeLogo && (
-                <input
-                  type="file"
-                  className="hidden"
-                  accept="image/*"
-                  onChange={handleLogoUpload}
-                  disabled={isUploadingAvatar || isDeletingAvatar}
-                  ref={fileInputRef}
-                />
-              )}
-              {canCustomizeLogo && settings.logo !== defaultAppLogoUrl && !isUploadingAvatar && (
-                <button
-                  onClick={removeLogo}
-                  disabled={isDeletingAvatar}
-                  className="mt-2 w-full flex items-center justify-center px-3 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 cursor-pointer"
-                >
-                  {isDeletingAvatar ? (
-                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                  ) : (
-                    <ImageIcon className="h-4 w-4 mr-2" />
-                  )}
-                  {t.restoreDefaultLogo}
-                </button>
-              )}
-              <p className="text-xs text-gray-500 mt-1">{t.logoHint}</p>
+
+              </div>{/* /wrapper IMAGE SETUP (label + grid + info) */}
             </div>
           </div>
 
@@ -2997,7 +4264,7 @@ export default function SettingsContent() {
                   onClick={confirmModal.onConfirm}
                   className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors cursor-pointer"
                 >
-                  {t.confirmRemove}
+                  {confirmModal.confirmLabel || t.confirmRemove}
                 </button>
               </div>
             </div>
@@ -3014,6 +4281,7 @@ export default function SettingsContent() {
         currentPlanRole={subscriptionData?.role || ''}
         subscriptionData={subscriptionData}
         onManageBilling={handleManageBilling}
+        mode={upgradeModalMode}
       />
 
       {/* Modal Wymuszenia Wyboru Właściciela (Blocking) */}
@@ -3052,6 +4320,30 @@ export default function SettingsContent() {
           </div>
         </div>
       )}
+
+      {/* Modal kadrowania zdjęcia profilowego */}
+      <ProfilePictureCropModal
+        isOpen={isCropModalOpen}
+        imageSrc={cropImageSrc}
+        onCancel={() => {
+          setIsCropModalOpen(false);
+          setCropImageSrc(null);
+        }}
+        onSave={handleCroppedImageSave}
+        language={currentLang}
+      />
+
+      {/* Modal kadrowania logo brandu — proporcje 3:1 / 4:1 / 5:1, output PNG */}
+      <BrandLogoModal
+        isOpen={isBrandLogoModalOpen}
+        imageSrc={brandLogoImageSrc}
+        onCancel={() => {
+          setIsBrandLogoModalOpen(false);
+          setBrandLogoImageSrc(null);
+        }}
+        onSave={handleBrandLogoSave}
+        language={currentLang}
+      />
     </div>
   );
 }

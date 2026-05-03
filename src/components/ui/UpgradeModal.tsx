@@ -11,6 +11,10 @@ interface UpgradeModalProps {
   currentPlanRole: string;
   subscriptionData: any;
   onManageBilling: () => void;
+  // mode: 'upgrade' = z innego CTA (brand logo, free → upgrade) — BEZ przycisku cancel.
+  //       'manage'  = z karty Subscription (managePlan) — Z przyciskiem cancel.
+  // Default: 'manage' (backwards compatible z istniejącymi wywołaniami).
+  mode?: 'upgrade' | 'manage';
 }
 
 interface PlanFeature {
@@ -280,7 +284,8 @@ export default function UpgradeModal({
   currentLang,
   currentPlanRole,
   subscriptionData,
-  onManageBilling
+  onManageBilling,
+  mode = 'manage'  // backwards compat — bez przekazania działa jak dotąd
 }: UpgradeModalProps) {
   const [showCancelConfirm, setShowCancelConfirm] = React.useState(false);
   const [showContactModal, setShowContactModal] = React.useState(false);
@@ -1072,8 +1077,10 @@ export default function UpgradeModal({
           )}
         </div>
 
-        {/* --- PRZYCISK ANULOWANIA (Tylko jeśli aktywna i NIE anulowana) --- */}
-        {showPaymentManagement && !isDemoUser && !isOneTimePaid && subscriptionData?.subscriptionStatus !== 'canceled' && (
+        {/* --- PRZYCISK ANULOWANIA (Tylko jeśli aktywna i NIE anulowana, ORAZ mode === 'manage') ---
+            mode === 'upgrade' (np. z karty Brand logo, z CTA z preview) → cancel ukryty,
+            user widzi tylko opcje upgrade (cancel byłby distractorem). */}
+        {mode === 'manage' && showPaymentManagement && !isDemoUser && !isOneTimePaid && subscriptionData?.subscriptionStatus !== 'canceled' && (
           <div className="mt-8 pt-6 border-t border-gray-700/50">
             <button onClick={handleCancelClick} className="w-full py-3 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 hover:border-red-500/30 text-red-400 hover:text-red-300 text-sm font-medium rounded-xl transition-all cursor-pointer flex items-center justify-center group">
               <AlertTriangle className="w-4 h-4 mr-2 group-hover:scale-110 transition-transform" />

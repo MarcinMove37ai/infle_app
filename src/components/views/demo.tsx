@@ -797,13 +797,31 @@ interface DemoViewProps {
   language?: 'pl' | 'en';
   colorSchemeName?: keyof typeof colorSchemes;
   partnerName?: string;
-  partnerLogoUrl?: string;  // Zdjęcie profilowe usera — wyświetlane po prawej w headerze (opcjonalne)
+  partnerLogoUrl?: string;  // [LEGACY] Zdjęcie profilowe — fallback gdy nie ma googleProfilePicture / customProfilePicture
   visitors?: number;
   pageId?: string;
   pageData?: any;
   isPreviewMode?: boolean;
   isTextEditMode?: boolean;
   onTextUpdate?: (fieldName: string, newValue: string) => void;
+
+  // ─── Header configuration (Landing Page Header Setup z Settings) ─────
+  // 3 stany decydują o renderze nagłówka LP:
+  //   • 'profile' → avatar (custom lub Google wg activeProfileSource) + podpis
+  //   • 'logo'    → tylko brand logo (bez podpisu)
+  //   • 'none'    → tylko podpis "made by X with inflee.app"
+  // Optional — gdy missing, fallback do partnerLogoUrl + zachowanie aktualne (backwards compat).
+  headerStyle?: 'profile' | 'logo' | 'none';
+  // Gdy user ma OBA zdjęcia (Google + custom), pole decyduje które pokazać.
+  // Default 'google' — bezpieczny fallback gdy custom nie istnieje.
+  activeProfileSource?: 'custom' | 'google';
+  // Profile picture URLs — DemoView wybiera jeden z dwóch wg activeProfileSource.
+  // Oba opcjonalne; gdy oba puste i headerStyle='profile' → fallback partnerLogoUrl.
+  googleProfilePicture?: string;
+  customProfilePicture?: string;
+  // Brand logo (z User.authorLogoUrl) — używany TYLKO gdy headerStyle='logo'.
+  // Optional — gdy brak i headerStyle='logo', fallback do partnerLogoUrl (legacy).
+  brandLogoUrl?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -821,22 +839,67 @@ const DemoView: React.FC<DemoViewProps> = ({
   pageData,
   isPreviewMode = false,
   isTextEditMode = false,
-  onTextUpdate
+  onTextUpdate,
+  // ─── NOWE: header config — backwards compat poprzez optional + default ───
+  // Gdy stary caller bez headerStyle → 'profile' (zachowuje obecne zachowanie:
+  // pokazuje "made by X" + avatar gdy URL).
+  headerStyle = 'profile',
+  activeProfileSource = 'google',
+  googleProfilePicture,
+  customProfilePicture,
+  brandLogoUrl,
 }) => {
-  // Resolver dla zdjęcia profilowego — sprawdza prop, a w fallbacku pageData.
-  // Nazwa to PROFILE PICTURE z tabeli users (NIE authorLogoUrl który jest
-  // osobnym polem dla logo brand/firmy). Obsługuje wiele konwencji żeby
-  // działało z różnymi caller'ami:
-  //   - explicit prop partnerLogoUrl (najwyższy priorytet)
-  //   - pageData.profilePicture (root, camelCase)
-  //   - pageData.user.profilePicture (zagnieżdżony, jak w PublicPageClient)
-  //   - pageData.profile_picture (snake_case fallback)
-  const resolvedPartnerLogoUrl =
-    partnerLogoUrl
-    || pageData?.profilePicture
-    || pageData?.user?.profilePicture
-    || pageData?.profile_picture
+  // ════════════════════════════════════════════════════════════════════════
+  // HEADER RESOLUTION — Landing Page Header Setup
+  // ════════════════════════════════════════════════════════════════════════
+  // 3 stany kontrolowane przez headerStyle z Settings:
+  //   • 'profile' → avatar (custom lub Google wg activeProfileSource) + podpis
+  //   • 'logo'    → tylko brand logo (bez podpisu)
+  //   • 'none'    → tylko podpis "made by X with inflee.app"
+  //
+  // Resolution kaskadowa — backwards compat z legacy caller'ami:
+  //   1. NEW propsy (googleProfilePicture, customProfilePicture, brandLogoUrl)
+  //   2. partnerLogoUrl (legacy)
+  //   3. pageData fallbacks (profilePicture / user.profilePicture)
+
+  // Resolved avatar — wybór wg activeProfileSource
+  const resolvedAvatarUrl = (() => {
+    // Custom ma priorytet gdy user explicite go wybrał i URL istnieje
+    if (activeProfileSource === 'custom' && customProfilePicture) {
+      return customProfilePicture;
+    }
+    // Google jako default lub gdy custom pusty
+    if (googleProfilePicture) return googleProfilePicture;
+    if (customProfilePicture) return customProfilePicture;
+    // Legacy fallback (stare callery bez nowych propsów)
+    return (
+      partnerLogoUrl
+      || pageData?.profilePicture
+      || pageData?.user?.profilePicture
+      || pageData?.profile_picture
+      || undefined
+    );
+  })();
+
+  // Resolved brand logo — fallback do pageData.author_logo_url (legacy public path)
+  const resolvedBrandLogoUrl =
+    brandLogoUrl
+    || pageData?.author_logo_url
+    || pageData?.user?.authorLogoUrl
     || undefined;
+
+  // Czy faktycznie pokazać avatar / logo / signature?
+  // Avatar pokazany tylko gdy headerStyle === 'profile' AND mamy URL.
+  const shouldShowAvatar = headerStyle === 'profile' && !!resolvedAvatarUrl;
+  // Brand logo pokazany tylko gdy headerStyle === 'logo' AND mamy URL.
+  const shouldShowBrandLogo = headerStyle === 'logo' && !!resolvedBrandLogoUrl;
+  // Podpis "made by X with inflee.app" — gdy NIE pokazujemy logo.
+  // (W stanie 'profile' jest podpis + avatar; w 'none' tylko podpis; w 'logo' bez podpisu.)
+  const shouldShowSignature = headerStyle !== 'logo';
+
+  // [LEGACY ALIAS] Stary kod używał resolvedPartnerLogoUrl — zachowujemy alias
+  // żeby uniknąć rozjazdów; nowy kod używa shouldShowAvatar + resolvedAvatarUrl.
+  const resolvedPartnerLogoUrl = resolvedAvatarUrl;
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
@@ -1221,68 +1284,104 @@ const DemoView: React.FC<DemoViewProps> = ({
           </button>
 
           {/* ── RIGHT MOBILE — podpis + profilowe (do lg) ─────────────── */}
-          {/* Skondensowany layout: tekst po lewej, avatar po prawej. */}
-          {/* Mniejsze rozmiary niż desktop żeby zmieściło się obok hamburgera. */}
+          {/* 3 stany analogiczne do desktop — mniejsze rozmiary dla mobile.
+              max-w-[55%] na brand logo żeby zmieściło się obok hamburger'a. */}
           <div className="flex lg:hidden items-center gap-2.5">
-            <div className="flex flex-col items-end justify-center">
-              <span className="text-xs leading-tight" style={{ color: theme.pageSubtext }}>
-                {isEN ? 'made by' : 'stworzone przez'}{' '}
-                <span style={{ color: theme.pageText, opacity: 0.85 }}>{partnerName}</span>
-              </span>
-              <div className="w-full h-px my-0.5" style={{ backgroundColor: theme.divider }}></div>
-              <span className="text-[0.65rem] leading-tight" style={{ color: theme.pageSubtext }}>
-                {isEN ? 'with' : 'z'}{' '}
-                <span style={{ color: theme.pageText, opacity: 0.85 }}>inflee.app</span>
-              </span>
-            </div>
-
-            {resolvedPartnerLogoUrl && (
-              <div
-                className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0"
-                style={{ border: `1.5px solid ${theme.cardBorder}` }}
-              >
-                <Image
-                  src={resolvedPartnerLogoUrl}
+            {shouldShowBrandLogo ? (
+              /* STAN 'logo' — tylko brand logo, mniejszy max-h niż desktop */
+              <div className="flex items-center justify-end">
+                <img
+                  src={resolvedBrandLogoUrl}
                   alt={partnerName}
-                  width={40}
-                  height={40}
-                  className="w-full h-full object-cover"
-                  unoptimized
+                  className="max-h-10 max-w-[180px] object-contain"
                 />
               </div>
+            ) : (
+              <>
+                {/* STAN 'profile' lub 'none' — podpis */}
+                {shouldShowSignature && (
+                  <div className="flex flex-col items-end justify-center">
+                    <span className="text-xs leading-tight" style={{ color: theme.pageSubtext }}>
+                      {isEN ? 'made by' : 'stworzone przez'}{' '}
+                      <span style={{ color: theme.pageText, opacity: 0.85 }}>{partnerName}</span>
+                    </span>
+                    <div className="w-full h-px my-0.5" style={{ backgroundColor: theme.divider }}></div>
+                    <span className="text-[0.65rem] leading-tight" style={{ color: theme.pageSubtext }}>
+                      {isEN ? 'with' : 'z'}{' '}
+                      <span style={{ color: theme.pageText, opacity: 0.85 }}>inflee.app</span>
+                    </span>
+                  </div>
+                )}
+
+                {/* STAN 'profile' — avatar po prawej podpisu */}
+                {shouldShowAvatar && (
+                  <div
+                    className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0"
+                    style={{ border: `1.5px solid ${theme.cardBorder}` }}
+                  >
+                    <Image
+                      src={resolvedAvatarUrl!}
+                      alt={partnerName}
+                      width={40}
+                      height={40}
+                      className="w-full h-full object-cover"
+                      unoptimized
+                    />
+                  </div>
+                )}
+              </>
             )}
           </div>
 
           {/* ── RIGHT — partner info (desktop only) ─────────────────── */}
+          {/* 3 stany wg headerStyle:
+              • 'logo'    → tylko brand logo (bez podpisu)
+              • 'profile' → podpis + avatar (custom albo Google wg activeProfileSource)
+              • 'none'    → tylko podpis "made by X with inflee.app" (bez avatara) */}
           <div className="hidden lg:flex items-center gap-3">
-            {/* Tekst: made by [name] / with inflee.app — klasycznie, bez ozdobników */}
-            <div className="flex flex-col items-end justify-center">
-              <span className="text-sm" style={{ color: theme.pageSubtext }}>
-                {isEN ? 'made by' : 'stworzone przez'}{' '}
-                <span style={{ color: theme.pageText, opacity: 0.85 }}>{partnerName}</span>
-              </span>
-              <div className="w-full h-px my-0.5" style={{ backgroundColor: theme.divider }}></div>
-              <span className="text-xs" style={{ color: theme.pageSubtext }}>
-                {isEN ? 'with' : 'z'}{' '}
-                <span style={{ color: theme.pageText, opacity: 0.85 }}>inflee.app</span>
-              </span>
-            </div>
-
-            {/* Avatar — opcjonalny, po prawej tekstu */}
-            {resolvedPartnerLogoUrl && (
-              <div
-                className="w-12 h-12 rounded-full overflow-hidden flex-shrink-0"
-                style={{ border: `1.5px solid ${theme.cardBorder}` }}
-              >
-                <Image
-                  src={resolvedPartnerLogoUrl}
+            {shouldShowBrandLogo ? (
+              /* STAN 'logo' — tylko brand logo, max-h ograniczony do wysokości headera (h-20=80px → max-h-12=48px) */
+              <div className="flex items-center justify-end">
+                <img
+                  src={resolvedBrandLogoUrl}
                   alt={partnerName}
-                  width={48}
-                  height={48}
-                  className="w-full h-full object-cover"
-                  unoptimized
+                  className="max-h-12 max-w-[280px] object-contain"
                 />
               </div>
+            ) : (
+              <>
+                {/* STAN 'profile' lub 'none' — zawsze podpis "made by X with inflee.app" */}
+                {shouldShowSignature && (
+                  <div className="flex flex-col items-end justify-center">
+                    <span className="text-sm" style={{ color: theme.pageSubtext }}>
+                      {isEN ? 'made by' : 'stworzone przez'}{' '}
+                      <span style={{ color: theme.pageText, opacity: 0.85 }}>{partnerName}</span>
+                    </span>
+                    <div className="w-full h-px my-0.5" style={{ backgroundColor: theme.divider }}></div>
+                    <span className="text-xs" style={{ color: theme.pageSubtext }}>
+                      {isEN ? 'with' : 'z'}{' '}
+                      <span style={{ color: theme.pageText, opacity: 0.85 }}>inflee.app</span>
+                    </span>
+                  </div>
+                )}
+
+                {/* STAN 'profile' — avatar po prawej podpisu (custom albo Google) */}
+                {shouldShowAvatar && (
+                  <div
+                    className="w-12 h-12 rounded-full overflow-hidden flex-shrink-0"
+                    style={{ border: `1.5px solid ${theme.cardBorder}` }}
+                  >
+                    <Image
+                      src={resolvedAvatarUrl!}
+                      alt={partnerName}
+                      width={48}
+                      height={48}
+                      className="w-full h-full object-cover"
+                      unoptimized
+                    />
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>
@@ -1301,43 +1400,58 @@ const DemoView: React.FC<DemoViewProps> = ({
           WebkitBackdropFilter: 'blur(16px)',
         }}
       >
-        {/* Drawer header — podpis (orientacja jak desktop) + close */}
-        {/* Layout: [.................podpis + avatar] gap [X] */}
+        {/* Drawer header — 3 stany analogiczne do desktop / mobile bar.
+            Layout: [content (logo lub podpis+avatar)] gap [X close] */}
         <div
           className="h-20 flex items-center justify-end px-4 sm:px-6 gap-3"
           style={{ borderBottom: `1px solid ${theme.headerBorder}` }}
         >
-          {/* Podpis — taka sama orientacja jak w desktop right side: */}
-          {/* tekst right-aligned (items-end), avatar po prawej tekstu. */}
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="flex flex-col items-end min-w-0">
-              <span className="text-sm leading-tight truncate" style={{ color: theme.pageSubtext }}>
-                {isEN ? 'made by' : 'stworzone przez'}{' '}
-                <span style={{ color: theme.pageText, opacity: 0.85 }}>{partnerName}</span>
-              </span>
-              <span className="text-xs leading-tight mt-0.5" style={{ color: theme.pageSubtext }}>
-                {isEN ? 'with' : 'z'}{' '}
-                <span style={{ color: theme.pageText, opacity: 0.85 }}>inflee.app</span>
-              </span>
+          {/* Content — brand logo / podpis+avatar / sam podpis */}
+          {shouldShowBrandLogo ? (
+            /* STAN 'logo' — tylko brand logo */
+            <div className="flex items-center justify-end min-w-0">
+              <img
+                src={resolvedBrandLogoUrl}
+                alt={partnerName}
+                className="max-h-11 max-w-[200px] object-contain"
+              />
             </div>
-            {resolvedPartnerLogoUrl && (
-              <div
-                className="w-11 h-11 rounded-full overflow-hidden flex-shrink-0"
-                style={{ border: `1.5px solid ${theme.cardBorder}` }}
-              >
-                <Image
-                  src={resolvedPartnerLogoUrl}
-                  alt={partnerName}
-                  width={44}
-                  height={44}
-                  className="w-full h-full object-cover"
-                  unoptimized
-                />
-              </div>
-            )}
-          </div>
+          ) : (
+            <div className="flex items-center gap-2.5 min-w-0">
+              {/* STAN 'profile' lub 'none' — podpis */}
+              {shouldShowSignature && (
+                <div className="flex flex-col items-end min-w-0">
+                  <span className="text-sm leading-tight truncate" style={{ color: theme.pageSubtext }}>
+                    {isEN ? 'made by' : 'stworzone przez'}{' '}
+                    <span style={{ color: theme.pageText, opacity: 0.85 }}>{partnerName}</span>
+                  </span>
+                  <span className="text-xs leading-tight mt-0.5" style={{ color: theme.pageSubtext }}>
+                    {isEN ? 'with' : 'z'}{' '}
+                    <span style={{ color: theme.pageText, opacity: 0.85 }}>inflee.app</span>
+                  </span>
+                </div>
+              )}
 
-          {/* Close button — po prawej brzegu */}
+              {/* STAN 'profile' — avatar po prawej podpisu */}
+              {shouldShowAvatar && (
+                <div
+                  className="w-11 h-11 rounded-full overflow-hidden flex-shrink-0"
+                  style={{ border: `1.5px solid ${theme.cardBorder}` }}
+                >
+                  <Image
+                    src={resolvedAvatarUrl!}
+                    alt={partnerName}
+                    width={44}
+                    height={44}
+                    className="w-full h-full object-cover"
+                    unoptimized
+                  />
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Close button — po prawej brzegu, ZAWSZE widoczny */}
           <button
             type="button"
             onClick={() => setMobileMenuOpen(false)}

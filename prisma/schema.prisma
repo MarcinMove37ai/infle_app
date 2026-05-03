@@ -25,12 +25,29 @@ model User {
   resetToken            String?
   resetTokenExpiry      DateTime?
   profilePicture        String?
+  customProfilePicture  String?
+  // headerStyle — kontroluje co pokazuje się w nagłówku landing page'a:
+  //   'profile' → podpis + avatar (Google lub custom — patrz activeProfileSource)
+  //   'logo'    → brand logo (z authorLogoUrl) zamiast podpisu
+  //   'none'    → tylko podpis bez avatara (sam tekst)
+  // Mutual exclusion wymuszone przez typ — nie da się aktywować obu naraz.
+  headerStyle           String                       @default("none")
+  // activeProfileSource — gdy headerStyle='profile' i user ma OBA źródła
+  // (Google + custom), to pole decyduje które pokazać:
+  //   'custom' → custom (priorytet domyślny po upload)
+  //   'google' → Google (świadomie wybrane przez usera, custom zostaje w bazie)
+  // Brak custom → fallback na Google (bez względu na to pole).
+  activeProfileSource   String                       @default("custom")
   instagramProfileId    String?
   linkedinProfileId     String?
   socialProfileType     SocialProfileType            @default(NONE)
   instagramUsername     String?
   authorDisplayName     String?
   authorLogoUrl         String?
+  // authorLogoOriginalUrl — original raw plik wgrany przez usera (zachowany do re-edycji).
+  // authorLogoUrl to finalny cropped PNG, ten plik to oryginal sprzed cropu.
+  // Pozwala na bezstratną re-edycję (zmiana proporcji/zoom) bez ponownego uploadu z dysku.
+  authorLogoOriginalUrl String?
   imageAiModel          String?                      @default("imagen-3")
   imageAiProvider       String?                      @default("google")
   textAiModel           String?                      @default("claude-3-haiku")
@@ -39,6 +56,7 @@ model User {
   stripeCustomerId      String?                      @unique
   stripeSubscriptionId  String?                      @unique
   subscriptionStatus    String?
+  primaryDomainId       String?                      @unique
   paymentVerifiedAt     DateTime?
   nextBillingDate       DateTime?
   billingName           String?
@@ -62,8 +80,10 @@ model User {
   pages                 pages[]
   reels                 reels[]
   apiKeys               UserApiKey[]
+  customDomains         CustomDomain[]
   instagramProfile      InstagramProfileCheck?       @relation(fields: [instagramProfileId], references: [id])
   linkedinProfile       LinkedInProfileCheck?        @relation(fields: [linkedinProfileId], references: [id])
+  primaryDomain         CustomDomain?                @relation("UserPrimaryDomain", fields: [primaryDomainId], references: [id], onDelete: SetNull)
 
   @@map("users")
 }
@@ -418,6 +438,35 @@ enum Role {
   payd
   premium
   GOD
+}
+
+model CustomDomain {
+  id                   String       @id @default(cuid())
+  userId               String
+  domain               String       @unique
+  status               DomainStatus @default(pending)
+  cloudflareHostnameId String?      @unique
+  sslStatus            String?      @db.VarChar(50)
+  verificationErrors   Json?
+  ownershipVerification Json?
+  lastCheckedAt        DateTime?
+  verifiedAt           DateTime?
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
+  user                 User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  primaryFor           User?        @relation("UserPrimaryDomain")
+
+  @@index([userId])
+  @@index([domain])
+  @@index([status])
+  @@map("custom_domains")
+}
+
+enum DomainStatus {
+  pending
+  verifying
+  active
+  failed
 }
 
 enum SourceType {

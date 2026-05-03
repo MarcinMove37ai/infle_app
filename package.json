@@ -42,6 +42,7 @@
     "qrcode.react": "^4.2.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "react-easy-crop": "^5.5.7",
     "resend": "^4.5.2",
     "stripe": "^19.1.0",
     "xlsx": "^0.18.5"

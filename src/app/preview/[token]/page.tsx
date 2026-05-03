@@ -43,7 +43,15 @@ interface PageData {
   ebookId?: number | null;
   authorDisplayName?: string | null;
   authorLogoUrl?: string;
-  profilePicture?: string | null;  // Zdjęcie profilowe usera (z tabeli users)
+  profilePicture?: string | null;  // Zdjęcie profilowe usera (Google original z tabeli users)
+
+  // ─── Header configuration z Settings → Landing Page Header Setup ─────
+  // headerStyle: 'profile' | 'logo' | 'none' — co user wybrał w toggle'ach Settings
+  // activeProfileSource: 'custom' | 'google' — wybór źródła avatara gdy user ma oba
+  // customProfilePicture: URL custom uploadu (Google original jest w profilePicture)
+  headerStyle?: 'profile' | 'logo' | 'none' | null;
+  activeProfileSource?: 'custom' | 'google' | null;
+  customProfilePicture?: string | null;
 
   // Treść strony — nowy schemat 7 sekcji jsonb (lub null jeśli nie wygenerowana)
   pageContent: PageContent | null;
@@ -1025,20 +1033,40 @@ const PreviewPageContent = ({ t, lang }: { t: typeof translations.pl; lang: 'pl'
       <div className={containerClass}>
         <div className="pb-24">
           {pageType === 'ebook' ? (
-            <DemoView
-              pageContent={pageData.pageContent as any}
-              colorSchemeName={currentColorScheme}
-              language={lang}
-              ebookMeta={ebookMeta}
-              partnerName={pageData.authorDisplayName || 'Autor'}
-              partnerLogoUrl={buildAssetUrl(pageData.profilePicture)}
-              visitors={pageData.visitors || 0}
-              pageId={pageData.id}
-              pageData={pageData}
-              isPreviewMode={isPreviewMode}
-              isTextEditMode={isTextEditMode && canEditPage}
-              onTextUpdate={useContextMode ? undefined : handleTextUpdate}
-            />
+            (() => {
+              // ─── Header config — fallback dla legacy users (null w DB) ────
+              // Jeśli user nie ustawił headerStyle w Settings, wybierz domyślny:
+              // 'profile' gdy ma jakiekolwiek zdjęcie, inaczej 'none'.
+              const hasAnyPic = !!pageData.profilePicture || !!pageData.customProfilePicture;
+              const resolvedHeaderStyle: 'profile' | 'logo' | 'none' =
+                pageData.headerStyle ?? (hasAnyPic ? 'profile' : 'none');
+              const googlePic = buildAssetUrl(pageData.profilePicture);
+              const customPic = buildAssetUrl(pageData.customProfilePicture);
+              const brandLogo = buildAssetUrl(pageData.authorLogoUrl);
+
+              return (
+                <DemoView
+                  pageContent={pageData.pageContent as any}
+                  colorSchemeName={currentColorScheme}
+                  language={lang}
+                  ebookMeta={ebookMeta}
+                  partnerName={pageData.authorDisplayName || 'Autor'}
+                  partnerLogoUrl={googlePic}
+                  visitors={pageData.visitors || 0}
+                  pageId={pageData.id}
+                  pageData={pageData}
+                  isPreviewMode={isPreviewMode}
+                  isTextEditMode={isTextEditMode && canEditPage}
+                  onTextUpdate={useContextMode ? undefined : handleTextUpdate}
+                  // ─── NOWE: header config z Settings ──────────────────────
+                  headerStyle={resolvedHeaderStyle}
+                  activeProfileSource={pageData.activeProfileSource ?? 'google'}
+                  googleProfilePicture={googlePic}
+                  customProfilePicture={customPic}
+                  brandLogoUrl={brandLogo}
+                />
+              );
+            })()
           ) : (
             <DemoVideo
               pageContent={{

@@ -33,6 +33,7 @@ export async function GET() {
         lastName: true,
         authorDisplayName: true,
         authorLogoUrl: true,
+        authorLogoOriginalUrl: true,  // original raw — do re-edycji w BrandLogoModal
         // ✅ NOWE: Dodaj pola AI
         textAiProvider: true,
         textAiModel: true,
@@ -51,6 +52,7 @@ export async function GET() {
       authorSettings: {
         authorDisplayName: user.authorDisplayName,
         authorLogoUrl: user.authorLogoUrl,
+        authorLogoOriginalUrl: user.authorLogoOriginalUrl,  // original raw URL (do re-edit modala)
         fallbackName: `${user.firstName} ${user.lastName}`.trim(),
         // ✅ NOWE: Dodaj ustawienia AI do odpowiedzi
         textAiProvider: user.textAiProvider,
@@ -89,6 +91,7 @@ export async function PUT(request: NextRequest) {
 
     let authorDisplayName: string | undefined;
     let imageFile: File | null = null;
+    let imageOriginalFile: File | null = null;  // raw oryginał (osobny FormData field 'avatarOriginal')
     // ✅ NOWE: Pola AI
     let textAiProvider: string | undefined;
     let textAiModel: string | undefined;
@@ -107,8 +110,10 @@ export async function PUT(request: NextRequest) {
           authorDisplayName = nameFromForm.trim();
         }
 
-        // Pobierz plik avatara jeśli jest w formData
+        // Pobierz plik avatara (cropped output z modala) jeśli jest w formData
         imageFile = formData.get('avatar') as File | null;
+        // Pobierz raw oryginał (osobny field — wysyłany przez frontend tylko przy fresh upload, nie przy Edit)
+        imageOriginalFile = formData.get('avatarOriginal') as File | null;
 
         // ✅ NOWE: Pobierz ustawienia AI z formData (opcjonalne)
         const textProviderFromForm = formData.get('textAiProvider');
@@ -257,8 +262,71 @@ export async function PUT(request: NextRequest) {
     }
 
     let newAvatarUrl: string | undefined;
+    let newOriginalUrl: string | undefined;
 
-    // Przetwarzanie avatara jeśli został przesłany (bez zmian w tej sekcji)
+    // ════════════════════════════════════════════════════════════════════
+    // Zapis oryginału RAW (osobny field 'avatarOriginal' z FormData)
+    // ════════════════════════════════════════════════════════════════════
+    // Frontend wysyła ten plik TYLKO przy fresh upload (nie przy Edit istniejącego logo).
+    // Brak tego field → user re-edytuje istniejący oryginał na serwerze, nie ruszamy go.
+    if (imageOriginalFile) {
+      console.log(`📦 Otrzymano raw oryginał: ${imageOriginalFile.size} bytes, typ: ${imageOriginalFile.type}`);
+
+      const origType = imageOriginalFile.type;
+      if (!origType.startsWith('image/')) {
+        return NextResponse.json({
+          error: 'avatarOriginal nie jest obrazem',
+          fileType: origType,
+        }, { status: 400 });
+      }
+
+      // Limit 10MB dla oryginału (większy niż dla cropped — original może być duże)
+      if (imageOriginalFile.size > 10 * 1024 * 1024) {
+        return NextResponse.json({
+          error: 'avatarOriginal jest za duży',
+          maxSize: '10MB',
+        }, { status: 400 });
+      }
+
+      const origBuffer = await imageOriginalFile.arrayBuffer();
+
+      const storageBasePathForOrig = process.env.FILE_STORAGE_PATH || '/data';
+      const avatarsDirForOrig = path.join(storageBasePathForOrig, 'uploads', 'avatars');
+      await fs.mkdir(avatarsDirForOrig, { recursive: true });
+
+      // Wybór rozszerzenia oryginału na podstawie typu pliku
+      let origExt = 'jpg';
+      if (origType.includes('png')) origExt = 'png';
+      else if (origType.includes('webp')) origExt = 'webp';
+      else if (origType.includes('gif')) origExt = 'gif';
+
+      // Usuń stare _ORIG.* (różne rozszerzenia z poprzednich uploadów)
+      try {
+        const existingFiles = await fs.readdir(avatarsDirForOrig);
+        const oldOrigFiles = existingFiles.filter(file =>
+          file.startsWith(`USER_${userId}_AVATAR_ORIG.`)
+        );
+        for (const oldFile of oldOrigFiles) {
+          await fs.unlink(path.join(avatarsDirForOrig, oldFile));
+          console.log(`🗑️ Usunięto stary oryginał: ${oldFile}`);
+        }
+      } catch (cleanupErr) {
+        console.warn('⚠️ Cleanup oryginałów:', cleanupErr);
+      }
+
+      const origFileName = `USER_${userId}_AVATAR_ORIG.${origExt}`;
+      const origFilePath = path.join(avatarsDirForOrig, origFileName);
+      // Zapisz raw bez przetwarzania sharp — chcemy original PIXEL-PERFECT do re-edycji
+      await fs.writeFile(origFilePath, Buffer.from(origBuffer));
+
+      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+      newOriginalUrl = `${baseUrl}/api/assets/uploads/avatars/${origFileName}`;
+      console.log(`✅ Original raw zapisany: ${newOriginalUrl}`);
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    // Przetwarzanie avatara (cropped output z modala) jeśli przesłany
+    // ════════════════════════════════════════════════════════════════════
     if (imageFile) {
       console.log(`🖼️ Przetwarzanie avatara - rozmiar: ${imageFile.size} bytes, typ: ${imageFile.type}`);
 
@@ -365,10 +433,13 @@ export async function PUT(request: NextRequest) {
       console.log(`✅ Avatar zapisany: ${newAvatarUrl}`);
     }
 
-    // ✅ ZAKTUALIZOWANE: Przygotowanie danych do aktualizacji z polami AI
+    // ──────────────────────────────────────────────────────────────────
+    // Przygotowanie danych do aktualizacji w bazie
+    // ──────────────────────────────────────────────────────────────────
     const updateData: {
       authorDisplayName?: string;
       authorLogoUrl?: string;
+      authorLogoOriginalUrl?: string;
       textAiProvider?: string;
       textAiModel?: string;
       imageAiProvider?: string;
@@ -386,19 +457,21 @@ export async function PUT(request: NextRequest) {
       updateData.authorLogoUrl = newAvatarUrl;
     }
 
-    // ✅ NOWE: Dodaj pola AI do aktualizacji
+    // Original URL — zapisujemy tylko gdy fresh upload (nie cropped output z modala)
+    if (newOriginalUrl) {
+      updateData.authorLogoOriginalUrl = newOriginalUrl;
+    }
+
+    // Pola AI
     if (textAiProvider !== undefined) {
       updateData.textAiProvider = textAiProvider;
     }
-
     if (textAiModel !== undefined) {
       updateData.textAiModel = textAiModel;
     }
-
     if (imageAiProvider !== undefined) {
       updateData.imageAiProvider = imageAiProvider;
     }
-
     if (imageAiModel !== undefined) {
       updateData.imageAiModel = imageAiModel;
     }
@@ -417,7 +490,7 @@ export async function PUT(request: NextRequest) {
         lastName: true,
         authorDisplayName: true,
         authorLogoUrl: true,
-        // ✅ NOWE: Pobierz zaktualizowane pola AI
+        authorLogoOriginalUrl: true,
         textAiProvider: true,
         textAiModel: true,
         imageAiProvider: true,
@@ -428,15 +501,15 @@ export async function PUT(request: NextRequest) {
 
     console.log(`✅ Pomyślnie zaktualizowano ustawienia autora dla userId=${userId}`);
 
-    // ✅ ZAKTUALIZOWANE: Zwróć odpowiedź z polami AI
+    // Zwróć odpowiedź z pełnymi polami autora + AI + originalUrl
     return NextResponse.json({
       success: true,
       message: 'Ustawienia autora zostały zaktualizowane',
       authorSettings: {
         authorDisplayName: updatedUser.authorDisplayName,
         authorLogoUrl: updatedUser.authorLogoUrl,
+        authorLogoOriginalUrl: updatedUser.authorLogoOriginalUrl,
         fallbackName: `${updatedUser.firstName} ${updatedUser.lastName}`.trim(),
-        // ✅ NOWE: Dodaj ustawienia AI do odpowiedzi
         textAiProvider: updatedUser.textAiProvider,
         textAiModel: updatedUser.textAiModel,
         imageAiProvider: updatedUser.imageAiProvider,
@@ -445,7 +518,7 @@ export async function PUT(request: NextRequest) {
       updatedFields: {
         name: authorDisplayName !== undefined,
         avatar: !!newAvatarUrl,
-        // ✅ NOWE: Informacja o zaktualizowanych polach AI
+        avatarOriginal: !!newOriginalUrl,
         textAiProvider: textAiProvider !== undefined,
         textAiModel: textAiModel !== undefined,
         imageAiProvider: imageAiProvider !== undefined,
@@ -486,15 +559,16 @@ export async function DELETE() {
       return NextResponse.json({ error: 'Użytkownik nie został znaleziony' }, { status: 404 });
     }
 
-    // Usunięcie pliku avatara z dysku jeśli istnieje
+    // Usunięcie pliku avatara z dysku jeśli istnieje (zarówno cropped jak i _ORIG)
     if (user.authorLogoUrl) {
       try {
         const storageBasePath = process.env.FILE_STORAGE_PATH || '/data';
         const avatarsDir = path.join(storageBasePath, 'uploads', 'avatars');
 
         const existingFiles = await fs.readdir(avatarsDir);
+        // Usuwamy wszystkie warianty: USER_xxx_AVATAR.* i USER_xxx_AVATAR_ORIG.*
         const avatarFiles = existingFiles.filter(file =>
-          file.startsWith(`USER_${userId}_AVATAR.`)
+          file.startsWith(`USER_${userId}_AVATAR.`) || file.startsWith(`USER_${userId}_AVATAR_ORIG.`)
         );
 
         for (const avatarFile of avatarFiles) {
@@ -508,11 +582,12 @@ export async function DELETE() {
       }
     }
 
-    // Usunięcie URL avatara z bazy danych
+    // Usunięcie URL avatara z bazy danych (oba pola: cropped i original)
     const updatedUser = await prisma.user.update({
       where: { id: userId },
       data: {
         authorLogoUrl: null,
+        authorLogoOriginalUrl: null,
         updatedAt: new Date()
       },
       select: {
@@ -521,6 +596,7 @@ export async function DELETE() {
         lastName: true,
         authorDisplayName: true,
         authorLogoUrl: true,
+        authorLogoOriginalUrl: true,
         // ✅ NOWE: Pobierz też ustawienia AI przy usuwaniu avatara
         textAiProvider: true,
         textAiModel: true,
@@ -538,6 +614,7 @@ export async function DELETE() {
       authorSettings: {
         authorDisplayName: updatedUser.authorDisplayName,
         authorLogoUrl: updatedUser.authorLogoUrl,
+        authorLogoOriginalUrl: updatedUser.authorLogoOriginalUrl,
         fallbackName: `${updatedUser.firstName} ${updatedUser.lastName}`.trim(),
         // ✅ NOWE: Dodaj ustawienia AI do odpowiedzi
         textAiProvider: updatedUser.textAiProvider,

@@ -89,6 +89,13 @@ export async function GET(
             authorDisplayName: true,
             authorLogoUrl: true,
             profilePicture: true,
+            // ─── Header configuration (z Settings → Landing Page Header Setup) ───
+            // headerStyle: 'profile' | 'logo' | 'none' — co user wybrał w toggle'ach
+            // activeProfileSource: 'custom' | 'google' — gdy ma oba, które pokazujemy
+            // customProfilePicture: URL wgranego custom (Google original jest już w profilePicture wyżej)
+            headerStyle: true,
+            activeProfileSource: true,
+            customProfilePicture: true,
           },
         },
       },
@@ -142,6 +149,16 @@ export async function GET(
       authorDisplayName,
       authorLogoUrl: buildAssetUrl(authorLogoUrl),
       profilePicture: buildAssetUrl(page.user?.profilePicture),
+
+      // ─── Header configuration — Landing Page Header Setup z Settings ───────
+      // Frontend (DemoView) używa tych pól żeby zdecydować co pokazać w nagłówku LP:
+      //   • headerStyle === 'profile' → avatar (custom lub Google wg activeProfileSource) + podpis
+      //   • headerStyle === 'logo'    → tylko brand logo (authorLogoUrl, bez podpisu)
+      //   • headerStyle === 'none'    → tylko podpis "made by X with inflee.app"
+      // Fallback dla legacy users (null w bazie) → 'profile' jeśli ma profilePicture, inaczej 'none'
+      headerStyle: page.user?.headerStyle ?? null,
+      activeProfileSource: page.user?.activeProfileSource ?? null,
+      customProfilePicture: buildAssetUrl(page.user?.customProfilePicture),
 
       // Treść strony (nowy schemat — 7 sekcji jsonb)
       pageContent: page.content
