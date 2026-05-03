@@ -158,10 +158,10 @@ export async function createCustomHostname(
       method: 'POST',
       body: JSON.stringify({
         hostname,
-        // Override Host header forwarded to origin — Railway musi widzieć znany hostname
+        // Override Host header forwarded to origin — Railway musi widzieć znany hostname.
+        // SNI nie ustawiamy explicit — to feature Enterprise. CF domyślnie użyje
+        // custom_origin_server jako SNI (Railway akceptuje cert dla connect.inflee.app).
         custom_origin_server: customOriginServer,
-        // Override SNI used when connecting to origin — must match a hostname Railway accepts
-        custom_origin_sni: customOriginServer,
         ssl: {
           method: 'txt',
           type: 'dv',
@@ -220,8 +220,8 @@ export async function updateCustomHostnameOrigin(
     {
       method: 'PATCH',
       body: JSON.stringify({
+        // Tylko custom_origin_server — custom_origin_sni jest Enterprise-only
         custom_origin_server: customOriginServer,
-        custom_origin_sni: customOriginServer,
       }),
     }
   );
