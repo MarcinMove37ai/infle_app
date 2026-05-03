@@ -292,22 +292,33 @@ const DomainSelector: React.FC<DomainSelectorProps> = ({
   pageId, currentDomainId, availableDomains, isOpen, onToggle, onSelect,
   isAssigning, error, t,
 }) => {
-  const popoverRef = useRef<HTMLDivElement>(null);
-
-  // Zamknij popover gdy klik poza
+  // Zamknij popover gdy klik poza JAKIMKOLWIEK DomainSelector na stronie.
+  //
+  // BUG którego unikamy: kafelek strony renderuje DomainSelector dwa razy
+  // (mobile card + desktop card, jeden chowany przez CSS ale oba w DOM).
+  // Gdyby każda instancja sprawdzała tylko swój popoverRef.contains(target),
+  // klik w desktop popover odpalałby clickOutside w mobile (target nie jest
+  // wewnątrz mobile popovera) → onToggle() zamykałby popover ZANIM click event
+  // dotarłby do option button → wybór domeny nigdy się nie zapisywał.
+  //
+  // Rozwiązanie: sprawdzamy `closest('[data-domain-selector]')` — klik
+  // wewnątrz DOWOLNEGO DomainSelector (mobile albo desktop) jest traktowany
+  // jako "wewnątrz", więc żadna instancja nie próbuje zamknąć drugiej.
   useEffect(() => {
     if (!isOpen) return;
     const handleClickOutside = (event: MouseEvent) => {
-      if (popoverRef.current && !popoverRef.current.contains(event.target as Node)) {
-        onToggle();
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('[data-domain-selector]')) {
+        return; // klik wewnątrz dowolnego DomainSelector — nie zamykaj
       }
+      onToggle();
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isOpen, onToggle]);
 
   return (
-    <div className="relative inline-flex">
+    <div className="relative inline-flex" data-domain-selector>
       {/* Trigger — ikona Globe spójna z QR/Copy */}
       <button
         onClick={onToggle}
@@ -328,7 +339,6 @@ const DomainSelector: React.FC<DomainSelectorProps> = ({
       {/* Popover */}
       {isOpen && (
         <div
-          ref={popoverRef}
           className="absolute right-0 bottom-full mb-2 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-30 overflow-hidden"
         >
           <div className="px-3 py-2 border-b border-gray-100 bg-gray-50">
@@ -374,7 +384,10 @@ const DomainSelector: React.FC<DomainSelectorProps> = ({
                 return (
                   <button
                     key={d.id}
-                    onClick={() => onSelect(d.id)}
+                    onClick={() => {
+                      console.log('🔵 [DomainSelector] Click on option:', { domainId: d.id, domain: d.domain, pageId, isAssigning });
+                      onSelect(d.id);
+                    }}
                     disabled={isAssigning}
                     className={`w-full px-3 py-2 text-left flex items-center justify-between gap-2 hover:bg-gray-50 transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 ${
                       isSelected ? 'bg-emerald-50' : ''
@@ -620,16 +633,19 @@ const PagesView = () => {
   // Po sukcesie aktualizujemy lokalnie pages[].customDomainId — UI od razu pokazuje
   // nowy URL (przez getDisplayUrl), bez czekania na refetch /api/pages.
   const handleAssignDomain = useCallback(async (pageId: string, domainId: string | null) => {
+    console.log('🟢 [handleAssignDomain] CALLED:', { pageId, domainId });
     setAssigningDomainPageId(pageId);
     setDomainSelectorError(null);
 
     try {
+      console.log('🟡 [handleAssignDomain] Sending PATCH...');
       const res = await fetch(`/api/pages/${pageId}/domain`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ customDomainId: domainId }),
       });
       const data = await res.json();
+      console.log('🟣 [handleAssignDomain] Response:', { status: res.status, data });
 
       if (!res.ok) {
         throw new Error(data.message || data.error || 'unknown_error');
