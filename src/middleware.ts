@@ -39,6 +39,7 @@ const PUBLIC_PATH_PATTERNS: RegExp[] = [
   /^\/[a-z0-9][a-z0-9-]*\/?$/,          // /<slug> — landing page (one segment)
   /^\/api\/leads\/?$/,                  // POST from lead-capture form
   /^\/api\/pages\/visits\/?$/,          // visit counter from landing page
+  /^\/api\/download-ebook\/?$/,         // ebook download after form submit
   /^\/api\/assets\/.+$/,                // public assets (images, files)
   /^\/_next\/static\/.+$/,              // bundled JS/CSS
   /^\/_next\/image$/,                   // image optimization

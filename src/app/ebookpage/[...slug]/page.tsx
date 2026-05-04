@@ -217,12 +217,12 @@ export async function generateMetadata({ params, searchParams }: PublicPageProps
   const pageData = await getPageData(slug, __landing === '1');
 
   if (!pageData || !pageData.content) {
-    return { title: 'Strona nie została znaleziona' };
+    return { title: 'Page not found' };
   }
 
   const content = pageData.content as any;
   const title = content.hero_headline || (pageData as any).title;
-  const description = content.hero_description || 'Pobierz nasz przewodnik i dowiedz się więcej.';
+  const description = content.hero_description || 'Get our guide and learn more.';
 
   // -----------------------------------------------------------------
   // metadataBase — kanoniczny host dla resolve OG/Twitter image URLs.
