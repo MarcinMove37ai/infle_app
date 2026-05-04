@@ -29,7 +29,7 @@ export default function HomePage() {
 
   return (
     <RedirectLoader 
-      message="Ładowanie serwisu inflee.app"
+      message="Inflee.app - Loading"
     />
   );
 }

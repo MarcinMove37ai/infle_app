@@ -38,6 +38,7 @@ const RESERVED_APP_PATHS = new Set([
 const PUBLIC_PATH_PATTERNS: RegExp[] = [
   /^\/[a-z0-9][a-z0-9-]*\/?$/,          // /<slug> — landing page (one segment)
   /^\/api\/leads\/?$/,                  // POST from lead-capture form
+  /^\/api\/pages\/visits\/?$/,          // visit counter from landing page
   /^\/api\/assets\/.+$/,                // public assets (images, files)
   /^\/_next\/static\/.+$/,              // bundled JS/CSS
   /^\/_next\/image$/,                   // image optimization
@@ -72,7 +73,6 @@ function isPublicLandingPath(pathname: string): boolean {
 }
 
 export async function middleware(request: NextRequest) {
-  console.log('🔥 PROXY EXEC:', request.nextUrl.pathname);
 
   // ────────────────────────────────────────────────────────────────────
   // Hostname detection.
@@ -97,23 +97,7 @@ export async function middleware(request: NextRequest) {
   // DEBUG — pełny dump relevant CF/proxy headers żeby zdiagnozować routing.
   // Ten log wskaże czy CF for SaaS faktycznie dodaje cf-custom-hostname,
   // jaki Host forwarduje do origin, oraz inne CF-specific headery.
-  console.log('🔬 [middleware] HEADERS DUMP:', {
-    pathname: request.nextUrl.pathname,
-    'host': directHost,
-    'cf-custom-hostname': cfHostname,
-    'x-forwarded-host': xForwardedHost,
-    'x-forwarded-for': request.headers.get('x-forwarded-for'),
-    'x-forwarded-proto': request.headers.get('x-forwarded-proto'),
-    'cf-connecting-ip': request.headers.get('cf-connecting-ip'),
-    'cf-ray': request.headers.get('cf-ray'),
-    'cf-visitor': request.headers.get('cf-visitor'),
-    'cf-ipcountry': request.headers.get('cf-ipcountry'),
-    'resolved_host_used': host,
-  })
 
-  if (cfHostname) {
-    console.log('🌐 CF custom hostname detected:', { cfHostname, directHost })
-  }
 
   const { pathname } = request.nextUrl
 
@@ -138,9 +122,15 @@ export async function middleware(request: NextRequest) {
   // ==================================================
   if (!isAppHost && !isLocalDev) {
     if (!isPublicLandingPath(pathname)) {
-      console.log('🚫 BLOCKED on landing host:', { host, pathname })
       return new NextResponse('Not found', { status: 404 })
     }
+
+    // Origin hosts (CF for SaaS infrastruktura) — noindex/nofollow
+    // żeby Google nie indeksował tych URL-i jako konkurencji dla custom domains
+    // klienta w SERP. Custom hostnames klientów (atlas.legalgpt.pl, etc.)
+    // NIE dostają tego headera.
+    const ORIGIN_HOSTS = new Set(['connect.inflee.app', 'fallback.inflee.app'])
+    const isOriginHost = ORIGIN_HOSTS.has(host)
 
     // Rewrite landing slug into /ebookpage/[slug]?__landing=1
     // — flaga __landing sygnalizuje page.tsx żeby użyć lookupu po slug
@@ -151,27 +141,25 @@ export async function middleware(request: NextRequest) {
       const url = request.nextUrl.clone()
       url.pathname = `/ebookpage/${slug}`
       url.searchParams.set('__landing', '1')
-      console.log('🔀 REWRITE on landing host:', {
-        host,
-        from: pathname,
-        to: `${url.pathname}?__landing=1`,
-      })
-      return NextResponse.rewrite(url)
+      const response = NextResponse.rewrite(url)
+      if (isOriginHost) {
+        response.headers.set('X-Robots-Tag', 'noindex, nofollow')
+      }
+      return response
     }
 
-    console.log('✅ ALLOWED on landing host:', { host, pathname })
-    // Passthrough for /, /api/leads, /api/assets/*, /_next/*, /favicon.ico, /robots.txt
-    return NextResponse.next()
+    // Passthrough for /api/leads, /api/assets/*, /_next/*, /favicon.ico, /robots.txt
+    const response = NextResponse.next()
+    if (isOriginHost) {
+      response.headers.set('X-Robots-Tag', 'noindex, nofollow')
+    }
+    return response
   }
 
   // ==================================================
   // Existing logic for app.inflee.app and localhost — UNCHANGED below
   // ==================================================
 
-  console.log('🛡️ PROXY:', {
-    path: pathname,
-    url: request.url
-  });
 
   // Pobierz token NextAuth
   const token = await getToken({
@@ -179,11 +167,6 @@ export async function middleware(request: NextRequest) {
     secret: process.env.NEXTAUTH_SECRET
   });
 
-  console.log('🔑 TOKEN:', {
-    exists: !!token,
-    email: token?.email,
-    emailVerified: token?.emailVerified
-  });
 
   const isAuth = !!token;
 
@@ -193,7 +176,6 @@ export async function middleware(request: NextRequest) {
   if (pathname.startsWith('/verify-payment')) {
     // Jeśli to strona weryfikacji płatności, przepuść request.
     // Musi być dostępna dla zalogowanego użytkownika.
-    console.log('✅ ALLOWED: Strona weryfikacji płatności, przepuszczam.');
     return NextResponse.next();
   }
   // ==================================================
@@ -212,32 +194,23 @@ export async function middleware(request: NextRequest) {
                          pathname.startsWith('/landings') ||
                          pathname.startsWith('/trendy');
 
-  console.log('🔍 PAGE TYPE:', {
-    isAuthPage,
-    isProtectedPage,
-    isAuth
-  });
 
   // 1. Jeśli zalogowany user próbuje wejść na strony auth - przekieruj na ebooks
   if (isAuthPage && isAuth) {
-    console.log('🔄 Redirect: Zalogowany na auth page -> dashboard');
     return NextResponse.redirect(new URL('/ebooks', request.url));
   }
 
   // 2. Jeśli niezalogowany próbuje wejść na chronione strony - przekieruj na login
   if (isProtectedPage && !isAuth) {
     const from = encodeURIComponent(request.nextUrl.pathname + request.nextUrl.search);
-    console.log('🔄 Redirect: Niezalogowany na protected page -> login');
     return NextResponse.redirect(new URL(`/login?from=${from}`, request.url));
   }
 
   // 3. Jeśli zalogowany ale niezweryfikowany email próbuje wejść na chronione strony
   if (isProtectedPage && isAuth && !token.emailVerified) {
-    console.log('🔄 Redirect: Niezweryfikowany email -> login');
     return NextResponse.redirect(new URL('/login?error=email-not-verified', request.url));
   }
 
-  console.log('✅ ALLOWED: Przepuszczam request');
   return NextResponse.next();
 }
 
