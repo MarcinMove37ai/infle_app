@@ -103,16 +103,18 @@ const buildEbookMeta = (ebook: any): EbookMeta => {
 const PublicPageClient = ({ initialPageData }: { initialPageData: any }) => {
   const language = (initialPageData?.language === 'pl' ? 'pl' : 'en') as 'pl' | 'en';
 
-  // Zliczanie wizyty (fire-and-forget)
-  useEffect(() => {
-    if (initialPageData?.id) {
-      fetch('/api/pages/visits', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pageId: initialPageData.id }),
-      }).catch(err => console.error('Błąd podczas zliczania wizyty:', err));
-    }
-  }, [initialPageData]);
+  // Zliczanie wizyty (fire-and-forget) — odpalane raz na mount,
+    // dependency to samo id (string) zamiast całego obiektu, żeby uniknąć
+    // re-runu przy zmianie referencji obiektu (np. przy hydration).
+    useEffect(() => {
+      if (initialPageData?.id) {
+        fetch('/api/pages/visits', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pageId: initialPageData.id }),
+        }).catch(err => console.error('Visit count error:', err));
+      }
+    }, [initialPageData?.id]);
 
   if (!initialPageData) {
     return <div>Błąd: Nie udało się załadować danych strony.</div>;
