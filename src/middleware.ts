@@ -36,7 +36,6 @@ const RESERVED_APP_PATHS = new Set([
 // The function checks RESERVED_APP_PATHS as a second layer to block panel
 // routes whose shape (one segment) matches the slug pattern below.
 const PUBLIC_PATH_PATTERNS: RegExp[] = [
-  /^\/$/,                               // domain root (handled in step 4.1b)
   /^\/[a-z0-9][a-z0-9-]*\/?$/,          // /<slug> — landing page (one segment)
   /^\/api\/leads\/?$/,                  // POST from lead-capture form
   /^\/api\/assets\/.+$/,                // public assets (images, files)
