@@ -103,21 +103,29 @@ const buildEbookMeta = (ebook: any): EbookMeta => {
 const PublicPageClient = ({ initialPageData }: { initialPageData: any }) => {
   const language = (initialPageData?.language === 'pl' ? 'pl' : 'en') as 'pl' | 'en';
 
-  // Zliczanie wizyty (fire-and-forget) — odpalane raz na mount,
-    // dependency to samo id (string) zamiast całego obiektu, żeby uniknąć
-    // re-runu przy zmianie referencji obiektu (np. przy hydration).
+  // Zliczanie wizyty (fire-and-forget) — odpalane RAZ na cykl życia strony.
+    // useRef guard zabezpiecza przed double-fetch który może wystąpić przy:
+    //  - hydration mismatch
+    //  - parent layout re-render
+    //  - React Strict Mode (dev)
+    //  - Suspense boundary remount
+    // Klucz to pageId — przy nawigacji do innej strony useRef się resetuje
+    // (komponent się unmount-uje), więc dla nowej strony fetch poleci normalnie.
+    const visitCountedRef = React.useRef<string | null>(null);
     useEffect(() => {
-      if (initialPageData?.id) {
-        fetch('/api/pages/visits', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ pageId: initialPageData.id }),
-        }).catch(err => console.error('Visit count error:', err));
-      }
+      if (!initialPageData?.id) return;
+      if (visitCountedRef.current === initialPageData.id) return;
+      visitCountedRef.current = initialPageData.id;
+
+      fetch('/api/pages/visits', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pageId: initialPageData.id }),
+      }).catch(err => console.error('Visit count error:', err));
     }, [initialPageData?.id]);
 
   if (!initialPageData) {
-    return <div>Błąd: Nie udało się załadować danych strony.</div>;
+    return <div>Error: Failed to load page data.</div>;
   }
 
   // ─── Treść strony — nowa struktura 7 sekcji jsonb prosto z bazy ───────
@@ -140,10 +148,6 @@ const PublicPageClient = ({ initialPageData }: { initialPageData: any }) => {
     `${initialPageData.user?.firstName || ''} ${initialPageData.user?.lastName || ''}`.trim() ||
     'Inflee';
 
-  // 🔍 DIAGNOSTYKA — usunąć po naprawie
-  console.log('🔍 user keys:', Object.keys(initialPageData.user ?? {}));
-  console.log('🔍 profilePicture value:', initialPageData.user?.profilePicture);
-  console.log('🔍 authorLogoUrl value:', initialPageData.user?.authorLogoUrl);
 
   const colorSchemeName: ColorSchemeKey = isValidColorScheme(initialPageData.color)
     ? initialPageData.color

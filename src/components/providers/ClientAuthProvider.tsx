@@ -15,21 +15,22 @@ export function ClientAuthProvider({
 }: {
   children: React.ReactNode;
 }) {
-  // SSR + pierwszy render po hydration: SessionProvider JEST aktywny.
-  // Powód: useSession() w komponentach dzieci wybucha jeśli SessionProvider
-  // nie istnieje przy pierwszym renderze.
-  // Po useEffect (po hydration) sprawdzamy hostname — jeśli landing host
-  // (nie app.inflee.app, nie localhost), unmountujemy SessionProvider.
-  const [hostChecked, setHostChecked] = useState(false);
-  const [isOnAppHost, setIsOnAppHost] = useState(false);
+  // Wykrywamy host SYNCHRONICZNIE przy pierwszym renderze klienta.
+  // typeof window guard zapobiega błędom na SSR (gdzie window nie istnieje).
+  // Na SSR -> isOnAppHost=true (default, SessionProvider aktywny).
+  // Na kliencie pierwszy render już ma poprawne isOnAppHost.
+  //
+  // Dlaczego nie useEffect: useEffect odpala się PO pierwszym renderze.
+  // SessionProvider w pierwszym renderze już strzela fetch /api/auth/session,
+  // zanim useEffect zdąży go ukryć. Synchronous check w useState initializer
+  // rozwiązuje ten problem — SessionProvider od pierwszego renderu wie
+  // że nie powinien się odpalać na landing host.
+  const [isOnAppHost] = useState(() => {
+    if (typeof window === 'undefined') return true; // SSR: default app host
+    return isAppHost(window.location.hostname);
+  });
 
-  useEffect(() => {
-    const hostname = window.location.hostname;
-    setIsOnAppHost(isAppHost(hostname));
-    setHostChecked(true);
-  }, []);
-
-  if (hostChecked && !isOnAppHost) {
+  if (!isOnAppHost) {
     return <>{children}</>;
   }
 
