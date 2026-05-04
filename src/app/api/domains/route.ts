@@ -165,7 +165,18 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // 6. Register in Cloudflare for SaaS
+  // 6. Register in Cloudflare for SaaS.
+  //
+  // CF tworzy hostname natychmiast, ale `ssl.validation_records` (DCV TXT)
+  // pojawiają się asynchronicznie — czasem od razu, czasem po 1-3s.
+  // Bez tej wartości UI pokazałby tylko 2 z 3 rekordów DNS, a 3-ci
+  // dolatuje przy pierwszym polling refreshu — wygląda chaotycznie
+  // i niespójnie z punktu widzenia user'a.
+  //
+  // Dlatego po POST robimy do 5 retry'ów z 600ms delay między nimi,
+  // czekając aż CF zwróci pełen komplet (ownership_verification + ssl.validation_records).
+  // Łączny worst-case: 3 sekundy. W praktyce zwykle wystarcza 1 retry.
+  // User w tym czasie widzi spinner "Verifying..." na buttonie.
   let cfHostname;
   try {
     cfHostname = await createCustomHostname(normalizedDomain);
@@ -176,6 +187,36 @@ export async function POST(req: NextRequest) {
       { error: 'cloudflare_error', message },
       { status: 502 }
     );
+  }
+
+  const hasFullRecords = (cf: typeof cfHostname): boolean => {
+    const sslRecords = (cf.ssl as any)?.validation_records;
+    return !!cf.ownership_verification && Array.isArray(sslRecords) &&
+           sslRecords.some((r: any) => r.txt_name && r.txt_value);
+  };
+
+  if (!hasFullRecords(cfHostname)) {
+    const { getCustomHostname } = await import('@/lib/cloudflare');
+    const MAX_RETRIES = 5;
+    const DELAY_MS = 600;
+
+    for (let i = 0; i < MAX_RETRIES; i++) {
+      await new Promise(resolve => setTimeout(resolve, DELAY_MS));
+      try {
+        const refreshed = await getCustomHostname(cfHostname.id);
+        cfHostname = refreshed;
+        if (hasFullRecords(refreshed)) {
+          console.log(`[api/domains POST] Got full records after ${i + 1} retry(ies)`);
+          break;
+        }
+      } catch (err) {
+        console.warn(`[api/domains POST] Retry ${i + 1} failed:`, err);
+      }
+    }
+
+    if (!hasFullRecords(cfHostname)) {
+      console.warn('[api/domains POST] CF did not return full validation_records after retries — UI will fetch via polling');
+    }
   }
 
   // 7. Persist to DB

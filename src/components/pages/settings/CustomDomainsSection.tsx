@@ -27,7 +27,7 @@ const translations = {
     inputPlaceholder: 'landing.twojadomena.pl',
     inputHelper: 'Podaj subdomenę (np. landing.firma.pl, ebook.firma.pl)',
     submitBtn: 'Dodaj',
-    submitting: 'Dodawanie...',
+    submitting: 'Weryfikacja...',
     cancelBtn: 'Anuluj',
 
     errorRequired: 'Podaj subdomenę',
@@ -104,7 +104,7 @@ const translations = {
     inputPlaceholder: 'landing.yourdomain.com',
     inputHelper: 'Enter a subdomain (e.g. landing.company.com, ebook.company.com)',
     submitBtn: 'Add',
-    submitting: 'Adding...',
+    submitting: 'Verifying...',
     cancelBtn: 'Cancel',
 
     errorRequired: 'Enter a subdomain',

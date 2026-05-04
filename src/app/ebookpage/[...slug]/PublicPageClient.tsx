@@ -144,7 +144,13 @@ const PublicPageClient = ({ initialPageData }: { initialPageData: any }) => {
   // ─── Pozostałe metadane ────────────────────────────────────────────────
   const pageType = initialPageData.type || 'ebook';
 
+  // Imię autora wyświetlane na landingu — kaskada:
+  // 1. authorDisplayName z User (publiczne imię "autora", edytowalne w Settings)
+  // 2. firstName + lastName z User (legacy fallback dla kont które nie ustawiły authorDisplayName)
+  // 3. 'Inflee' (ostateczny fallback gdy oba puste)
+  // Spójne z `preview/[token]/page.tsx` które używa pageData.authorDisplayName.
   const partnerName =
+    initialPageData.user?.authorDisplayName?.trim() ||
     `${initialPageData.user?.firstName || ''} ${initialPageData.user?.lastName || ''}`.trim() ||
     'Inflee';
 
