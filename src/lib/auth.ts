@@ -54,8 +54,62 @@ declare module 'next-auth/jwt' {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────
+// Cookie domain scope dla NextAuth.
+//
+// W produkcji ustawiamy domain = 'app.inflee.app' żeby session cookie
+// NIE wyciekało na custom domeny klientów (np. lp.legalgpt.pl).
+// Bez tego:
+//   - User loguje się na app.inflee.app → dostaje cookie
+//   - Otwiera landing klienta na lp.legalgpt.pl → cookie może polecieć
+//   - Klient (lub XSS na jego content'cie) ma dostęp do sesji admina
+//
+// Z domain scope:
+//   - Cookie jest valid TYLKO dla app.inflee.app (i subdomen)
+//   - Custom domeny klientów dostają requesty bez cookie → traktowane jako anon
+//
+// W dev (localhost) zostawiamy default — bo localhost nie ma domeny,
+// próba ustawienia domain = 'app.inflee.app' zepsułaby login.
+// ─────────────────────────────────────────────────────────────────────
+const APP_HOST = process.env.APP_HOST || 'app.inflee.app';
+const isProduction = process.env.NODE_ENV === 'production';
+const cookieDomain = isProduction ? APP_HOST : undefined;
+
 export const authOptions: NextAuthOptions = {
   secret: process.env.NEXTAUTH_SECRET,
+  cookies: {
+    sessionToken: {
+      name: isProduction ? '__Secure-next-auth.session-token' : 'next-auth.session-token',
+      options: {
+        httpOnly: true,
+        sameSite: 'lax',
+        path: '/',
+        secure: isProduction,
+        domain: cookieDomain,
+      },
+    },
+    callbackUrl: {
+      name: isProduction ? '__Secure-next-auth.callback-url' : 'next-auth.callback-url',
+      options: {
+        httpOnly: false,
+        sameSite: 'lax',
+        path: '/',
+        secure: isProduction,
+        domain: cookieDomain,
+      },
+    },
+    csrfToken: {
+      // CSRF token NIE używa __Host- prefix bo wymaga domain unset (a my chcemy domain w prod)
+      name: isProduction ? '__Secure-next-auth.csrf-token' : 'next-auth.csrf-token',
+      options: {
+        httpOnly: true,
+        sameSite: 'lax',
+        path: '/',
+        secure: isProduction,
+        domain: cookieDomain,
+      },
+    },
+  },
   providers: [
     CredentialsProvider({
       name: 'credentials',
