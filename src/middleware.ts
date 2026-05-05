@@ -149,13 +149,21 @@ export async function middleware(request: NextRequest) {
       return response
     }
 
-    // Robots.txt na custom hostach — rewrite z __landing=1 żeby route handler
-    // wygenerował ALLOW (klient chce SEO swojego landingu), zamiast zwracać
-    // DISALLOW na podstawie directHost = connect.inflee.app (nasza infrastruktura).
+    // Robots.txt na custom hostach — propaguj header `x-landing-host` żeby
+    // route handler wygenerował minimal body (ALLOW dla klienta), zamiast
+    // zwracać DISALLOW na podstawie directHost = connect.inflee.app.
+    //
+    // UŻYWAMY REQUEST HEADER, NIE SEARCHPARAMS — w Next 15 rewrite z
+    // searchParams nie zawsze propaguje się do route handlerów, ale headers
+    // są niezawodne.
+    //
+    // CF Managed Content (Cloudflare for SaaS) i tak dodaje pełny
+    // `User-agent: *` blok dla custom hostów — nasz body w landing flow
+    // jest minimal (tylko Sitemap pointer) żeby nie konfliktować.
     if (pathname === '/robots.txt') {
-      const url = request.nextUrl.clone()
-      url.searchParams.set('__landing', '1')
-      const response = NextResponse.rewrite(url)
+      const requestHeaders = new Headers(request.headers)
+      requestHeaders.set('x-landing-host', '1')
+      const response = NextResponse.next({ request: { headers: requestHeaders } })
       if (isOriginHost) {
         response.headers.set('X-Robots-Tag', 'noindex, nofollow')
       }
