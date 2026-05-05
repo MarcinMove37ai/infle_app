@@ -45,8 +45,6 @@ const PUBLIC_PATH_PATTERNS: RegExp[] = [
   /^\/_next\/image$/,                   // image optimization
   /^\/favicon\.ico$/,
   /^\/robots\.txt$/,
-  /^\/llms\.txt$/,
-  /^\/llms-pl\.txt$/,
 ]
 
 function isPublicLandingPath(pathname: string): boolean {
@@ -151,7 +149,20 @@ export async function middleware(request: NextRequest) {
       return response
     }
 
-    // Passthrough for /api/leads, /api/assets/*, /_next/*, /favicon.ico, /robots.txt
+    // Robots.txt na custom hostach — rewrite z __landing=1 żeby route handler
+    // wygenerował ALLOW (klient chce SEO swojego landingu), zamiast zwracać
+    // DISALLOW na podstawie directHost = connect.inflee.app (nasza infrastruktura).
+    if (pathname === '/robots.txt') {
+      const url = request.nextUrl.clone()
+      url.searchParams.set('__landing', '1')
+      const response = NextResponse.rewrite(url)
+      if (isOriginHost) {
+        response.headers.set('X-Robots-Tag', 'noindex, nofollow')
+      }
+      return response
+    }
+
+    // Passthrough for /api/leads, /api/assets/*, /_next/*, /favicon.ico
     const response = NextResponse.next()
     if (isOriginHost) {
       response.headers.set('X-Robots-Tag', 'noindex, nofollow')

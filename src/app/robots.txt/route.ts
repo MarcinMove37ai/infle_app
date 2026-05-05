@@ -47,8 +47,22 @@ export async function GET(request: NextRequest) {
   const directHost = (request.headers.get('host') || '').toLowerCase().split(':')[0];
   const host = cfHostname || xForwardedHost || directHost;
 
-  const isDisallowed = DISALLOW_HOSTS.has(host);
-  const body = isDisallowed ? DISALLOW_BODY : ALLOW_BODY(host);
+  // __landing=1 ustawiane przez middleware dla custom domain klientów.
+  // CF for SaaS na non-Enterprise nadpisuje Host header na connect.inflee.app
+  // (nasz origin), więc bez tej flagi handler myślałby że to panel i zwracał
+  // DISALLOW. Dla landing flow zwracamy generic Allow bez sitemap — nie znamy
+  // oryginalnego hosta klienta (CF nie przekazuje go do origin w tym trybie).
+  const isLandingFlow = request.nextUrl.searchParams.get('__landing') === '1';
+  const isDisallowed = !isLandingFlow && DISALLOW_HOSTS.has(host);
+
+  let body: string;
+  if (isDisallowed) {
+    body = DISALLOW_BODY;
+  } else if (isLandingFlow) {
+    body = `User-agent: *\nAllow: /\n`;
+  } else {
+    body = ALLOW_BODY(host);
+  }
 
   return new Response(body, {
     status: 200,
