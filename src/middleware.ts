@@ -126,12 +126,19 @@ export async function middleware(request: NextRequest) {
       return new NextResponse('Not found', { status: 404 })
     }
 
-    // Origin hosts (CF for SaaS infrastruktura) — noindex/nofollow
-    // żeby Google nie indeksował tych URL-i jako konkurencji dla custom domains
-    // klienta w SERP. Custom hostnames klientów (atlas.legalgpt.pl, etc.)
-    // NIE dostają tego headera.
-    const ORIGIN_HOSTS = new Set(['connect.inflee.app', 'fallback.inflee.app'])
-    const isOriginHost = ORIGIN_HOSTS.has(host)
+    // UWAGA: NIE ustawiamy X-Robots-Tag dla origin hosts (connect/fallback.inflee.app).
+    //
+    // W trybie CF for SaaS non-Enterprise (SNI), Cloudflare nadpisuje Host
+    // header na connect.inflee.app dla WSZYSTKICH custom domain requests
+    // klientów. Z perspektywy origin nie można odróżnić "direct hit na
+    // connect.inflee.app" od "klient request lp.panwalczak.pl przez CF SaaS".
+    // X-Robots-Tag tu blokował indeksację landingów klientów.
+    //
+    // Ostatnia linia obrony przed indeksacją infrastruktury jest w
+    // src/app/ebookpage/[...slug]/page.tsx → generateMetadata, gdzie
+    // searchParams.__landing flag pozwala precyzyjnie rozpoznać landing
+    // flow vs direct origin hit i ustawić robots noindex tylko w drugim
+    // przypadku.
 
     // Rewrite landing slug into /ebookpage/[slug]?__landing=1
     // — flaga __landing sygnalizuje page.tsx żeby użyć lookupu po slug
@@ -142,40 +149,20 @@ export async function middleware(request: NextRequest) {
       const url = request.nextUrl.clone()
       url.pathname = `/ebookpage/${slug}`
       url.searchParams.set('__landing', '1')
-      const response = NextResponse.rewrite(url)
-      if (isOriginHost) {
-        response.headers.set('X-Robots-Tag', 'noindex, nofollow')
-      }
-      return response
+      return NextResponse.rewrite(url)
     }
 
     // Robots.txt na custom hostach — propaguj header `x-landing-host` żeby
-    // route handler wygenerował minimal body (ALLOW dla klienta), zamiast
-    // zwracać DISALLOW na podstawie directHost = connect.inflee.app.
-    //
-    // UŻYWAMY REQUEST HEADER, NIE SEARCHPARAMS — w Next 15 rewrite z
-    // searchParams nie zawsze propaguje się do route handlerów, ale headers
-    // są niezawodne.
-    //
-    // CF Managed Content (Cloudflare for SaaS) i tak dodaje pełny
-    // `User-agent: *` blok dla custom hostów — nasz body w landing flow
-    // jest minimal (tylko Sitemap pointer) żeby nie konfliktować.
+    // route handler wygenerował minimal body, zamiast DISALLOW na podstawie
+    // directHost = connect.inflee.app (UŻYWAMY HEADER, NIE SEARCHPARAMS).
     if (pathname === '/robots.txt') {
       const requestHeaders = new Headers(request.headers)
       requestHeaders.set('x-landing-host', '1')
-      const response = NextResponse.next({ request: { headers: requestHeaders } })
-      if (isOriginHost) {
-        response.headers.set('X-Robots-Tag', 'noindex, nofollow')
-      }
-      return response
+      return NextResponse.next({ request: { headers: requestHeaders } })
     }
 
     // Passthrough for /api/leads, /api/assets/*, /_next/*, /favicon.ico
-    const response = NextResponse.next()
-    if (isOriginHost) {
-      response.headers.set('X-Robots-Tag', 'noindex, nofollow')
-    }
-    return response
+    return NextResponse.next()
   }
 
   // ==================================================
