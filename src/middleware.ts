@@ -161,47 +161,7 @@ export async function middleware(request: NextRequest) {
   // Existing logic for app.inflee.app and localhost — UNCHANGED below
   // ==================================================
 
-  // ─────────────────────────────────────────────────────────────────
-  // Ghost cookie cleanup.
-  //
-  // Userzy zalogowani przed deployem Phase 4.2 (cookie domain scope)
-  // mają DWIE wersje session cookies:
-  //   - stary: domain '.app.inflee.app' (leading dot, z poprzedniej config)
-  //   - nowy:  domain 'app.inflee.app' (z naszej obecnej config)
-  //
-  // NextAuth signOut czyści tylko nową wersję — stary "ghost" zostaje,
-  // co skutkuje pseudologiną (logout → wraca do /ebooks bo middleware
-  // czyta stary token z domain '.app.inflee.app').
-  //
-  // Fix: na każdym requeście do app.inflee.app forcefully expire stare
-  // cookies (z leading dot). Set-Cookie z expires=epoch+empty value to
-  // standardowy sposób na usunięcie cookie. Jeśli ghost cookie nie ma,
-  // przeglądarka zignoruje (no-op).
-  //
-  // Kod można usunąć po ~7 dniach od deployu — wtedy wszyscy aktywni
-  // userzy będą już wyczyszczeni.
-  // ─────────────────────────────────────────────────────────────────
-  const cleanupGhostCookies = (response: NextResponse) => {
-    if (!isAppHost) return response;
-    const ghostCookieNames = [
-      '__Secure-next-auth.session-token',
-      '__Secure-next-auth.callback-url',
-      '__Secure-next-auth.csrf-token',
-    ];
-    for (const name of ghostCookieNames) {
-      response.cookies.set({
-        name,
-        value: '',
-        domain: '.app.inflee.app', // leading dot — to jest ghost variant
-        path: '/',
-        expires: new Date(0),
-        secure: true,
-        httpOnly: true,
-        sameSite: 'lax',
-      });
-    }
-    return response;
-  };
+
 
   // Pobierz token NextAuth
   const token = await getToken({
@@ -218,7 +178,7 @@ export async function middleware(request: NextRequest) {
   if (pathname.startsWith('/verify-payment')) {
     // Jeśli to strona weryfikacji płatności, przepuść request.
     // Musi być dostępna dla zalogowanego użytkownika.
-    return cleanupGhostCookies(NextResponse.next());
+    return NextResponse.next();
   }
   // ==================================================
 
@@ -239,21 +199,21 @@ export async function middleware(request: NextRequest) {
 
   // 1. Jeśli zalogowany user próbuje wejść na strony auth - przekieruj na ebooks
   if (isAuthPage && isAuth) {
-    return cleanupGhostCookies(NextResponse.redirect(new URL('/ebooks', request.url)));
+    return NextResponse.redirect(new URL('/ebooks', request.url));
   }
 
   // 2. Jeśli niezalogowany próbuje wejść na chronione strony - przekieruj na login
   if (isProtectedPage && !isAuth) {
     const from = encodeURIComponent(request.nextUrl.pathname + request.nextUrl.search);
-    return cleanupGhostCookies(NextResponse.redirect(new URL(`/login?from=${from}`, request.url)));
+    return NextResponse.redirect(new URL(`/login?from=${from}`, request.url));
   }
 
   // 3. Jeśli zalogowany ale niezweryfikowany email próbuje wejść na chronione strony
   if (isProtectedPage && isAuth && !token.emailVerified) {
-    return cleanupGhostCookies(NextResponse.redirect(new URL('/login?error=email-not-verified', request.url)));
+    return NextResponse.redirect(new URL('/login?error=email-not-verified', request.url));
   }
 
-  return cleanupGhostCookies(NextResponse.next());
+  return NextResponse.next();
 }
 
 export const config = {
