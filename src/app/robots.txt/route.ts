@@ -54,10 +54,14 @@ export async function GET(request: NextRequest) {
 
   if (isLandingFlow) {
     // Custom domain — CF Managed Content już dodaje `User-agent: *` z
-    // Allow + per-bot disallow. My dodajemy TYLKO sitemap pointer żeby
-    // Google wiedział gdzie szukać. Bez User-agent block — uniknięcie
-    // duplikatu który łamie standard robots.txt.
-    body = `Sitemap: https://${host}/sitemap.xml\n`;
+    // Allow + per-bot disallow listę. My nic nie dodajemy — Sitemap nie
+    // wystawiamy bo:
+    //  1. CF for SaaS w trybie SNI nadpisuje Host na connect.inflee.app
+    //     (oryginalna domena klienta nie jest dostępna w handlerze),
+    //     więc nie wiemy jaki URL wpisać w Sitemap.
+    //  2. Sitemap.xml na custom domenie jeszcze nie istnieje (todo Phase 8).
+    //  3. Google + tak indeksuje przez crawl. Sitemap to optymalizacja, nie wymóg.
+    body = '';
   } else if (DISALLOW_HOSTS.has(host)) {
     body = DISALLOW_BODY;
   } else {
