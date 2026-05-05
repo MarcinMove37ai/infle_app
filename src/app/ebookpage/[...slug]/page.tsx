@@ -196,34 +196,6 @@ async function getPageData(
   }
 }
 
-// ─────────────────────────────────────────────────────────────────
-  // Canonical redirect: when the page is hit directly under app.inflee.app
-  // and THIS page has an active custom domain assigned (per-page, Phase 6),
-  // 301 the visitor to canonical URL on that domain.
-  // Direct app.inflee.app hit detected by absence of __landing flag
-  // (set by middleware only for custom/landing host requests).
-  // ─────────────────────────────────────────────────────────────────
-  if (__landing !== '1') {
-    const hdrs = await headers();
-    const requestHost = (hdrs.get('host') || '').toLowerCase().split(':')[0];
-    const isAppHost = requestHost === APP_HOST;
-
-    if (isAppHost) {
-      const pageCustomDomain = (pageData as any).customDomain as
-        | { domain: string; status: string }
-        | null
-        | undefined;
-
-      if (pageCustomDomain && pageCustomDomain.status === 'active') {
-        // Last segment of slug is the page-slug used on the custom domain
-        const pageSlug = slug[slug.length - 1];
-        const target = `https://${pageCustomDomain.domain}/${pageSlug}`;
-        console.log('[ebookpage] 301 redirect to canonical custom domain:', target);
-        redirect(target);
-      }
-    }
-  }
-
 export async function generateMetadata({ params, searchParams }: PublicPageProps): Promise<Metadata> {
   const { slug } = await params;
   const { __landing } = await searchParams;
@@ -315,10 +287,10 @@ export default async function PublicPage({ params, searchParams }: PublicPagePro
 
   // ─────────────────────────────────────────────────────────────────
   // Canonical redirect: when the page is hit directly under app.inflee.app
-  // and the page owner has an active primary custom domain, 301 the visitor
-  // to the canonical URL on their custom domain.
-  // We detect a "direct app.inflee.app hit" by absence of BOTH __host AND
-  // __landing flags (oba ustawiane przez middleware tylko dla custom/landing).
+  // and THIS page has an active custom domain assigned (per-page, Phase 6),
+  // 301 the visitor to canonical URL on that domain.
+  // Direct app.inflee.app hit detected by absence of __landing flag
+  // (set by middleware only for custom/landing host requests).
   // ─────────────────────────────────────────────────────────────────
   if (__landing !== '1') {
     const hdrs = await headers();
@@ -326,11 +298,15 @@ export default async function PublicPage({ params, searchParams }: PublicPagePro
     const isAppHost = requestHost === APP_HOST;
 
     if (isAppHost) {
-      const primaryDomain = await getPrimaryDomainForUser((pageData as any).userId);
-      if (primaryDomain) {
+      const pageCustomDomain = (pageData as any).customDomain as
+        | { domain: string; status: string }
+        | null
+        | undefined;
+
+      if (pageCustomDomain && pageCustomDomain.status === 'active') {
         // Last segment of slug is the page-slug used on the custom domain
         const pageSlug = slug[slug.length - 1];
-        const target = `https://${primaryDomain}/${pageSlug}`;
+        const target = `https://${pageCustomDomain.domain}/${pageSlug}`;
         console.log('[ebookpage] 301 redirect to canonical custom domain:', target);
         redirect(target);
       }
