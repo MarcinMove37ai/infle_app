@@ -259,9 +259,11 @@ export async function generateMetadata({ params, searchParams }: PublicPageProps
     robots: isDirectOriginHit
       ? { index: false, follow: false }
       : undefined,
-    other: {
-      preload: `<link rel="preload" as="image" href="${imageUrl}" fetchpriority="high" />`,
-    },
+    // Preload usunięty — wskazywał na ebook.final_mockup_url (oryginalny
+    // upload), ale Next.js Image renderuje przez /_next/image?url=...&w=...&q=...
+    // (resize + WebP conversion). Browser ściągał plik którego nikt nie używał.
+    // Zamiast tego polegamy na <Image priority> które Next.js sam preloaduje
+    // (poprawnie, na właściwy URL z resize parametrami).
     openGraph: {
       title: `e-book | ${title}`,
       description,

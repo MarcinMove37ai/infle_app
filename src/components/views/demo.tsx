@@ -157,6 +157,9 @@ export interface ThemeTokens {
   ctaText: string;
   ctaShadow: string;
   ctaGlow: string;
+  // Buttons — disabled state (Sending, Downloading)
+  ctaDisabledBg: string;
+  ctaDisabledText: string;
   // Buttons — secondary / outline
   secondaryBg: string;
   secondaryBorder: string;
@@ -252,12 +255,14 @@ export const colorSchemes: Record<string, ThemeTokens> = {
     inputFocusBorder: "#A78BFA",
     inputFocusRing: "rgba(167,139,250,0.25)",
     inputText: "#E2E8F0",
-    inputPlaceholder: "#64748B",
+    inputPlaceholder: "#94A3B8",
     ctaBg: "linear-gradient(135deg, #8B5CF6, #6366F1)",
     ctaHoverBg: "linear-gradient(135deg, #7C3AED, #4F46E5)",
     ctaText: "#FFFFFF",
     ctaShadow: "0 8px 24px rgba(139,92,246,0.35)",
     ctaGlow: "0 0 40px rgba(139,92,246,0.20)",
+    ctaDisabledBg: "rgba(167,139,250,0.20)",
+    ctaDisabledText: "#A78BFA",
     secondaryBg: "rgba(255,255,255,0.06)",
     secondaryBorder: "rgba(255,255,255,0.12)",
     secondaryText: "#A78BFA",
@@ -283,7 +288,7 @@ export const colorSchemes: Record<string, ThemeTokens> = {
     faqHoverText: "#A78BFA",
     footerBg: "rgba(255,255,255,0.02)",
     footerBorder: "rgba(255,255,255,0.06)",
-    footerText: "#64748B",
+    footerText: "#94A3B8",
     footerHoverText: "#E2E8F0",
     formBannerBg: "linear-gradient(135deg, #8B5CF6, #6366F1)",
     formBannerText: "#FFFFFF",
@@ -330,12 +335,14 @@ export const colorSchemes: Record<string, ThemeTokens> = {
     inputFocusBorder: "#6366F1",
     inputFocusRing: "rgba(99,102,241,0.20)",
     inputText: "#1E293B",
-    inputPlaceholder: "#9CA3AF",
+    inputPlaceholder: "#6B7280",
     ctaBg: "linear-gradient(135deg, #6366F1, #4F46E5)",
     ctaHoverBg: "linear-gradient(135deg, #4F46E5, #4338CA)",
     ctaText: "#FFFFFF",
     ctaShadow: "0 6px 20px rgba(99,102,241,0.30)",
     ctaGlow: "none",
+    ctaDisabledBg: "#E0E7FF",
+    ctaDisabledText: "#6366F1",
     secondaryBg: "transparent",
     secondaryBorder: "#D1D5DB",
     secondaryText: "#6366F1",
@@ -361,7 +368,7 @@ export const colorSchemes: Record<string, ThemeTokens> = {
     faqHoverText: "#6366F1",
     footerBg: "#F8FAFC",
     footerBorder: "rgba(0,0,0,0.06)",
-    footerText: "#94A3B8",
+    footerText: "#64748B",
     footerHoverText: "#1E293B",
     formBannerBg: "linear-gradient(135deg, #6366F1, #4F46E5)",
     formBannerText: "#FFFFFF",
@@ -408,12 +415,14 @@ export const colorSchemes: Record<string, ThemeTokens> = {
     inputFocusBorder: "#2E7D6E",
     inputFocusRing: "rgba(46,125,110,0.20)",
     inputText: "#3D2E1E",
-    inputPlaceholder: "#A39480",
+    inputPlaceholder: "#8C7B66",
     ctaBg: "linear-gradient(135deg, #2E7D6E, #1D6B5D)",
     ctaHoverBg: "linear-gradient(135deg, #1D6B5D, #165A4E)",
     ctaText: "#FFFFFF",
     ctaShadow: "0 6px 20px rgba(46,125,110,0.30)",
     ctaGlow: "none",
+    ctaDisabledBg: "#E8DDD0",
+    ctaDisabledText: "#2E7D6E",
     secondaryBg: "transparent",
     secondaryBorder: "#D4C4AD",
     secondaryText: "#2E7D6E",
@@ -439,7 +448,7 @@ export const colorSchemes: Record<string, ThemeTokens> = {
     faqHoverText: "#2E7D6E",
     footerBg: "#F5EFE7",
     footerBorder: "rgba(60,46,30,0.06)",
-    footerText: "#A39480",
+    footerText: "#7C6A56",
     footerHoverText: "#3D2E1E",
     formBannerBg: "linear-gradient(135deg, #2E7D6E, #1D6B5D)",
     formBannerText: "#FFFFFF",
@@ -472,7 +481,7 @@ export const colorSchemes: Record<string, ThemeTokens> = {
     name: "Mroźna Cisza",
     pageBg: "#0C1222",
     pageText: "#CBD5E1",
-    pageSubtext: "#64748B",
+    pageSubtext: "#94A3B8",
     headerBg: "rgba(12,18,34,0.75)",
     headerBorder: "rgba(148,163,184,0.08)",
     headerShadow: "0 1px 24px rgba(0,0,0,0.5)",
@@ -486,12 +495,14 @@ export const colorSchemes: Record<string, ThemeTokens> = {
     inputFocusBorder: "#38BDF8",
     inputFocusRing: "rgba(56,189,248,0.20)",
     inputText: "#E2E8F0",
-    inputPlaceholder: "#475569",
+    inputPlaceholder: "#94A3B8",
     ctaBg: "linear-gradient(135deg, #0EA5E9, #0284C7)",
     ctaHoverBg: "linear-gradient(135deg, #0284C7, #0369A1)",
     ctaText: "#FFFFFF",
     ctaShadow: "0 8px 24px rgba(14,165,233,0.30)",
     ctaGlow: "0 0 40px rgba(14,165,233,0.15)",
+    ctaDisabledBg: "rgba(56,189,248,0.18)",
+    ctaDisabledText: "#38BDF8",
     secondaryBg: "rgba(148,163,184,0.06)",
     secondaryBorder: "rgba(148,163,184,0.12)",
     secondaryText: "#38BDF8",
@@ -517,7 +528,7 @@ export const colorSchemes: Record<string, ThemeTokens> = {
     faqHoverText: "#38BDF8",
     footerBg: "rgba(148,163,184,0.02)",
     footerBorder: "rgba(148,163,184,0.06)",
-    footerText: "#475569",
+    footerText: "#94A3B8",
     footerHoverText: "#E2E8F0",
     formBannerBg: "linear-gradient(135deg, #0EA5E9, #0284C7)",
     formBannerText: "#FFFFFF",
@@ -1325,7 +1336,6 @@ const DemoView: React.FC<DemoViewProps> = ({
                       width={40}
                       height={40}
                       className="w-full h-full object-cover"
-                      unoptimized
                     />
                   </div>
                 )}
@@ -1377,7 +1387,6 @@ const DemoView: React.FC<DemoViewProps> = ({
                       width={48}
                       height={48}
                       className="w-full h-full object-cover"
-                      unoptimized
                     />
                   </div>
                 )}
@@ -1444,7 +1453,6 @@ const DemoView: React.FC<DemoViewProps> = ({
                     width={44}
                     height={44}
                     className="w-full h-full object-cover"
-                    unoptimized
                   />
                 </div>
               )}
@@ -1496,6 +1504,11 @@ const DemoView: React.FC<DemoViewProps> = ({
         </nav>
 
       </div>
+
+      {/* main landmark — owija wszystkie sekcje treści od hero do form,
+          pomijając header (banner) i footer (contentinfo). Wymóg WCAG
+          dla screen readerów żeby mogły przeskoczyć do głównej zawartości. */}
+      <main>
 
       {/* ================================================================ */}
       {/* HERO SECTION                                                     */}
@@ -1585,8 +1598,8 @@ const DemoView: React.FC<DemoViewProps> = ({
                     src={mockupUrl}
                     alt="E-book Mockup"
                     className="w-full h-auto"
-                    width={300}
-                    height={400}
+                    width={640}
+                    height={882}
                     priority
                     sizes="(max-width: 600px) 300px, 400px"
                   />
@@ -1682,8 +1695,8 @@ const DemoView: React.FC<DemoViewProps> = ({
                   src={mockupUrl}
                   alt="E-book Mockup"
                   className="w-full h-auto"
-                  width={680}
-                  height={900}
+                  width={640}
+                  height={882}
                   priority
                   sizes="(max-width: 768px) 300px, (max-width: 1024px) 450px, 560px"
                 />
@@ -2575,19 +2588,19 @@ const DemoView: React.FC<DemoViewProps> = ({
                   type="submit"
                   disabled={isPreviewMode || isSubmitting}
                   className={`w-full py-3.5 sm:py-4 rounded-lg font-bold text-sm sm:text-base transition-all flex items-center justify-center ${
-                    (isPreviewMode || isSubmitting) ? 'opacity-50 cursor-not-allowed' : 'hover:scale-[1.02]'
+                    (isPreviewMode || isSubmitting) ? 'cursor-not-allowed' : 'hover:scale-[1.02]'
                   }`}
                   style={{
-                    background: theme.ctaBg,
-                    color: theme.ctaText,
-                    boxShadow: theme.ctaShadow,
+                    background: (isPreviewMode || isSubmitting) ? theme.ctaDisabledBg : theme.ctaBg,
+                    color: (isPreviewMode || isSubmitting) ? theme.ctaDisabledText : theme.ctaText,
+                    boxShadow: (isPreviewMode || isSubmitting) ? 'none' : theme.ctaShadow,
                   }}
                 >
                   {isSubmitting ? (
                     <>
                       <span
                         className="inline-block w-4 h-4 border-2 border-t-transparent rounded-full animate-spin mr-2"
-                        style={{ borderColor: theme.spinnerBorder, borderTopColor: 'transparent' }}
+                        style={{ borderColor: theme.ctaDisabledText, borderTopColor: 'transparent' }}
                       ></span>
                       {ui.sending}
                     </>
@@ -2670,11 +2683,11 @@ const DemoView: React.FC<DemoViewProps> = ({
                       onClick={handleDownloadEbook}
                       disabled={isDownloading || isPreviewMode}
                       className={`inline-flex items-center justify-center px-7 py-3.5 rounded-lg font-semibold transition-all ${
-                        (isDownloading || isPreviewMode) ? 'opacity-50 cursor-not-allowed' : 'hover:scale-105'
+                        (isDownloading || isPreviewMode) ? 'cursor-not-allowed' : 'hover:scale-105'
                       }`}
                       style={{
-                        background: (isDownloading || isPreviewMode) ? theme.divider : theme.ctaBg,
-                        color: theme.ctaText,
+                        background: (isDownloading || isPreviewMode) ? theme.ctaDisabledBg : theme.ctaBg,
+                        color: (isDownloading || isPreviewMode) ? theme.ctaDisabledText : theme.ctaText,
                         boxShadow: (isDownloading || isPreviewMode) ? 'none' : theme.ctaShadow,
                       }}
                     >
@@ -2682,7 +2695,7 @@ const DemoView: React.FC<DemoViewProps> = ({
                         <>
                           <span
                             className="inline-block w-5 h-5 mr-2 border-2 border-t-transparent rounded-full animate-spin"
-                            style={{ borderColor: theme.spinnerBorder, borderTopColor: 'transparent' }}
+                            style={{ borderColor: theme.ctaDisabledText, borderTopColor: 'transparent' }}
                           ></span>
                           {ui.downloading}
                         </>
@@ -2720,6 +2733,8 @@ const DemoView: React.FC<DemoViewProps> = ({
           </div>
         </div>
       </section>
+
+      </main>
 
       {/* ================================================================ */}
       {/* FOOTER                                                           */}
