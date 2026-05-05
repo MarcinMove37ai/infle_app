@@ -112,7 +112,9 @@ async function getPageData(
         console.log('[ebookpage] LANDING flow MISS for slug:', pageSlug);
       }
     } else {
-      // ----- Direct app.inflee.app flow (unchanged) -----
+      // ----- Direct app.inflee.app flow -----
+      // Includes customDomain so PublicPage can decide if 301 redirect to
+      // canonical custom domain is needed (per-page, not per-user).
       const fullPath = `/ebookpage/${slug.join('/')}`;
       page = await prisma.pages.findFirst({
         where: {
@@ -122,6 +124,7 @@ async function getPageData(
         include: {
           content: true,
           user: true,
+          customDomain: { select: { id: true, domain: true, status: true } },
           ebook: {
             include: {
               ebook_chapters: { orderBy: { position: 'asc' } },
@@ -193,23 +196,33 @@ async function getPageData(
   }
 }
 
-/**
- * Resolve the canonical primary domain for the page owner, if any.
- * Used to 301-redirect direct hits on app.inflee.app to the user's custom domain.
- */
-async function getPrimaryDomainForUser(userId: string): Promise<string | null> {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: {
-      primaryDomain: { select: { domain: true, status: true } },
-    },
-  });
-  const pd = user?.primaryDomain;
-  if (pd && pd.status === 'active') {
-    return pd.domain;
+// ─────────────────────────────────────────────────────────────────
+  // Canonical redirect: when the page is hit directly under app.inflee.app
+  // and THIS page has an active custom domain assigned (per-page, Phase 6),
+  // 301 the visitor to canonical URL on that domain.
+  // Direct app.inflee.app hit detected by absence of __landing flag
+  // (set by middleware only for custom/landing host requests).
+  // ─────────────────────────────────────────────────────────────────
+  if (__landing !== '1') {
+    const hdrs = await headers();
+    const requestHost = (hdrs.get('host') || '').toLowerCase().split(':')[0];
+    const isAppHost = requestHost === APP_HOST;
+
+    if (isAppHost) {
+      const pageCustomDomain = (pageData as any).customDomain as
+        | { domain: string; status: string }
+        | null
+        | undefined;
+
+      if (pageCustomDomain && pageCustomDomain.status === 'active') {
+        // Last segment of slug is the page-slug used on the custom domain
+        const pageSlug = slug[slug.length - 1];
+        const target = `https://${pageCustomDomain.domain}/${pageSlug}`;
+        console.log('[ebookpage] 301 redirect to canonical custom domain:', target);
+        redirect(target);
+      }
+    }
   }
-  return null;
-}
 
 export async function generateMetadata({ params, searchParams }: PublicPageProps): Promise<Metadata> {
   const { slug } = await params;

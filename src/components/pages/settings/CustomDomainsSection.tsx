@@ -531,7 +531,10 @@ function DomainRow({ domain, instructions, onShowInstructions, onRefresh, onDele
     : 'border-amber-200';
 
   return (
-    <div className={`bg-white rounded-lg border ${borderClass} overflow-hidden`}>
+    <div
+      onClick={onShowInstructions}
+      className={`bg-white rounded-lg border ${borderClass} overflow-hidden cursor-pointer hover:bg-gray-50 transition-colors`}
+    >
       {/* Top row — domena (lewa) + akcje (prawa).
           Status badge ukryty na mobile (sm:flex), pokazuje się dopiero >=640px. */}
       <div className="flex items-center justify-between gap-2 p-3">
@@ -540,17 +543,6 @@ function DomainRow({ domain, instructions, onShowInstructions, onRefresh, onDele
             isActive ? 'text-emerald-600' : isFailed ? 'text-red-600' : 'text-amber-600'
           }`} />
           <span className="font-mono text-sm text-gray-900 truncate">{domain.domain}</span>
-          {isActive && (
-            <a
-              href={`https://${domain.domain}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center text-emerald-600 hover:text-emerald-700 transition-colors flex-shrink-0"
-              title={t.openLink}
-            >
-              <ExternalLink className="w-3.5 h-3.5" />
-            </a>
-          )}
         </div>
 
         <div className="flex items-center gap-1.5 flex-shrink-0">
@@ -568,7 +560,7 @@ function DomainRow({ domain, instructions, onShowInstructions, onRefresh, onDele
           {/* Pending: amber CTA "Pokaż instrukcje" */}
           {isPending && (
             <button
-              onClick={onShowInstructions}
+              onClick={(e) => { e.stopPropagation(); onShowInstructions(); }}
               className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-600 text-white text-[0.7rem] font-medium rounded-md hover:bg-amber-700 transition-colors cursor-pointer"
             >
               {t.showInstructionsBtn}
@@ -579,7 +571,7 @@ function DomainRow({ domain, instructions, onShowInstructions, onRefresh, onDele
           {isFailed && (
             <>
               <button
-                onClick={onRefresh}
+                onClick={(e) => { e.stopPropagation(); onRefresh(); }}
                 disabled={isRefreshing}
                 className="inline-flex items-center gap-1 px-2.5 py-1 bg-white text-red-700 text-[0.7rem] font-medium border border-red-300 rounded-md hover:bg-red-50 transition-colors disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
               >
@@ -587,7 +579,7 @@ function DomainRow({ domain, instructions, onShowInstructions, onRefresh, onDele
                 {t.refreshBtn}
               </button>
               <button
-                onClick={onShowInstructions}
+                onClick={(e) => { e.stopPropagation(); onShowInstructions(); }}
                 className="inline-flex items-center gap-1 px-2 py-1 text-[0.7rem] font-medium text-gray-500 hover:text-gray-900 transition-colors cursor-pointer"
               >
                 {t.showInstructionsBtn}
@@ -595,20 +587,8 @@ function DomainRow({ domain, instructions, onShowInstructions, onRefresh, onDele
             </>
           )}
 
-          {/* Active: ikona oka — pozwala podejrzeć konfigurację DNS w modal
-              (do weryfikacji wartości rekordów albo przy debugowaniu) */}
-          {isActive && (
-            <button
-              onClick={onShowInstructions}
-              className="inline-flex items-center justify-center w-6 h-6 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors cursor-pointer"
-              title={t.showInstructionsBtn}
-            >
-              <Eye className="w-3.5 h-3.5" />
-            </button>
-          )}
-
           <button
-            onClick={onDelete}
+            onClick={(e) => { e.stopPropagation(); onDelete(); }}
             className="inline-flex items-center justify-center w-6 h-6 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors cursor-pointer"
             title="Delete"
           >
