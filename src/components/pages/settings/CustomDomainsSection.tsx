@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Globe, Plus, Trash2, Copy, CheckCircle, AlertCircle, Loader2,
-  Lock, X, ExternalLink, RefreshCw, ChevronDown, ChevronUp, Info,
+  Lock, X, ExternalLink, RefreshCw, ChevronDown, ChevronUp, Info, Eye,
 } from 'lucide-react';
 
 // ════════════════════════════════════════════════════════════════════════
@@ -46,6 +46,7 @@ const translations = {
 
     statusPending: 'Konfiguracja DNS',
     statusVerifying: 'Weryfikacja DNS',
+    statusIssuingSsl: 'Wystawianie SSL',
     statusActive: 'Aktywna',
     statusFailed: 'Niepowodzenie',
 
@@ -59,18 +60,24 @@ const translations = {
     purposeDcv: 'Pozwala automatycznie wystawić certyfikat SSL (HTTPS)',
     recordStatusOk: 'OK',
     recordStatusPending: 'Czeka',
-    recordStatusError: 'Sprawdź wartość',
+    recordStatusError: 'Niezgodne',
+    recordErrorHint: 'Wartość w Twoim panelu DNS jest inna niż powyżej. Skopiuj ponownie i zastąp.',
     recordName: 'Nazwa',
     recordValue: 'Wartość',
     copied: 'Skopiowano',
     refreshBtn: 'Sprawdź teraz',
     refreshing: 'Sprawdzanie...',
-    autoCheckHint: 'Auto-sprawdzanie co 30s',
+    waitingForDns: 'Czekamy na propagację DNS — możesz zamknąć to okno',
+    waitingForSsl: 'Czekamy na certyfikat SSL — możesz zamknąć to okno',
     showDetails: 'Pokaż szczegóły',
     hideDetails: 'Ukryj szczegóły',
+    showRecord: 'Pokaż wartości',
+    hideRecord: 'Ukryj wartości',
 
     sslValid: 'Cert SSL aktywny',
     openLink: 'Otwórz w nowej karcie',
+    allSetTitle: 'Wszystko gotowe!',
+    allSetMsg: 'Możesz teraz przypisać tę domenę do swojej strony zapisu w sekcji "Strony zapisu".',
 
     failedHint: 'Sprawdź czy rekordy DNS zostały poprawnie dodane',
     pendingShortHint: 'Wymaga konfiguracji DNS',
@@ -123,6 +130,7 @@ const translations = {
 
     statusPending: 'DNS configuration',
     statusVerifying: 'DNS Verifying',
+    statusIssuingSsl: 'Issuing SSL',
     statusActive: 'Active',
     statusFailed: 'Failed',
 
@@ -136,18 +144,24 @@ const translations = {
     purposeDcv: 'Allows automatic SSL certificate (HTTPS) issuance',
     recordStatusOk: 'OK',
     recordStatusPending: 'Waiting',
-    recordStatusError: 'Check value',
+    recordStatusError: 'Mismatch',
+    recordErrorHint: 'The value in your DNS panel is different from the one above. Copy it again and replace.',
     recordName: 'Name',
     recordValue: 'Value',
     copied: 'Copied',
     refreshBtn: 'Check now',
     refreshing: 'Checking...',
-    autoCheckHint: 'Auto-check every 30s',
+    waitingForDns: 'Waiting for DNS propagation — you can close this window',
+    waitingForSsl: 'Waiting for SSL certificate — you can close this window',
     showDetails: 'Show details',
     hideDetails: 'Hide details',
+    showRecord: 'Show values',
+    hideRecord: 'Hide values',
 
     sslValid: 'SSL cert active',
     openLink: 'Open in new tab',
+    allSetTitle: 'All set!',
+    allSetMsg: 'You can now apply this domain to your active landing page in the "Landing pages" section.',
 
     failedHint: 'Check that DNS records were added correctly',
     pendingShortHint: 'DNS configuration required',
@@ -233,23 +247,82 @@ function validateSubdomain(raw: string): { ok: true; normalized: string } | { ok
   return { ok: true, normalized };
 }
 
+/**
+ * Sprawdza czy wszystkie wymagane rekordy DNS są w stanie 'ok'.
+ *
+ * "Wymagany rekord" = rekord który ma instructions (np. instructions.cname istnieje).
+ * Jeśli rekord nie istnieje w instructions, jego status jest pomijany (CF już zweryfikował
+ * lub nigdy nie był wymagany — np. dla domeny gdzie CF nie wymaga ownership TXT).
+ *
+ * Zwraca true gdy DNS lookup widzi WSZYSTKIE wymagane rekordy z poprawnymi wartościami.
+ * Używane do nadpisania globalnego badge label gdy CF nadal pokazuje "verifying"
+ * — wtedy realnie czekamy już tylko na wystawienie certa SSL.
+ */
+function allRecordsOk(instructions: DomainInstructions | null | undefined): boolean {
+  if (!instructions) return false;
+  const rs = instructions.recordStatus;
+  if (!rs) return false;
+  // Dla każdego rekordu który JEST w instructions, recordStatus musi być 'ok'.
+  if (instructions.cname && rs.cname !== 'ok') return false;
+  if (instructions.ownershipTxt && rs.ownership !== 'ok') return false;
+  if (instructions.dcvTxt && rs.dcv !== 'ok') return false;
+  // Co najmniej jeden rekord musi istnieć (żeby uniknąć false-positive gdy
+  // instructions są puste i wszystkie warunki "if" przechodzą)
+  return !!(instructions.cname || instructions.ownershipTxt || instructions.dcvTxt);
+}
+
 // ════════════════════════════════════════════════════════════════════════
 // Status badge — kolorystyka spójna z resztą Settings
 // (emerald dla active, amber dla pending, blue dla verifying, red dla failed)
 // Wszystkie kolory tekstu i tła literalne, bez przezroczystości w klasach.
 // ════════════════════════════════════════════════════════════════════════
-function StatusBadge({ status, t }: { status: DomainStatus; t: typeof translations['pl'] }) {
+/**
+ * StatusBadge — globalny status domeny z opcjonalnym override labelem.
+ *
+ * `labelOverride` używamy gdy backend status to nadal "verifying" (CF jeszcze nie
+ * zaktywował hostname'u), ale wszystkie 3 rekordy DNS są już "ok" w lookup'ie.
+ * Wtedy z punktu widzenia user'a "DNS jest skonfigurowany, czeka tylko cert SSL"
+ * — pokazujemy "Wystawianie certyfikatu SSL" zamiast generycznego "Weryfikacja DNS".
+ * Kolor/ikona zostają (nadal stan "w trakcie"), zmienia się tylko tekst.
+ */
+/**
+ * StatusBadge — globalny status domeny.
+ *
+ * Logika spinnerów (żeby nie dublować animacji w UI):
+ *   - DNS verifying → BRAK spinnera (spinnery są przy rekordach DNS które się propagują)
+ *   - SSL issuing → SPINNER (rekordy są zielone OK, ale Cloudflare jeszcze wystawia cert)
+ *   - pending → BRAK spinnera (user dopiero zaczyna konfigurację, brak ruchu)
+ *   - active/failed → ikona stała (success/error)
+ */
+function StatusBadge({
+  status,
+  labelOverride,
+  showSpinner,
+  t,
+}: {
+  status: DomainStatus;
+  labelOverride?: string;
+  showSpinner?: boolean;
+  t: typeof translations['pl'];
+}) {
   const config = {
-    pending:   { label: t.statusPending,   bg: 'bg-amber-50',   text: 'text-amber-700',   border: 'border-amber-200',   icon: Loader2,     iconClass: 'animate-spin' },
-    verifying: { label: t.statusVerifying, bg: 'bg-blue-50',    text: 'text-blue-700',    border: 'border-blue-200',    icon: Loader2,     iconClass: 'animate-spin' },
+    pending:   { label: t.statusPending,   bg: 'bg-amber-50',   text: 'text-amber-700',   border: 'border-amber-200',   icon: Loader2,     iconClass: '' },
+    verifying: { label: t.statusVerifying, bg: 'bg-blue-50',    text: 'text-blue-700',    border: 'border-blue-200',    icon: Loader2,     iconClass: '' },
     active:    { label: t.statusActive,    bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200', icon: CheckCircle, iconClass: '' },
     failed:    { label: t.statusFailed,    bg: 'bg-red-50',     text: 'text-red-700',     border: 'border-red-200',     icon: AlertCircle, iconClass: '' },
   }[status];
   const Icon = config.icon;
+  const label = labelOverride ?? config.label;
+  // Loader2 (kółeczko spinnera) chowamy gdy showSpinner=false dla pending/verifying.
+  // Bez kręcenia wygląda jak zamrożony bug, lepiej całkiem ukryć i pokazać sam tekst.
+  // Active i failed mają stałe ikony (CheckCircle/AlertCircle) — zawsze widoczne.
+  const isLoaderIcon = status === 'pending' || status === 'verifying';
+  const hideIcon = isLoaderIcon && !showSpinner;
+
   return (
     <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 ${config.bg} ${config.text} border ${config.border} text-[0.65rem] font-bold uppercase tracking-wider rounded`}>
-      <Icon className={`w-3 h-3 ${config.iconClass}`} />
-      {config.label}
+      {!hideIcon && <Icon className={`w-3 h-3 ${showSpinner ? 'animate-spin' : ''}`} />}
+      {label}
     </span>
   );
 }
@@ -360,9 +433,29 @@ function DnsRecordRow({
   status?: 'ok' | 'pending' | 'error';
   t: typeof translations['pl'];
 }) {
+  // Domyślne rozwinięcie zależy od statusu rekordu:
+  //   - ok      → zwinięty (user nie potrzebuje patrzeć na wartość, rekord jest poprawny)
+  //   - pending → rozwinięty (user musi widzieć co skopiować)
+  //   - error   → rozwinięty (user musi sprawdzić co wpisał ze swoim DNS panel)
+  //   - undefined (CF już zweryfikował) → zwinięty (już nie wymaga uwagi)
+  // User zawsze może rozwinąć/zwinąć ręcznie chevronem.
+  const defaultExpanded = status === 'pending' || status === 'error';
+  const [expanded, setExpanded] = useState(defaultExpanded);
+
+  // Synchronizuj stan rozwinięcia gdy status się zmieni z pending/error → ok
+  // (np. user wgrał poprawny rekord, polling zwrócił 'ok' → autocollapse).
+  // useRef tracking poprzedniego defaultu, żeby nie nadpisywać user'owego ręcznego toggle gdy status nie zmienia "kategorii".
+  const prevDefaultRef = useRef(defaultExpanded);
+  useEffect(() => {
+    if (prevDefaultRef.current !== defaultExpanded) {
+      setExpanded(defaultExpanded);
+      prevDefaultRef.current = defaultExpanded;
+    }
+  }, [defaultExpanded]);
+
   return (
     <div className="bg-white border border-gray-200 rounded-lg p-3 space-y-2.5">
-      {/* Header — type badge + krótkie wyjaśnienie + per-record status badge po prawej */}
+      {/* Header — type badge + krótkie wyjaśnienie + per-record status badge + chevron toggle */}
       <div className="flex items-baseline justify-between gap-2">
         <div className="flex items-baseline gap-2 min-w-0 flex-1">
           <span className="inline-flex items-center px-1.5 py-0.5 bg-gray-900 text-white text-[0.6rem] font-bold uppercase tracking-wider rounded flex-shrink-0">
@@ -370,14 +463,34 @@ function DnsRecordRow({
           </span>
           <span className="text-[0.7rem] text-gray-600 leading-snug">{purpose}</span>
         </div>
-        <RecordStatusBadge status={status} t={t} />
+        <div className="flex items-center gap-1.5 flex-shrink-0">
+          <RecordStatusBadge status={status} t={t} />
+          <button
+            onClick={() => setExpanded(e => !e)}
+            className="inline-flex items-center justify-center w-5 h-5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors cursor-pointer"
+            title={expanded ? t.hideRecord : t.showRecord}
+          >
+            {expanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+          </button>
+        </div>
       </div>
 
-      {/* Two fields — każde z własnym Copy buttonem */}
-      <div className="space-y-2">
-        <DnsField label={t.recordName} value={name} t={t} />
-        <DnsField label={t.recordValue} value={value} t={t} />
-      </div>
+      {/* Collapsible body — fields tylko gdy expanded */}
+      {expanded && (
+        <div className="space-y-2">
+          <DnsField label={t.recordName} value={name} t={t} />
+          <DnsField label={t.recordValue} value={value} t={t} />
+        </div>
+      )}
+
+      {/* Error hint — gdy backend wykrył mismatch wartości,
+          jasna instrukcja co zrobić (skopiować ponownie i zastąpić) */}
+      {status === 'error' && (
+        <div className="flex items-start gap-1.5 px-2 py-1.5 bg-red-50 border border-red-100 rounded">
+          <AlertCircle className="w-3 h-3 text-red-600 flex-shrink-0 mt-0.5" />
+          <p className="text-[0.7rem] text-red-700 leading-snug">{t.recordErrorHint}</p>
+        </div>
+      )}
     </div>
   );
 }
@@ -389,6 +502,7 @@ function DnsRecordRow({
 // ════════════════════════════════════════════════════════════════════════
 interface DomainRowProps {
   domain: CustomDomain;
+  instructions: DomainInstructions | null;
   onShowInstructions: () => void;
   onRefresh: () => void;
   onDelete: () => void;
@@ -396,10 +510,18 @@ interface DomainRowProps {
   t: typeof translations['pl'];
 }
 
-function DomainRow({ domain, onShowInstructions, onRefresh, onDelete, isRefreshing, t }: DomainRowProps) {
+function DomainRow({ domain, instructions, onShowInstructions, onRefresh, onDelete, isRefreshing, t }: DomainRowProps) {
   const isPending = domain.status === 'pending' || domain.status === 'verifying';
   const isActive = domain.status === 'active';
   const isFailed = domain.status === 'failed';
+
+  // Override label gdy backend nadal "verifying" ale wszystkie rekordy DNS są 'ok'.
+  // Z punktu widzenia user'a DNS jest gotowy — czekamy tylko na cert SSL z Cloudflare.
+  // Ten label zastępuje generyczne "Weryfikacja DNS" konkretną informacją "Wystawianie SSL".
+  const statusLabelOverride =
+    domain.status === 'verifying' && allRecordsOk(instructions)
+      ? t.statusIssuingSsl
+      : undefined;
 
   // Border color matching status (subtelny accent)
   const borderClass = isActive
@@ -435,7 +557,12 @@ function DomainRow({ domain, onShowInstructions, onRefresh, onDelete, isRefreshi
           {/* Status badge — desktop ZAWSZE, mobile TYLKO dla active.
               Pending/failed na mobile mają osobny wiersz pod top row (więcej miejsca dla buttonów akcji). */}
           <span className={`${isActive ? 'inline-flex' : 'hidden sm:inline-flex'}`}>
-            <StatusBadge status={domain.status} t={t} />
+            <StatusBadge
+              status={domain.status}
+              labelOverride={statusLabelOverride}
+              showSpinner={isPending}
+              t={t}
+            />
           </span>
 
           {/* Pending: amber CTA "Pokaż instrukcje" */}
@@ -468,7 +595,17 @@ function DomainRow({ domain, onShowInstructions, onRefresh, onDelete, isRefreshi
             </>
           )}
 
-          {/* Active: brak buttona — domena działa, user niczego nie potrzebuje */}
+          {/* Active: ikona oka — pozwala podejrzeć konfigurację DNS w modal
+              (do weryfikacji wartości rekordów albo przy debugowaniu) */}
+          {isActive && (
+            <button
+              onClick={onShowInstructions}
+              className="inline-flex items-center justify-center w-6 h-6 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors cursor-pointer"
+              title={t.showInstructionsBtn}
+            >
+              <Eye className="w-3.5 h-3.5" />
+            </button>
+          )}
 
           <button
             onClick={onDelete}
@@ -484,7 +621,12 @@ function DomainRow({ domain, onShowInstructions, onRefresh, onDelete, isRefreshi
           więc ten dodatkowy wiersz nie jest potrzebny. */}
       {!isActive && (
         <div className="sm:hidden px-3 pb-2.5 -mt-1">
-          <StatusBadge status={domain.status} t={t} />
+          <StatusBadge
+            status={domain.status}
+            labelOverride={statusLabelOverride}
+            showSpinner={isPending}
+            t={t}
+          />
         </div>
       )}
 
@@ -650,19 +792,18 @@ interface DnsInstructionsModalProps {
   domain: CustomDomain | null;
   instructions: DomainInstructions | null;
   isPolling: boolean;
-  onRefresh: () => void;
   onClose: () => void;
-  isRefreshing: boolean;
   t: typeof translations['pl'];
 }
 
 function DnsInstructionsModal({
-  isOpen, domain, instructions, isPolling, onRefresh, onClose, isRefreshing, t,
+  isOpen, domain, instructions, isPolling, onClose, t,
 }: DnsInstructionsModalProps) {
   if (!isOpen || !domain) return null;
 
   const isPending = domain.status === 'pending' || domain.status === 'verifying';
   const isFailed = domain.status === 'failed';
+  const isActive = domain.status === 'active';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -680,7 +821,16 @@ function DnsInstructionsModal({
             </div>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
-            <StatusBadge status={domain.status} t={t} />
+            <StatusBadge
+              status={domain.status}
+              labelOverride={
+                domain.status === 'verifying' && allRecordsOk(instructions)
+                  ? t.statusIssuingSsl
+                  : undefined
+              }
+              showSpinner={domain.status === 'verifying' && allRecordsOk(instructions)}
+              t={t}
+            />
             <button
               onClick={onClose}
               className="inline-flex items-center justify-center w-7 h-7 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors cursor-pointer"
@@ -694,6 +844,19 @@ function DnsInstructionsModal({
         {/* Body — scrollable when content exceeds modal height */}
         <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
 
+          {/* Active banner — All set! */}
+          {domain.status === 'active' && (
+            <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3">
+              <div className="flex items-start gap-2">
+                <CheckCircle className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-semibold text-emerald-900 mb-0.5">{t.allSetTitle}</p>
+                  <p className="text-xs text-emerald-800 leading-relaxed">{t.allSetMsg}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Failed banner — when domain verification failed */}
           {isFailed && (
             <div className="bg-red-50 border border-red-200 rounded-lg p-3">
@@ -706,20 +869,23 @@ function DnsInstructionsModal({
             </div>
           )}
 
-          {/* Step-by-step instructions */}
-          <div>
-            <div className="text-xs font-semibold text-gray-900 mb-2">{t.instructionsTitle}</div>
-            <ol className="text-xs text-gray-700 leading-relaxed space-y-1.5 list-decimal list-inside">
-              <li>{t.instructionsStep1}</li>
-              <li>{t.instructionsStep2}</li>
-              <li>{t.instructionsStep3}</li>
-            </ol>
-            {isPending && (
-              <p className="text-xs text-gray-500 mt-2 italic">
-                💡 {t.instructionsHintTime}
-              </p>
-            )}
-          </div>
+          {/* Step-by-step instructions — ukryte gdy domena active (user już je wykonał).
+              Zostawiamy listę rekordów poniżej żeby user mógł zweryfikować wartości. */}
+          {!isActive && (
+            <div>
+              <div className="text-xs font-semibold text-gray-900 mb-2">{t.instructionsTitle}</div>
+              <ol className="text-xs text-gray-700 leading-relaxed space-y-1.5 list-decimal list-inside">
+                <li>{t.instructionsStep1}</li>
+                <li>{t.instructionsStep2}</li>
+                <li>{t.instructionsStep3}</li>
+              </ol>
+              {isPending && (
+                <p className="text-xs text-gray-500 mt-2 italic">
+                  💡 {t.instructionsHintTime}
+                </p>
+              )}
+            </div>
+          )}
 
           {/* DNS records — każdy z live per-record status badge */}
           <div className="space-y-2">
@@ -756,30 +922,20 @@ function DnsInstructionsModal({
           </div>
         </div>
 
-        {/* Footer — auto-check hint + manual refresh + close */}
+        {/* Footer — wait info + close */}
         <div className="flex items-center justify-between gap-3 px-6 py-3 border-t border-gray-200 flex-shrink-0 bg-gray-50 rounded-b-xl">
           {isPending ? (
             <>
               <span className="text-[0.7rem] text-gray-500 inline-flex items-center gap-1.5">
                 {isPolling && <Loader2 className="w-3 h-3 animate-spin" />}
-                {t.autoCheckHint}
+                {allRecordsOk(instructions) ? t.waitingForSsl : t.waitingForDns}
               </span>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={onRefresh}
-                  disabled={isRefreshing}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white text-blue-700 text-xs font-medium border border-blue-200 rounded-md hover:bg-blue-50 transition-colors disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
-                >
-                  {isRefreshing ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
-                  {isRefreshing ? t.refreshing : t.refreshBtn}
-                </button>
-                <button
-                  onClick={onClose}
-                  className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors cursor-pointer"
-                >
-                  {t.modalCloseBtn}
-                </button>
-              </div>
+              <button
+                onClick={onClose}
+                className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors cursor-pointer"
+              >
+                {t.modalCloseBtn}
+              </button>
             </>
           ) : (
             <button
@@ -848,11 +1004,23 @@ export default function CustomDomainsSection({ userRole, currentLang = 'pl' }: C
       const data = await res.json();
       setDomains(prev => prev.map(d => d.id === id ? { ...d, ...data.domain } : d));
       if (data.instructions) {
-        // Łączymy instrukcje DNS z per-record status check (recordStatus jest osobnym
-        // top-level polem w API response, ale w UI traktujemy je jako część instructions).
+        // Sticky 'ok' dla active domeny — gdy CF status === 'active', to znaczy że
+        // CF już zweryfikował wszystkie rekordy i są poprawne. Nasz DNS lookup z Node.js
+        // może czasem zwrócić 'pending' (TTL cache, różne resolvery, race conditions),
+        // ale to jest tylko diagnostyka — autoritatywna prawda to status z CF.
+        // Override'ujemy recordStatus na wszystkie 'ok' żeby uniknąć fałszywych "Waiting".
+        const isActive = data.domain.status === 'active';
+        const recordStatus = isActive
+          ? {
+              cname: 'ok' as const,
+              ownership: 'ok' as const,
+              dcv: 'ok' as const,
+            }
+          : data.recordStatus;
+
         setInstructionsMap(prev => ({
           ...prev,
-          [id]: { ...data.instructions, recordStatus: data.recordStatus },
+          [id]: { ...data.instructions, recordStatus },
         }));
       }
       return { status: data.domain.status as DomainStatus };
@@ -875,10 +1043,26 @@ export default function CustomDomainsSection({ userRole, currentLang = 'pl' }: C
           if (dom) showToast('success', t.toastVerified.replace('{domain}', dom.domain));
         }
       }
-    }, 30000);
+    }, 15000);
 
     return () => clearInterval(intervalId);
   }, [domains, syncDomain, showToast, t]);
+
+  // Modal-open polling — gdy modal jest otwarty, odświeżamy szybciej (co 10s),
+  // żeby user widział zmiany statusów w czasie zbliżonym do real-time.
+  // Działa równolegle z głównym polling 15s — gdy modal otwarty dla pending domeny,
+  // user dostaje update co 10s, gdy zamknięty — nadal co 15s w tle.
+  // Dla active domeny w modalu też pollujemy (user może chcieć zobaczyć zmiany
+  // w `recordStatus` gdy ktoś zmodyfikuje DNS).
+  useEffect(() => {
+    if (!instructionsModalDomainId) return;
+
+    const intervalId = setInterval(() => {
+      syncDomain(instructionsModalDomainId);
+    }, 10000);
+
+    return () => clearInterval(intervalId);
+  }, [instructionsModalDomainId, syncDomain]);
 
   const handleRefresh = useCallback(async (id: string) => {
     setRefreshingId(id);
@@ -886,16 +1070,15 @@ export default function CustomDomainsSection({ userRole, currentLang = 'pl' }: C
     setRefreshingId(null);
   }, [syncDomain]);
 
-  // Open instructions modal — fetch instructions on demand if we don't have
-  // them cached (list endpoint doesn't return instructions, only basic fields).
+  // Open instructions modal — zawsze odświeżamy stan z backendu przy otwarciu.
+  // Bez tego user widziałby cache'owany stan (np. 'pending' z czasu gdy domena
+  // dopiero była dodana), nawet jeśli polling już dawno zaktualizował recordStatus.
+  // Fire-and-forget: modal otwiera się natychmiast z obecnym stanem, fetch
+  // zaktualizuje go gdy response wróci (~200-500ms).
   const handleShowInstructions = useCallback(async (id: string) => {
     setInstructionsModalDomainId(id);
-    if (!instructionsMap[id]) {
-      // Fire-and-forget: syncDomain populates instructionsMap when CF returns details.
-      // Modal will re-render automatically when state updates.
-      syncDomain(id);
-    }
-  }, [instructionsMap, syncDomain]);
+    syncDomain(id);
+  }, [syncDomain]);
 
   const handleAdd = useCallback(async (domain: string, force: boolean) => {
     setIsSubmitting(true);
@@ -1047,6 +1230,7 @@ export default function CustomDomainsSection({ userRole, currentLang = 'pl' }: C
               <DomainRow
                 key={dom.id}
                 domain={dom}
+                instructions={instructionsMap[dom.id] || null}
                 onShowInstructions={() => handleShowInstructions(dom.id)}
                 onRefresh={() => handleRefresh(dom.id)}
                 onDelete={() => setDeleteTarget(dom)}
@@ -1129,9 +1313,7 @@ export default function CustomDomainsSection({ userRole, currentLang = 'pl' }: C
             domain={modalDomain}
             instructions={modalDomain ? instructionsMap[modalDomain.id] || null : null}
             isPolling={modalDomain ? (modalDomain.status === 'pending' || modalDomain.status === 'verifying') : false}
-            onRefresh={() => modalDomain && handleRefresh(modalDomain.id)}
             onClose={() => setInstructionsModalDomainId(null)}
-            isRefreshing={!!modalDomain && refreshingId === modalDomain.id}
             t={t}
           />
         );

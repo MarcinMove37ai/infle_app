@@ -453,6 +453,11 @@ model CustomDomain {
   sslStatus            String?      @db.VarChar(50)
   verificationErrors   Json?
   ownershipVerification Json?
+  // dcvVerification — TXT rekord do walidacji certyfikatu SSL (DCV).
+  // Cloudflare zwraca to pole tylko podczas wystawiania certa, po aktywacji
+  // czyści `ssl.validation_records` w response. Trzymamy w naszej bazie żeby
+  // móc pokazać user'owi kompletne instrukcje DNS niezależnie od stanu CF.
+  dcvVerification      Json?
   lastCheckedAt        DateTime?
   verifiedAt           DateTime?
   createdAt            DateTime     @default(now())

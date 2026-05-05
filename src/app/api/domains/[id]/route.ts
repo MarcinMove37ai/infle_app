@@ -64,28 +64,53 @@ function mapCfToDomainStatus(cf: CFCustomHostname): DomainStatus {
  * dzięki czemu user widzi WSZYSTKIE wgrane wartości — nawet po aktywacji
  * (do weryfikacji że ma poprawną konfigurację, do diagnozowania jeśli się rozjedzie).
  */
-function buildInstructions(cf: CFCustomHostname) {
+/**
+ * Stored verification data (z naszej bazy danych).
+ * Cloudflare po aktywacji domeny czyści `ownership_verification` i `ssl.validation_records`
+ * w response — bez fallbacku do DB user widziałby pustą listę rekordów po sukcesie.
+ * Te wartości zapisujemy przy POST (ownership) oraz przy GET refresh (DCV gdy CF dostarczy).
+ */
+interface StoredVerification {
+  ownershipVerification?: { name?: string; value?: string } | null;
+  dcvVerification?: { name?: string; value?: string } | null;
+}
+
+/**
+ * Build full DCV (Domain Control Validation) instructions.
+ *
+ * ZAWSZE zwracamy wszystkie 3 rekordy (jeśli mamy ich wartości — z CF lub z DB).
+ * Logika fallbacku per rekord:
+ *   - CNAME       → zawsze syntetyzowany z hostname + env (nigdy nie zniknie)
+ *   - ownership   → CF (cf.ownership_verification) → fallback DB (stored.ownershipVerification)
+ *   - DCV         → CF (cf.ssl.validation_records) → fallback DB (stored.dcvVerification)
+ *
+ * Cloudflare po aktywacji zeruje pola w response, więc DB jest source of truth
+ * po pierwszej weryfikacji. Dzięki temu user zawsze widzi 3 rekordy w modal.
+ */
+function buildInstructions(cf: CFCustomHostname, stored?: StoredVerification) {
   const cnameTarget = process.env.CUSTOM_DOMAIN_CNAME_TARGET || 'connect.inflee.app';
 
-  // Hostname pre-validation TXT (ownership) — wartość pochodzi z cf.ownership_verification.
-  // CF utrzymuje to pole nawet po aktywacji (do weryfikacji rotacji właściciela).
-  const ownershipTxt = cf.ownership_verification
-    ? {
-        name: cf.ownership_verification.name,
-        value: cf.ownership_verification.value,
-      }
-    : null;
+  // Ownership TXT — CF first, fallback DB.
+  const cfOwnership = cf.ownership_verification;
+  const dbOwnership = stored?.ownershipVerification;
+  const ownershipTxt =
+    cfOwnership?.name && cfOwnership?.value
+      ? { name: cfOwnership.name, value: cfOwnership.value }
+      : dbOwnership?.name && dbOwnership?.value
+      ? { name: dbOwnership.name, value: dbOwnership.value }
+      : null;
 
-  // Certificate validation TXT (DCV) — wartość z ssl.validation_records[0].
-  // CF utrzymuje to pole nawet po wystawieniu certa (do auto-renewal w przyszłości).
-  const dcvTxt = cf.ssl?.validation_records?.length
-    ? cf.ssl.validation_records
-        .filter(r => r.txt_name && r.txt_value)
-        .map(r => ({ name: r.txt_name!, value: r.txt_value! }))[0] ?? null
-    : null;
+  // DCV TXT — CF first, fallback DB.
+  const cfDcv = cf.ssl?.validation_records?.find(r => r.txt_name && r.txt_value);
+  const dbDcv = stored?.dcvVerification;
+  const dcvTxt =
+    cfDcv?.txt_name && cfDcv?.txt_value
+      ? { name: cfDcv.txt_name, value: cfDcv.txt_value }
+      : dbDcv?.name && dbDcv?.value
+      ? { name: dbDcv.name, value: dbDcv.value }
+      : null;
 
-  // CNAME — ten rekord ZAWSZE musi być na DNS aby ruch leciał na nasze CF for SaaS.
-  // Po aktywacji NADAL musi tam być, więc zawsze zwracamy.
+  // CNAME — zawsze syntetyzowany. Hostname + env CNAME target.
   const cname = { name: cf.hostname, value: cnameTarget };
 
   return { ownershipTxt, dcvTxt, cname };
@@ -200,7 +225,9 @@ export async function GET(
 
   const { id } = await params;
 
-  // 1. Fetch domain from DB (with userId guard)
+  // 1. Fetch domain from DB (with userId guard).
+  // Pobieramy też dcvVerification — używane jako fallback w buildInstructions
+  // gdy CF już przestał zwracać ssl.validation_records (po wystawieniu certa).
   const domain = await prisma.customDomain.findFirst({
     where: { id, userId: session.user.id },
     select: {
@@ -211,6 +238,7 @@ export async function GET(
       sslStatus: true,
       verificationErrors: true,
       ownershipVerification: true,
+      dcvVerification: true,
       verifiedAt: true,
       createdAt: true,
     },
@@ -241,9 +269,17 @@ export async function GET(
     });
   }
 
-  // 4. Update DB with fresh state from Cloudflare
+  // 4. Update DB with fresh state from Cloudflare.
+  //
+  // Defensive write — gdy CF zwraca świeże ownership/DCV (przed aktywacją),
+  // zapisujemy do DB. Jeśli CF już zeruje (po aktywacji), zostawiamy poprzednią
+  // wartość w DB nietkniętą (undefined w Prisma update = nie modyfikuj pola).
+  // Dzięki temu DB akumuluje source of truth: pierwszy raz dostaje wartości z CF,
+  // potem ich nie traci.
   const newStatus = mapCfToDomainStatus(cf);
   const justBecameActive = newStatus === 'active' && domain.status !== 'active';
+
+  const cfDcvForDb = cf.ssl?.validation_records?.find(r => r.txt_name && r.txt_value);
 
   const updated = await prisma.customDomain.update({
     where: { id: domain.id },
@@ -263,6 +299,12 @@ export async function GET(
             value: cf.ownership_verification.value,
           }
         : undefined,
+      dcvVerification: cfDcvForDb
+        ? {
+            name: cfDcvForDb.txt_name,
+            value: cfDcvForDb.txt_value,
+          }
+        : undefined,
       lastCheckedAt: new Date(),
       verifiedAt: justBecameActive ? new Date() : undefined,
     },
@@ -273,17 +315,21 @@ export async function GET(
       sslStatus: true,
       verificationErrors: true,
       ownershipVerification: true,
+      dcvVerification: true,
       verifiedAt: true,
       lastCheckedAt: true,
       createdAt: true,
     },
   });
 
-  // Build instructions and check each DNS record status individually.
-  // Per-record status pozwala UI pokazać user'owi DOKŁADNIE który rekord
-  // jest OK, który czeka na propagację, a który ma błędną wartość.
+  // Build instructions z DB-fallback. Jeśli CF zwraca świeże dane → użyj CF.
+  // Jeśli CF zeruje (po aktywacji) → fallback do `updated.ownershipVerification` i `updated.dcvVerification`.
+  // Per-record status sprawdza każdy rekord osobno przez DNS lookup.
   const cnameTarget = process.env.CUSTOM_DOMAIN_CNAME_TARGET || 'connect.inflee.app';
-  const instructions = buildInstructions(cf);
+  const instructions = buildInstructions(cf, {
+    ownershipVerification: updated.ownershipVerification as StoredVerification['ownershipVerification'],
+    dcvVerification: updated.dcvVerification as StoredVerification['dcvVerification'],
+  });
   const recordStatus = await checkRecordStatuses(updated.domain, instructions, cnameTarget);
 
   return NextResponse.json({

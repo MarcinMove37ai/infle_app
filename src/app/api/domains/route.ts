@@ -219,7 +219,18 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // 7. Persist to DB
+  // 7. Persist to DB.
+  //
+  // Zapisujemy oba TXT'y (ownership + DCV) do bazy jako source of truth.
+  // Po aktywacji CF czyści te wartości w response — bez DB nie moglibyśmy
+  // pokazać user'owi kompletnych instrukcji w modal.
+  //
+  // dcvVerification wyciągamy z ssl.validation_records[0] (po retry-fetch
+  // w sekcji 6 powinno już tam być; jeśli nie — zostaje null, GET /[id] uzupełni).
+  const sslValidationForDb = (cfHostname.ssl as any)?.validation_records?.find(
+    (r: any) => r.txt_name && r.txt_value
+  );
+
   const created = await prisma.customDomain.create({
     data: {
       userId: session.user.id,
@@ -232,6 +243,12 @@ export async function POST(req: NextRequest) {
             type: cfHostname.ownership_verification.type,
             name: cfHostname.ownership_verification.name,
             value: cfHostname.ownership_verification.value,
+          }
+        : undefined,
+      dcvVerification: sslValidationForDb
+        ? {
+            name: sslValidationForDb.txt_name,
+            value: sslValidationForDb.txt_value,
           }
         : undefined,
       lastCheckedAt: new Date(),
