@@ -16,6 +16,8 @@ const nextConfig: NextConfig = {
   // jest inputem, nie zagrożeniem (browser nie ładuje go bezpośrednio).
   images: {
     remotePatterns: [
+      // Self-hosted assets — uploads serwowane przez nasz /api/assets/* endpoint
+      // (profile pictures, ebook covers, mockup uploads, brand logos).
       {
         protocol: 'https',
         hostname: '**',
@@ -25,6 +27,25 @@ const nextConfig: NextConfig = {
         protocol: 'http',
         hostname: 'localhost',
         pathname: '/api/assets/**',
+      },
+      // Google profile pictures — userzy logujący się przez OAuth Google
+      // dostają avatar z lh3.googleusercontent.com (subdomeny lh3-7).
+      // Wszystkie to ten sam domain pattern *.googleusercontent.com.
+      {
+        protocol: 'https',
+        hostname: 'lh3.googleusercontent.com',
+      },
+      {
+        protocol: 'https',
+        hostname: 'lh4.googleusercontent.com',
+      },
+      {
+        protocol: 'https',
+        hostname: 'lh5.googleusercontent.com',
+      },
+      {
+        protocol: 'https',
+        hostname: 'lh6.googleusercontent.com',
       },
     ],
   },
