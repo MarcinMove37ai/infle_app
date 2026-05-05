@@ -45,6 +45,8 @@ const PUBLIC_PATH_PATTERNS: RegExp[] = [
   /^\/_next\/image$/,                   // image optimization
   /^\/favicon\.ico$/,
   /^\/robots\.txt$/,
+  /^\/llms\.txt$/,
+  /^\/llms-pl\.txt$/,
 ]
 
 function isPublicLandingPath(pathname: string): boolean {
