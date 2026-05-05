@@ -873,8 +873,36 @@ const DemoView: React.FC<DemoViewProps> = ({
   //   2. partnerLogoUrl (legacy)
   //   3. pageData fallbacks (profilePicture / user.profilePicture)
 
-  // Resolved avatar — wybór wg activeProfileSource
-  const resolvedAvatarUrl = (() => {
+  // Helper — normalizacja URL avatara/logo:
+  // 1) URL-e wskazujące na nasz /api/assets/* są konwertowane na relative
+  //    (strip protocol+host) żeby działały na każdej domenie i NIE forcowały
+  //    cross-origin requests z custom domain klienta na app.inflee.app.
+  //    Historyczne dane w bazie mają full URL-e — naprawiamy at-render-time
+  //    bez ruszania bazy.
+  // 2) Google avatars (lh3.googleusercontent.com z =sNN-c suffix) — strip
+  //    rozmiar żeby pozwolić Next Image na request z parametrem `w` (resize).
+  const normalizeAvatarUrl = (url: string | undefined): string | undefined => {
+    if (!url) return url;
+
+    // Strip absolute prefix dla self-hosted assets — działa na każdej domenie
+    const apiAssetsMatch = url.match(/^https?:\/\/[^/]+(\/api\/assets\/.*)/);
+    if (apiAssetsMatch) {
+      return apiAssetsMatch[1]; // np. "/api/assets/uploads/profile-pictures/..."
+    }
+
+    // Strip Google size suffix (=s96-c, =s256-c) — Next Image sam zażąda właściwego rozmiaru
+    if (url.startsWith('https://lh3.googleusercontent.com/') ||
+        url.startsWith('https://lh4.googleusercontent.com/') ||
+        url.startsWith('https://lh5.googleusercontent.com/') ||
+        url.startsWith('https://lh6.googleusercontent.com/')) {
+      return url.replace(/=s\d+-c$/, '');
+    }
+
+    return url;
+  };
+
+  // Resolved avatar — wybór wg activeProfileSource (z normalizacją URL)
+  const resolvedAvatarUrl = normalizeAvatarUrl((() => {
     // Custom ma priorytet gdy user explicite go wybrał i URL istnieje
     if (activeProfileSource === 'custom' && customProfilePicture) {
       return customProfilePicture;
@@ -890,14 +918,15 @@ const DemoView: React.FC<DemoViewProps> = ({
       || pageData?.profile_picture
       || undefined
     );
-  })();
+  })());
 
   // Resolved brand logo — fallback do pageData.author_logo_url (legacy public path)
-  const resolvedBrandLogoUrl =
+  const resolvedBrandLogoUrl = normalizeAvatarUrl(
     brandLogoUrl
     || pageData?.author_logo_url
     || pageData?.user?.authorLogoUrl
-    || undefined;
+    || undefined
+  );
 
   // Czy faktycznie pokazać avatar / logo / signature?
   // Avatar pokazany tylko gdy headerStyle === 'profile' AND mamy URL.
@@ -1272,7 +1301,7 @@ const DemoView: React.FC<DemoViewProps> = ({
               href={navCta.href}
               className="ml-2 px-4 py-2 rounded-full text-sm font-semibold transition-all"
               style={{
-                backgroundColor: theme.accent,
+                background: theme.ctaBg,
                 color: theme.ctaText,
                 boxShadow: theme.ctaShadow,
               }}
@@ -1494,7 +1523,7 @@ const DemoView: React.FC<DemoViewProps> = ({
             onClick={() => setMobileMenuOpen(false)}
             className="mt-8 px-6 py-3.5 rounded-full text-base font-semibold text-center transition-all"
             style={{
-              backgroundColor: theme.accent,
+              background: theme.ctaBg,
               color: theme.ctaText,
               boxShadow: theme.ctaShadow,
             }}
