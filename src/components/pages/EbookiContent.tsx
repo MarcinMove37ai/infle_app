@@ -2,7 +2,7 @@
 'use client';
 import { useRouter } from 'next/navigation';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { BookOpen, Plus, Edit, Download, Sparkles, Trash2, AlertCircle, RefreshCw, FileText, ImageIcon, X, Search, LayoutGrid } from 'lucide-react';
+import { BookOpen, Plus, Edit, Download, Sparkles, Trash2, AlertCircle, RefreshCw, FileText, ImageIcon, X, Search, LayoutGrid, Check } from 'lucide-react';
 import EbookGeneratorModal from '@/components/ebooks/EbookGeneratorModal';
 import { useEbooksSSE } from '@/hooks/useEbooksSSE';
 
@@ -107,6 +107,12 @@ const translations = {
     // Paginacja
     pageOf: 'Strona',
     of: 'z',
+
+    // Create spotlight
+    startHere: 'Zacznij tutaj',
+    startHereDesc: 'Stwórz swój pierwszy ebook w kilka minut. Poprowadzimy Cię krok po kroku, zaczynając od tytułów przygotowanych dla Ciebie.',
+    dontShowAgain: 'Nie pokazuj ponownie',
+    gotIt: 'Rozumiem',
   },
   en: {
     // Headers and buttons
@@ -173,6 +179,12 @@ const translations = {
     // Pagination
     pageOf: 'Page',
     of: 'of',
+
+    // Create spotlight
+    startHere: 'Start here',
+    startHereDesc: 'Create your first ebook in minutes. We will guide you the whole way, starting with titles made for you.',
+    dontShowAgain: "Don't show again",
+    gotIt: 'Got it',
   }
 };
 
@@ -268,8 +280,9 @@ export default function EbookiContent() {
     );
   };
 
-  const fetchAllEbooks = useCallback(async () => {
-    setLoading(true);
+  const fetchAllEbooks = useCallback(async (opts?: { silent?: boolean }) => {
+    const silent = opts?.silent === true;
+    if (!silent) setLoading(true);
     setLocalError(null);
     try {
       const response = await fetch(`/api/ebooks?limit=9999`);
@@ -279,9 +292,9 @@ export default function EbookiContent() {
       }
       setAllEbooks(data.ebooks || []);
     } catch (err) {
-      setLocalError(err instanceof Error ? err.message : 'An unknown error occurred');
+      if (!silent) setLocalError(err instanceof Error ? err.message : 'An unknown error occurred');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, []);
 
@@ -615,18 +628,83 @@ export default function EbookiContent() {
     }
   };
 
+  const [showCreateSpotlight, setShowCreateSpotlight] = useState(false);
+  // Tłumi spotlight tuż po zamknięciu kreatora — w tym oknie cichy refresh dolicza ewentualny
+  // nowy szkic/ebook, więc spotlight nie mignie zanim lista się zaktualizuje.
+  const suppressCreateSpotlight = useRef(false);
+  // Po zamknięciu kreatora pokazujemy natychmiast kartę-skeleton (placeholder), żeby strona
+  // nie była pusta zanim cichy refresh dociągnie prawdziwą kartę nowego ebooka.
+  const [showPostCloseSkeleton, setShowPostCloseSkeleton] = useState(false);
+
+  // Spotlight na "Create new e-book" — dla świeżego usera bez ebooków, jeśli nie wyłączył.
+  // Czekamy aż lista się załaduje (loading=false), żeby nie mignąć przed danymi.
+  // NIE pokazujemy, gdy modal kreatora jest otwarty (tam jest własny spotlight tytułów),
+  // ani w oknie tłumienia tuż po jego zamknięciu.
+  useEffect(() => {
+    if (loading || isGeneratorModalOpen || suppressCreateSpotlight.current) { setShowCreateSpotlight(false); return; }
+    let hidden = false;
+    try { hidden = localStorage.getItem('inflee_create_spotlight_hidden') === '1'; } catch {}
+    const cleanCount = allEbooks.filter((e) => e.title !== 'New Ebook (draft)').length;
+    if (!hidden && cleanCount === 0) {
+      const tmr = setTimeout(() => setShowCreateSpotlight(true), 250);
+      return () => clearTimeout(tmr);
+    }
+    setShowCreateSpotlight(false);
+  }, [loading, allEbooks, isGeneratorModalOpen]);
+
+  // Skeleton po zamknięciu kreatora znika dopiero, gdy w liście pojawi się realna karta
+  // (ciągłe przejście placeholder → karta). Bezpiecznik: jeśli po 3s nic nie wpadło
+  // (np. zamknięto pusty modal bez zapisu), też go chowamy, by nie wisiał w nieskończoność.
+  useEffect(() => {
+    if (!showPostCloseSkeleton) return;
+    if (displayedEbooks.length > 0) {
+      setShowPostCloseSkeleton(false);
+      return;
+    }
+    const safety = setTimeout(() => setShowPostCloseSkeleton(false), 3000);
+    return () => clearTimeout(safety);
+  }, [showPostCloseSkeleton, displayedEbooks.length]);
+
+  const dismissCreateSpotlight = () => setShowCreateSpotlight(false);
+  const [createSpotlightHidden, setCreateSpotlightHidden] = useState(false);
+  useEffect(() => {
+    try { setCreateSpotlightHidden(localStorage.getItem('inflee_create_spotlight_hidden') === '1'); } catch {}
+  }, []);
+  const toggleCreateSpotlightHidden = (checked: boolean) => {
+    setCreateSpotlightHidden(checked);
+    try {
+      if (checked) localStorage.setItem('inflee_create_spotlight_hidden', '1');
+      else localStorage.removeItem('inflee_create_spotlight_hidden');
+    } catch {}
+  };
+
   const handleOpenGenerator = () => {
+    setShowCreateSpotlight(false);
     setEditingEbookId(null);
     setIsGeneratorModalOpen(true);
   };
 
   const handleCloseGenerator = async () => {
+    suppressCreateSpotlight.current = true; // blokuj spotlight, póki lista się nie odświeży
+    setShowCreateSpotlight(false);
+    setShowPostCloseSkeleton(true); // natychmiast placeholder karty, by strona nie była pusta
     setIsGeneratorModalOpen(false);
-    await new Promise(resolve => setTimeout(resolve, 300));
-    fetchAllEbooks();
     setActiveFilter('all');
     setCurrentPage(1);
     setEditingEbookId(null);
+    // Auto-zapis szkicu w modalu jest fire-and-forget przy unmount — odświeżamy listę
+    // CICHO (bez spinnera), żeby dane podmieniły się płynnie bez migotania. Dwa przejścia:
+    // jedno po krótkiej chwili, drugie z zapasem, by na pewno złapać zapisany tytuł.
+    await new Promise(resolve => setTimeout(resolve, 400));
+    await fetchAllEbooks({ silent: true });
+    // NIE chowamy skeletonu tutaj — zrobi to useEffect, gdy realna karta pojawi się
+    // w displayedEbooks (ciągłość: placeholder ustępuje dopiero, gdy jest co pokazać).
+    setTimeout(() => {
+      fetchAllEbooks({ silent: true });
+      // Po odświeżeniu zdejmujemy tłumienie. Jeśli user faktycznie nie ma ebooków
+      // (nic nie stworzył), spotlight wróci po tym oknie — co jest pożądane.
+      setTimeout(() => { suppressCreateSpotlight.current = false; }, 200);
+    }, 700);
   };
 
   return (
@@ -723,13 +801,48 @@ export default function EbookiContent() {
             </button>
           )}
         </form>
-        <button
-          onClick={handleOpenGenerator}
-          className="w-full sm:w-auto flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium cursor-pointer"
-        >
-          <Plus size={16} className="mr-2" />
-          {translations[currentLang].createNewEbook}
-        </button>
+        <div className={`relative w-full sm:w-auto ${showCreateSpotlight ? 'z-[81]' : ''}`}>
+          <button
+            onClick={handleOpenGenerator}
+            className={`w-full sm:w-auto flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium cursor-pointer ${
+              showCreateSpotlight ? 'ring-4 ring-blue-400/50 shadow-lg' : ''
+            }`}
+          >
+            <Plus size={16} className="mr-2" />
+            {translations[currentLang].createNewEbook}
+          </button>
+
+          {showCreateSpotlight && !isGeneratorModalOpen && (
+            <div className="absolute right-0 top-full mt-3 w-80 max-w-[90vw] bg-white rounded-xl shadow-2xl p-4 z-[81]" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-start gap-3">
+                <span className="flex-shrink-0 w-8 h-8 rounded-md bg-indigo-100 flex items-center justify-center mt-0.5">
+                  <Sparkles size={16} className="text-indigo-600" />
+                </span>
+                <div>
+                  <div className="text-sm font-medium text-gray-900">{translations[currentLang].startHere}</div>
+                  <div className="text-[13px] text-gray-500 mt-0.5 leading-relaxed">{translations[currentLang].startHereDesc}</div>
+                </div>
+              </div>
+              <div className="border-t border-gray-200 mt-3 pt-2.5 flex items-center justify-between gap-3">
+                <label className="flex items-center gap-2 cursor-pointer text-[12px] text-gray-500 select-none">
+                  <input
+                    type="checkbox"
+                    checked={createSpotlightHidden}
+                    onChange={(e) => toggleCreateSpotlightHidden(e.target.checked)}
+                    className="w-4 h-4 cursor-pointer accent-blue-600"
+                  />
+                  {translations[currentLang].dontShowAgain}
+                </label>
+                <button
+                  onClick={dismissCreateSpotlight}
+                  className="inline-flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-[13px] font-medium px-4 py-2 rounded-lg cursor-pointer transition-colors"
+                >
+                  <Check size={14} /> {translations[currentLang].gotIt}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="bg-transparent sm:bg-white rounded-none sm:rounded-xl border-0 sm:border border-gray-200 overflow-hidden -mx-4 sm:mx-0">
@@ -747,7 +860,7 @@ export default function EbookiContent() {
 
         {loading ? (
             <div className="px-6 py-12 text-center"><RefreshCw size={48} className="mx-auto text-gray-300 mb-4 animate-spin" /><p className="text-gray-500">{translations[currentLang].loading}</p></div>
-        ) : displayedEbooks.length === 0 ? (
+        ) : displayedEbooks.length === 0 && !showPostCloseSkeleton ? (
             <div className="px-6 py-12 text-center">
               <BookOpen size={48} className="mx-auto text-gray-300 mb-4" />
               <h3 className="text-lg font-medium text-gray-900 mb-2">{searchTerm || activeFilter !== 'all' ? translations[currentLang].noEbooksFound : translations[currentLang].noEbooksYet}</h3>
@@ -755,6 +868,29 @@ export default function EbookiContent() {
             </div>
         ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-4">
+              {showPostCloseSkeleton && (
+                <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden flex flex-col animate-pulse">
+                  <div className="h-1.5 bg-gray-200"></div>
+                  <div className="p-4 flex flex-col flex-grow">
+                    <div className="flex gap-4">
+                      <div className="w-1/3 flex-shrink-0">
+                        <div className="w-full aspect-square bg-gray-100 rounded-md"></div>
+                      </div>
+                      <div className="w-2/3 flex flex-col gap-2">
+                        <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+                        <div className="h-3 bg-gray-100 rounded w-1/2"></div>
+                        <div className="h-5 bg-gray-100 rounded-full w-16 mt-1"></div>
+                        <div className="border-t border-gray-100 my-2"></div>
+                        <div className="h-3 bg-gray-100 rounded w-2/3"></div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="px-4 py-3 border-t border-gray-100 bg-gray-50/50 mt-auto flex justify-between">
+                    <div className="h-7 bg-gray-100 rounded w-16"></div>
+                    <div className="h-7 bg-gray-100 rounded w-16"></div>
+                  </div>
+                </div>
+              )}
               {displayedEbooks.map((ebook) => {
                 const isDeleting = deletingIds.has(ebook.id);
                 const isDownloading = downloadingIds.has(ebook.id);
@@ -900,7 +1036,11 @@ export default function EbookiContent() {
         )}
       </div>
 
-      <EbookGeneratorModal isOpen={isGeneratorModalOpen} onClose={handleCloseGenerator} onEbookCreated={handleEbookCreated} ebookId={editingEbookId}/>
+      {showCreateSpotlight && !isGeneratorModalOpen && (
+        <div className="fixed inset-0 z-[80] bg-[#0a0f1e]/72 backdrop-blur-sm" onClick={dismissCreateSpotlight} />
+      )}
+
+      <EbookGeneratorModal isOpen={isGeneratorModalOpen} onClose={handleCloseGenerator} onEbookCreated={handleEbookCreated} ebookId={editingEbookId} lang={currentLang}/>
 
       {showDeleteConfirm && ebookToDelete && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[70] p-4 backdrop-blur-sm">

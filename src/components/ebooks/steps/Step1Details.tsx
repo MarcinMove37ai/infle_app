@@ -1,8 +1,9 @@
 import React, { RefObject } from 'react';
 import {
-  X, Check, Loader, Save, Sparkles, ChevronRight, Upload
+  X, Check, Loader, Save, Sparkles, ChevronRight, Upload, Lightbulb, Gem
 } from 'lucide-react';
 import { ScrapedContent } from '../types';
+import { getChapterLimits } from '@/lib/chapterLimits';
 
 interface Step1DetailsProps {
   title: string;
@@ -30,10 +31,20 @@ interface Step1DetailsProps {
   generateTableOfContents: () => void;
   userRole: string | null;
   isInitializing: boolean;
+  seedSuggestions: { position: number; title: string; subtitle: string; description?: string }[];
+  onInspireMe: () => void;
   titleInputRef: RefObject<HTMLInputElement>;
   subtitleInputRef: RefObject<HTMLInputElement>;
   descriptionInputRef: RefObject<HTMLTextAreaElement>;
   pdfInputRef: RefObject<HTMLInputElement>;
+  highlightSources?: boolean;
+  sourcesRef?: RefObject<HTMLDivElement>;
+  onDismissHighlight?: () => void;
+  sourcesSpotlightHidden?: boolean;
+  toggleSourcesSpotlightHidden?: (checked: boolean) => void;
+  bounceGenerate?: boolean;
+  chapterCount: number;
+  setChapterCount: (value: number) => void;
 }
 
 export const Step1Details: React.FC<Step1DetailsProps> = ({
@@ -62,11 +73,30 @@ export const Step1Details: React.FC<Step1DetailsProps> = ({
   generateTableOfContents,
   userRole,
   isInitializing,
+  seedSuggestions,
+  onInspireMe,
   titleInputRef,
   subtitleInputRef,
   descriptionInputRef,
-  pdfInputRef
+  pdfInputRef,
+  highlightSources = false,
+  sourcesRef,
+  onDismissHighlight,
+  sourcesSpotlightHidden = false,
+  toggleSourcesSpotlightHidden,
+  bounceGenerate = false,
+  chapterCount,
+  setChapterCount,
 }) => {
+  // Limity rozdziałów — z tego samego źródła prawdy co route (getChapterLimits),
+  // na bazie tej samej roli co limit źródeł.
+  const chapterLimits = getChapterLimits(userRole);
+  // Pole jest "z inspiracji", gdy jego wartość dokładnie odpowiada którejś propozycji.
+  // Edycja (choćby jeden znak) zrywa równość → akcent znika sam, bez dodatkowego stanu.
+  const titleFromSeed = seedSuggestions.some((s) => s.title === title && title.trim() !== '');
+  const subtitleFromSeed = seedSuggestions.some((s) => s.subtitle === subtitle && subtitle.trim() !== '');
+  const descriptionFromSeed = seedSuggestions.some((s) => (s.description || '') === description && description.trim() !== '');
+
   // --- LOGIKA LIMITU ŹRÓDEŁ (Odtworzona z oryginału) ---
   const currentSourceCount = scrapedContent.length;
   let maxSources = Infinity;
@@ -84,7 +114,13 @@ export const Step1Details: React.FC<Step1DetailsProps> = ({
   const isAtSourceLimit = currentSourceCount >= maxSources;
 
   return (
-    <div className="sm:bg-white sm:rounded-xl sm:border sm:border-gray-200 sm:shadow-lg sm:overflow-hidden transition-all duration-300">
+    <div className="relative sm:bg-white sm:rounded-xl sm:border sm:border-gray-200 sm:shadow-lg sm:overflow-hidden transition-all duration-300">
+
+      {/* Ciemna nakładka spotlightu źródeł — fixed na cały ekran, identyczna z pierwszym spotlightem.
+          Sekcja źródeł jest renderowana ponad nią (z-[61]) i pozostaje ostra. */}
+      {highlightSources && (
+        <div className="fixed inset-0 z-[60] bg-[#0a0f1e]/75 backdrop-blur-sm transition-opacity duration-300" onClick={onDismissHighlight} />
+      )}
 
       {/* Header */}
       <div className="bg-gradient-to-r from-blue-500 to-blue-600 p-4 sm:p-6 text-white">
@@ -104,15 +140,36 @@ export const Step1Details: React.FC<Step1DetailsProps> = ({
 
           {/* Title Section */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Ebook Title *
-            </label>
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <label className="block text-sm font-medium text-gray-700">
+                  Ebook Title *
+                </label>
+                {titleFromSeed && (
+                  <span className="inline-flex items-center gap-1 text-[11px] text-indigo-600">
+                    <Gem size={11} /> Suggested
+                  </span>
+                )}
+              </div>
+              {seedSuggestions.length > 0 && !tocGenerated && (
+                <button
+                  type="button"
+                  onClick={onInspireMe}
+                  className="inline-flex items-center gap-1.5 bg-indigo-100 hover:bg-indigo-200 text-indigo-700 text-xs font-medium px-3 py-1.5 rounded-full cursor-pointer transition-colors"
+                >
+                  <Lightbulb size={14} />
+                  Inspire me
+                </button>
+              )}
+            </div>
             <input
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="E.g. The Complete Guide to Time Management"
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-700 bg-white transition-all duration-200"
+              className={`w-full px-4 py-3 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-700 transition-all duration-200 ${
+                titleFromSeed ? 'border border-indigo-300 bg-indigo-50/40' : 'border border-gray-300 bg-white'
+              }`}
               disabled={isGeneratingToc || isSaving || isScrapingUrls}
               ref={titleInputRef}
             />
@@ -120,16 +177,25 @@ export const Step1Details: React.FC<Step1DetailsProps> = ({
 
           {/* Subtitle Section */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Subtitle
-              <span className="text-gray-400 font-normal ml-1">(optional)</span>
-            </label>
+            <div className="flex items-center gap-2 mb-2">
+              <label className="block text-sm font-medium text-gray-700">
+                Subtitle
+                <span className="text-gray-400 font-normal ml-1">(optional)</span>
+              </label>
+              {subtitleFromSeed && (
+                <span className="inline-flex items-center gap-1 text-[11px] text-indigo-600">
+                  <Gem size={11} /> Suggested
+                </span>
+              )}
+            </div>
             <input
               type="text"
               value={subtitle}
               onChange={(e) => setSubtitle(e.target.value)}
               placeholder="E.g. Practical Methods and Tools"
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-700 bg-white transition-all duration-200"
+              className={`w-full px-4 py-3 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-700 transition-all duration-200 ${
+                subtitleFromSeed ? 'border border-indigo-300 bg-indigo-50/40' : 'border border-gray-300 bg-white'
+              }`}
               disabled={isGeneratingToc || isSaving || isScrapingUrls}
               ref={subtitleInputRef}
             />
@@ -137,15 +203,24 @@ export const Step1Details: React.FC<Step1DetailsProps> = ({
 
           {/* Description Section */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Description and guidelines
-              <span className="text-gray-400 font-normal ml-1">(optional)</span>
-            </label>
+            <div className="flex items-center gap-2 mb-2">
+              <label className="block text-sm font-medium text-gray-700">
+                Description and guidelines
+                <span className="text-gray-400 font-normal ml-1">(optional)</span>
+              </label>
+              {descriptionFromSeed && (
+                <span className="inline-flex items-center gap-1 text-[11px] text-indigo-600">
+                  <Gem size={11} /> Suggested
+                </span>
+              )}
+            </div>
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Describe the target audience, writing style, key topics to include..."
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-700 bg-white transition-all duration-200 resize-none"
+              className={`w-full px-4 py-3 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-700 transition-all duration-200 resize-none ${
+                descriptionFromSeed ? 'border border-indigo-300 bg-indigo-50/40' : 'border border-gray-300 bg-white'
+              }`}
               rows={4}
               disabled={isGeneratingToc || isSaving || isScrapingUrls}
               maxLength={1000}
@@ -157,7 +232,12 @@ export const Step1Details: React.FC<Step1DetailsProps> = ({
           </div>
 
           {/* Sources Section */}
-          <div className="text-gray-700">
+          <div
+            ref={sourcesRef}
+            className={`text-gray-700 transition-all duration-300 ${
+              highlightSources ? 'relative z-[61] rounded-xl border-2 border-indigo-500 p-4 ring-4 ring-indigo-500/15 bg-white' : ''
+            }`}
+          >
             <div className="flex justify-between items-center mb-3">
               <label className="text-sm font-medium text-gray-700">
                 WWW Sources
@@ -223,32 +303,59 @@ export const Step1Details: React.FC<Step1DetailsProps> = ({
               ))}
             </div>
 
-            <div className="border-t border-gray-200 pt-4 mt-4">
-              <label className="block text-sm font-medium text-gray-700 mb-3">
-                PDF Sources
-                <span className="text-gray-400 font-normal ml-1">(optional, max 10MB)</span>
-              </label>
-              <button
-                onClick={handleOpenPdfDialog}
-                disabled={
-                  isInitializing ||
-                  isGeneratingToc ||
-                  isSaving ||
-                  isScrapingUrls ||
-                  isScrapingSingleUrl ||
-                  isUploadingPdf ||
-                  isAtSourceLimit
-                }
-                title={isAtSourceLimit ? "You have reached the source limit for your plan" : "Choose PDF file"}
-                className="flex items-center px-4 py-2 border border-dashed border-gray-300 rounded-lg transition-colors bg-white text-gray-700 hover:bg-gray-50 disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
-              >
-                {isUploadingPdf ? (
-                  <><Loader size={16} className="animate-spin mr-2" /> Processing...</>
-                ) : (
-                  <><Upload size={16} className="mr-2" /> Choose PDF file</>
-                )}
-              </button>
-              <input type="file" ref={pdfInputRef} className="hidden" accept=".pdf,application/pdf" onChange={handlePdfUpload} />
+            <div className="border-t border-gray-200 pt-4 mt-4 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+              {/* PDF (lewa strona) */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-3">
+                  PDF Sources
+                  <span className="text-gray-400 font-normal ml-1">(optional, max 10MB)</span>
+                </label>
+                <button
+                  onClick={handleOpenPdfDialog}
+                  disabled={
+                    isInitializing ||
+                    isGeneratingToc ||
+                    isSaving ||
+                    isScrapingUrls ||
+                    isScrapingSingleUrl ||
+                    isUploadingPdf ||
+                    isAtSourceLimit
+                  }
+                  title={isAtSourceLimit ? "You have reached the source limit for your plan" : "Choose PDF file"}
+                  className="flex items-center px-4 py-2 border border-dashed border-gray-300 rounded-lg transition-colors bg-white text-gray-700 hover:bg-gray-50 cursor-pointer disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
+                >
+                  {isUploadingPdf ? (
+                    <><Loader size={16} className="animate-spin mr-2" /> Processing...</>
+                  ) : (
+                    <><Upload size={16} className="mr-2" /> Choose PDF file</>
+                  )}
+                </button>
+                <input type="file" ref={pdfInputRef} className="hidden" accept=".pdf,application/pdf" onChange={handlePdfUpload} />
+              </div>
+
+              {/* Liczba rozdziałów (prawa strona na desktop, kompaktowy suwak) */}
+              <div className="w-full sm:w-60 sm:flex-shrink-0">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-sm font-medium text-gray-700">Chapters</label>
+                  <span className="inline-flex items-center justify-center min-w-[26px] h-[22px] px-1.5 bg-indigo-50 text-indigo-600 text-xs font-semibold rounded-md">
+                    {chapterCount}
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min={chapterLimits.min}
+                  max={chapterLimits.max}
+                  step={1}
+                  value={chapterCount}
+                  onChange={(e) => setChapterCount(Number(e.target.value))}
+                  disabled={isGeneratingToc || isSaving || isScrapingUrls}
+                  className="w-full accent-indigo-600 cursor-pointer disabled:cursor-not-allowed"
+                />
+                <div className="flex items-center justify-between mt-1">
+                  <span className="text-[11px] text-gray-400">{chapterLimits.min}</span>
+                  <span className="text-[11px] text-gray-400">{chapterLimits.max}</span>
+                </div>
+              </div>
             </div>
 
             {scrapedContent.length > 0 && (
@@ -271,6 +378,48 @@ export const Step1Details: React.FC<Step1DetailsProps> = ({
                 </div>
               </div>
             )}
+
+            {highlightSources && (
+              <div className="mt-4 rounded-xl border border-gray-200 p-4 bg-white">
+                <div className="flex items-start gap-3">
+                  <span className="flex-shrink-0 w-8 h-8 rounded-md bg-indigo-100 flex items-center justify-center mt-0.5">
+                    <Lightbulb size={16} className="text-indigo-600" />
+                  </span>
+                  <div className="flex-1">
+                    <div className="text-sm font-medium text-gray-800">Optionally, add your own sources</div>
+                    <div className="text-[13px] text-gray-500 mt-0.5 leading-relaxed">
+                      Enrich the context with your materials and real examples, your website, a blog post, or a PDF from your knowledge base.
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={onDismissHighlight}
+                    aria-label="Dismiss"
+                    className="flex-shrink-0 p-1 text-gray-400 hover:text-gray-600 cursor-pointer"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+                <div className="border-t border-gray-200 mt-3 pt-2.5 flex items-center justify-between gap-3">
+                  <label className="flex items-center gap-2 cursor-pointer text-[13px] text-gray-500 select-none">
+                    <input
+                      type="checkbox"
+                      checked={sourcesSpotlightHidden}
+                      onChange={(e) => toggleSourcesSpotlightHidden?.(e.target.checked)}
+                      className="w-4 h-4 cursor-pointer accent-indigo-700"
+                    />
+                    Don&apos;t show this again
+                  </label>
+                  <button
+                    type="button"
+                    onClick={onDismissHighlight}
+                    className="inline-flex items-center gap-1.5 bg-indigo-700 hover:bg-indigo-800 text-white text-[13px] font-medium px-4 py-2 rounded-lg cursor-pointer transition-colors"
+                  >
+                    <Check size={14} /> Got it
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -280,7 +429,7 @@ export const Step1Details: React.FC<Step1DetailsProps> = ({
         <button
           onClick={handleSaveDraft}
           disabled={!title.trim() || isGeneratingToc || isSaving || isScrapingUrls || isSavingDraft}
-          className="w-full sm:w-auto flex items-center justify-center px-6 py-3 rounded-lg font-medium shadow-sm transition-all duration-200 bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 disabled:bg-gray-200 disabled:cursor-not-allowed"
+          className="w-full sm:w-auto flex items-center justify-center px-6 py-3 rounded-lg font-medium shadow-sm transition-all duration-200 bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 cursor-pointer disabled:bg-gray-200 disabled:cursor-not-allowed"
         >
           {isSavingDraft ? (
             <><Loader size={20} className="animate-spin mr-3" /> Saving...</>
@@ -291,7 +440,7 @@ export const Step1Details: React.FC<Step1DetailsProps> = ({
         <button
           onClick={tocGenerated ? () => changeStep(2) : generateTableOfContents}
           disabled={!title.trim() || isGeneratingToc || isSaving || isScrapingUrls}
-          className="w-full sm:w-auto flex items-center justify-center px-6 py-3 rounded-lg text-white font-medium shadow-md transition-all duration-200 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+          className={`w-full sm:w-auto flex items-center justify-center px-6 py-3 rounded-lg text-white font-medium shadow-md transition-all duration-200 bg-blue-600 hover:bg-blue-700 cursor-pointer disabled:bg-gray-400 disabled:cursor-not-allowed ${bounceGenerate ? 'animate-toc-bounce' : ''}`}
         >
           {isGeneratingToc ? (
             <><Loader size={20} className="animate-spin mr-3" /> Generating...</>
@@ -304,6 +453,20 @@ export const Step1Details: React.FC<Step1DetailsProps> = ({
           )}
         </button>
       </div>
+
+      <style jsx>{`
+        @keyframes tocBounce {
+          0%, 100% { transform: translateY(0); }
+          25% { transform: translateY(-8px); }
+          50% { transform: translateY(0); }
+          70% { transform: translateY(-4px); }
+          85% { transform: translateY(0); }
+        }
+        :global(.animate-toc-bounce) {
+          animation: tocBounce 0.9s ease-in-out;
+          box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.25);
+        }
+      `}</style>
     </div>
   );
 };

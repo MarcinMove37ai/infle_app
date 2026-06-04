@@ -81,6 +81,7 @@ model User {
   reels                 reels[]
   apiKeys               UserApiKey[]
   customDomains         CustomDomain[]
+  inviteCode            InviteCode?
   instagramProfile      InstagramProfileCheck?       @relation(fields: [instagramProfileId], references: [id])
   linkedinProfile       LinkedInProfileCheck?        @relation(fields: [linkedinProfileId], references: [id])
   primaryDomain         CustomDomain?                @relation("UserPrimaryDomain", fields: [primaryDomainId], references: [id], onDelete: SetNull)
@@ -494,4 +495,99 @@ enum SocialProfileType {
 enum AudioGender {
   MALE
   FEMALE
+}
+// ── System zaproszeń (invite-only) ───────────────────────────────────────────
+
+enum InviteCodeStatus {
+  issued    // wystawiony, jeszcze nieużyty i nieprzeterminowany
+  used      // zużyty przy rejestracji (usedByUserId wypełnione)
+  expired   // po 24h lub ręcznie wygaszony (ustawiane leniwie/cronem)
+}
+
+enum ApplicationStatus {
+  pending   // świeży wniosek z modala "Apply", czeka na decyzję
+  invited   // zaakceptowany, wystawiono kod (inviteCode wypełnione)
+  rejected  // odrzucony
+}
+
+// Wniosek z publicznego modala "Apply" (inbound). Po akceptacji wiążemy z kodem.
+model Application {
+  id         String            @id @default(cuid())
+  firstName  String
+  email      String
+  website    String?
+  instagram  String?
+  facebook   String?
+  youtube    String?
+  linkedin   String?
+  status     ApplicationStatus @default(pending)
+  reviewedAt DateTime?
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+  inviteCode InviteCode?       // wystawiony po akceptacji (1:1)
+
+  @@index([status])
+  @@index([email])
+  @@map("applications")
+}
+
+// Kod zaproszenia. Powstaje dwiema drogami:
+//   - inbound: z zaakceptowanego Application (applicationId wypełnione),
+//   - outbound: ręcznie pod leada z prospectora (recipientHandle + recipientNote).
+// Ważność = status == issued AND expiresAt > now(). Status 'expired' ustawiamy
+// leniwie/cronem — żywa walidacja zawsze sprawdza expiresAt niezależnie od statusu.
+model InviteCode {
+  id              String           @id @default(cuid())
+  code            String           @unique // krótki, URL-safe token do magic linku /r/{code}
+  status          InviteCodeStatus @default(issued)
+
+  recipientHandle String?          // np. "@xyz" — komu wysłaliśmy (gdy bez Application)
+  recipientNote   String?          // wewnętrzna notatka: kto to / z jakiego segmentu
+
+  expiresAt       DateTime         // = createdAt + 24h (liczone app-side przy tworzeniu)
+  clickedAt       DateTime?        // pierwszy raz, gdy ktoś otworzył link rejestracji z tym kodem (lejek: Clicked)
+  usedAt          DateTime?
+  usedByUserId    String?          @unique // user, który zużył kod (1:1)
+
+  applicationId   String?          @unique // źródłowy wniosek (gdy inbound)
+
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  seeds           InviteCodeSeed[]
+  usedBy          User?            @relation(fields: [usedByUserId], references: [id], onDelete: SetNull)
+  application     Application?     @relation(fields: [applicationId], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@index([expiresAt])
+  @@map("invite_codes")
+}
+
+// 3 propozycje tytuł + podtytuł przypięte do kodu (snapshot tego, co
+// zaproponowaliśmy). Przy rejestracji materializujemy je w `ebooks` jako drafty
+// usera — te wiersze zostają jako oryginał/audyt i nie są edytowane.
+model InviteCodeSeed {
+  id           String     @id @default(cuid())
+  inviteCodeId String
+  position     Int        // 1..3 — kolejność prezentacji
+  title        String     @db.VarChar(255)
+  subtitle     String
+  description  String?    @db.Text  // opis/wytyczne dla tego tytułu (opcjonalne, też generowane)
+  createdAt    DateTime   @default(now())
+  inviteCode   InviteCode @relation(fields: [inviteCodeId], references: [id], onDelete: Cascade)
+
+  @@unique([inviteCodeId, position])
+  @@index([inviteCodeId])
+  @@map("invite_code_seeds")
+}
+
+// Singleton ustawień aplikacji — JEDEN wiersz o stałym id "app".
+// Panel GOD edytuje, rejestracja czyta. Trwałe między restartami (w przeciwieństwie
+// do stanu w pamięci) i zmienialne bez redeployu (w przeciwieństwie do .env).
+model AppSetting {
+  id         String   @id @default("app") // zawsze "app" — wymuszamy jeden rekord
+  inviteOnly Boolean  @default(true)      // true = bez ważnego kodu nie ma rejestracji
+  updatedAt  DateTime @updatedAt
+
+  @@map("app_settings")
 }

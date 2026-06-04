@@ -16,6 +16,81 @@ function getResendClient() {
   return new Resend(apiKey);
 }
 
+// Szablon maila weryfikacyjnego — dwujęzyczny (EN/PL), bliźniaczy do maila resetu hasła.
+// Ciemny header z logo-gradientem, białe ciało, bez emoji, jeden box informacyjny.
+function buildVerificationEmail(opts: { firstName: string; verifyUrl: string; pl: boolean }) {
+  const { firstName, verifyUrl, pl } = opts;
+
+  const t = pl
+    ? {
+        subject: 'Potwierdź swój email - inflee.app',
+        tagline: 'Edukuj · Rośnij · Zarabiaj',
+        heading: 'Potwierdź swój adres email',
+        hi: `Cześć ${firstName},`,
+        intro: 'Dziękujemy za rejestrację w inflee.app. Aby aktywować konto i zacząć korzystać z platformy, potwierdź swój adres email klikając przycisk poniżej.',
+        button: 'Potwierdź email',
+        notice: 'Link jest ważny przez 24 godziny. Po weryfikacji będziesz mógł się zalogować. Jeśli to nie Ty zakładałeś konto, zignoruj tę wiadomość.',
+        trouble: 'Problem z przyciskiem? Wklej ten link do przeglądarki:',
+        footer: '© 2026 inflee.app · Masz pytania?',
+      }
+    : {
+        subject: 'Confirm your email - inflee.app',
+        tagline: 'Educate · Grow · Earn',
+        heading: 'Confirm your email address',
+        hi: `Hi ${firstName},`,
+        intro: 'Thanks for signing up for inflee.app. To activate your account and start using the platform, please confirm your email address by clicking the button below.',
+        button: 'Confirm email',
+        notice: 'This link is valid for 24 hours. Once verified, you will be able to log in. If you did not create an account, you can safely ignore this email.',
+        trouble: 'Trouble with the button? Paste this link into your browser:',
+        footer: '© 2026 inflee.app · Questions?',
+      };
+
+  const html = `<!DOCTYPE html>
+<html lang="${pl ? 'pl' : 'en'}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${t.subject}</title>
+</head>
+<body style="margin:0; padding:0; background-color:#f3f3f6; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Oxygen,Ubuntu,Cantarell,sans-serif; color:#1a1a1f;">
+  <div style="padding:24px 12px;">
+    <div style="max-width:520px; margin:0 auto; background-color:#ffffff; border-radius:14px; overflow:hidden; border:1px solid #e8e8ec;">
+
+      <div style="background-color:#0A0A0A; padding:28px 32px; text-align:center;">
+        <span style="font-size:22px; font-weight:700; background:linear-gradient(135deg,#A855F7,#6366F1); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; color:#A855F7;">inflee.app</span>
+        <div style="font-size:11px; letter-spacing:0.08em; text-transform:uppercase; color:#8a8a93; margin-top:4px;">${t.tagline}</div>
+      </div>
+
+      <div style="padding:32px;">
+        <h1 style="margin:0 0 16px; font-size:20px; font-weight:600; color:#1a1a1f;">${t.heading}</h1>
+
+        <p style="margin:0 0 14px; font-size:15px; line-height:1.65; color:#4a4a55;">${t.hi}</p>
+        <p style="margin:0 0 24px; font-size:15px; line-height:1.65; color:#4a4a55;">${t.intro}</p>
+
+        <div style="text-align:center; margin:28px 0;">
+          <a href="${verifyUrl}" style="display:inline-block; background:linear-gradient(135deg,#9333ea,#4f46e5); color:#ffffff; text-decoration:none; padding:13px 36px; border-radius:10px; font-size:15px; font-weight:600;">${t.button}</a>
+        </div>
+
+        <div style="background-color:#f7f7fa; border-radius:10px; padding:14px 16px; margin:24px 0;">
+          <p style="margin:0; font-size:13px; line-height:1.6; color:#6a6a76;">${t.notice}</p>
+        </div>
+
+        <p style="margin:24px 0 6px; font-size:12px; color:#9a9aa5;">${t.trouble}</p>
+        <p style="margin:0; font-size:11px; color:#9a9aa5; word-break:break-all; font-family:'SF Mono',Monaco,'Cascadia Code',monospace;">${verifyUrl}</p>
+      </div>
+
+      <div style="padding:20px 32px; background-color:#fafafb; border-top:1px solid #eeeef2; text-align:center;">
+        <p style="margin:0; font-size:12px; color:#9a9aa5;">${t.footer} <a href="mailto:support@inflee.app" style="color:#6366F1; text-decoration:none;">support@inflee.app</a></p>
+      </div>
+
+    </div>
+  </div>
+</body>
+</html>`;
+
+  return { subject: t.subject, html };
+}
+
 export async function POST(request: Request) {
   // DEBUG - sprawdź zmienne środowiskowe w API route
   console.log('=== API ROUTE ENVIRONMENT CHECK ===');
@@ -31,7 +106,8 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const { firstName, lastName, email, phone, socialLink, password, profilePicture, checkedProfileId } = body;
+    const { firstName, lastName, email, phone, socialLink, password, profilePicture, checkedProfileId, inviteCode, lang } = body;
+    const pl = lang === 'pl';
 
     console.log('📝 Registration request received:', {
       firstName,
@@ -67,6 +143,35 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { error: 'Użytkownik z tym emailem już istnieje' },
         { status: 400 }
+      );
+    }
+
+    // ── Bramka invite-only (flaga sterowana z panelu GOD) ──────────────────────
+    // Czytamy singleton ustawień. Brak rekordu → traktujemy jak inviteOnly:true
+    // (domyślnie zamknięte = bezpiecznie). Gdy włączone, wymagamy PRAWIDŁOWEGO kodu.
+    const appSetting = await prisma.appSetting.findUnique({ where: { id: 'app' } });
+    const inviteOnly = appSetting?.inviteOnly ?? true;
+
+    // Walidujemy kod zawsze, gdy został podany — żeby móc go skonsumować i powiązać
+    // seedy nawet, gdyby invite-only było chwilowo wyłączone.
+    let validInvite: { id: string; applicationId: string | null } | null = null;
+    if (inviteCode) {
+      const invite = await prisma.inviteCode.findUnique({
+        where: { code: inviteCode },
+        select: { id: true, status: true, usedByUserId: true, applicationId: true },
+      });
+      const isUsable =
+        invite && invite.status === 'issued' && invite.usedByUserId === null;
+      if (isUsable) {
+        validInvite = { id: invite!.id, applicationId: invite!.applicationId };
+      }
+    }
+
+    // Twarda blokada: gdy invite-only włączone, bez ważnego kodu nie ma rejestracji.
+    if (inviteOnly && !validInvite) {
+      return NextResponse.json(
+        { error: 'Rejestracja wymaga ważnego kodu zaproszenia.' },
+        { status: 403 }
       );
     }
 
@@ -109,24 +214,50 @@ export async function POST(request: Request) {
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
     const defaultLogoUrl = `${baseUrl}/api/assets/uploads/logo_inflee.webp`;
 
-    // Utworzenie użytkownika z tokenem weryfikacyjnym, domyślnym logo i powiązaniem profilu
-    const user = await prisma.user.create({
-      data: {
-        firstName,
-        lastName,
-        email: email.toLowerCase().trim(),
-        phone: phone?.trim() || null,
-        socialLink: socialLink?.trim() || null,
-        profilePicture: profilePicture?.trim() || null,
-        password: hashedPassword,
-        verificationToken,
-        // NOWE POLA - powiązanie z profilem społecznościowym
-        instagramProfileId,
-        linkedinProfileId,
-        socialProfileType,
-        // Domyślne logo dla nowego użytkownika
-        authorLogoUrl: defaultLogoUrl,
+    // Utworzenie użytkownika + konsumpcja kodu ATOMOWO. Jeśli powiązanie kodu
+    // zawiedzie, cała transakcja się cofa (nie zostaje user bez kodu ani odwrotnie).
+    const user = await prisma.$transaction(async (tx) => {
+      const created = await tx.user.create({
+        data: {
+          firstName,
+          lastName,
+          email: email.toLowerCase().trim(),
+          phone: phone?.trim() || null,
+          socialLink: socialLink?.trim() || null,
+          profilePicture: profilePicture?.trim() || null,
+          password: hashedPassword,
+          verificationToken,
+          // NOWE POLA - powiązanie z profilem społecznościowym
+          instagramProfileId,
+          linkedinProfileId,
+          socialProfileType,
+          // Domyślne logo dla nowego użytkownika
+          authorLogoUrl: defaultLogoUrl,
+        },
+      });
+
+      // Konsumpcja kodu: wiążemy z userem, oznaczamy used. Warunek w `where`
+      // (status issued + niezużyty) chroni przed race — gdyby ktoś użył kodu
+      // równolegle, update nie złapie żadnego wiersza i poniżej to wykryjemy.
+      if (validInvite) {
+        const consumed = await tx.inviteCode.updateMany({
+          where: { id: validInvite.id, status: 'issued', usedByUserId: null },
+          data: { status: 'used', usedByUserId: created.id, usedAt: new Date() },
+        });
+        if (consumed.count === 0) {
+          // Kod zniknął/został użyty między walidacją a tu — cofamy wszystko.
+          throw new Error('INVITE_CONSUMED_RACE');
+        }
+        // Jeśli kod pochodził z wniosku — flip na 'invited'.
+        if (validInvite.applicationId) {
+          await tx.application.update({
+            where: { id: validInvite.applicationId },
+            data: { status: 'invited' },
+          });
+        }
       }
+
+      return created;
     });
 
     console.log('✅ User created successfully:', {
@@ -142,71 +273,17 @@ export async function POST(request: Request) {
       // Inicjalizuj Resend dopiero tutaj
       const resend = getResendClient();
 
+      const verifyUrl = `${process.env.NEXTAUTH_URL}/verify/${verificationToken}?lang=${pl ? 'pl' : 'en'}`;
+      const { subject, html } = buildVerificationEmail({
+        firstName: user.firstName,
+        verifyUrl,
+        pl,
+      });
       await resend.emails.send({
         from: 'inflee.app <noreply@inflee.app>',
         to: [user.email],
-        subject: 'Potwierdź swój email - inflee.app',
-        html: `
-          <!DOCTYPE html>
-          <html>
-          <head>
-            <meta charset="utf-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Potwierdź swój email - inflee.app</title>
-          </head>
-          <body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif; background-color: #f7fafc; color: #2d3748;">
-            <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff;">
-
-              <!-- Content -->
-              <div style="padding: 32px;">
-                <h2 style="margin: 0 0 16px 0; font-size: 20px; font-weight: 600; color: #1a202c;">Witaj ${user.firstName}! 👋</h2>
-
-                <p style="margin: 0 0 16px 0; color: #4a5568; line-height: 1.6; font-size: 16px;">
-                  Dziękujemy za rejestrację w <a href="${process.env.NEXTAUTH_URL}" style="color: #3b82f6; text-decoration: none; font-weight: 600;">inflee.app</a>! Aby rozpocząć korzystanie z platformy, potwierdź swój adres email.
-                </p>
-
-                <!-- Email Highlight Box -->
-                <div style="background-color: #f0f9ff; border: 1px solid #7dd3fc; border-radius: 12px; padding: 16px; margin: 24px 0; text-align: center;">
-                  <p style="margin: 0 0 8px 0; color: #0c4a6e; font-size: 14px; font-weight: 600;">📧 Weryfikujemy adres email:</p>
-                  <div style="background-color: #ffffff; border: 1px solid #3b82f6; border-radius: 8px; padding: 12px; margin: 8px 0;">
-                    <span style="font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace; color: #1e40af; font-weight: 600; font-size: 16px;">${user.email}</span>
-                  </div>
-                </div>
-
-                <!-- Verification Button -->
-                <div style="margin: 32px 0; text-align: center;">
-                  <a href="${process.env.NEXTAUTH_URL}/verify/${verificationToken}"
-                     style="display: inline-block; background: linear-gradient(135deg, #9333ea 0%, #3b82f6 100%); color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 12px; font-weight: 600; font-size: 14px; box-shadow: 0 4px 14px rgba(147, 51, 234, 0.25); transition: all 0.2s ease;">
-                    Potwierdź email
-                  </a>
-                </div>
-
-                <!-- Info Box -->
-                <div style="background-color: #f7fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; margin: 24px 0;">
-                  <p style="margin: 0; color: #4a5568; font-size: 14px; line-height: 1.5;">
-                    <span style="font-weight: 600;">📧 Ważne informacje:</span><br>
-                    • Link jest ważny przez 24 godziny<br>
-                    • Jeśli nie rejestrowałeś się, zignoruj ten email<br>
-                    • Po weryfikacji będziesz mógł się zalogować
-                  </p>
-                </div>
-
-                <!-- Alternative Link -->
-                <div style="margin-top: 24px; padding: 16px; background-color: #f8fafc; border-radius: 8px;">
-                  <p style="margin: 0 0 8px 0; color: #64748b; font-size: 12px; font-weight: 500;">Problemy z przyciskiem? Skopiuj link:</p>
-                  <p style="margin: 0; font-size: 11px; color: #64748b; word-break: break-all; font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;">${process.env.NEXTAUTH_URL}/verify/${verificationToken}</p>
-                </div>
-              </div>
-
-              <!-- Footer -->
-              <div style="padding: 24px 32px; background-color: #f8fafc; text-align: center; border-radius: 0 0 12px 12px;">
-                <p style="margin: 0; color: #64748b; font-size: 12px;">© 2025 inflee.app • Platforma edukacyjna</p>
-              </div>
-
-            </div>
-          </body>
-          </html>
-        `
+        subject,
+        html,
       });
       console.log('✅ Verification email sent successfully');
     } catch (emailError) {

@@ -22,17 +22,24 @@ export default function LoginForm() {
   const forgotPasswordHref = lang ? `/forgot-password?lang=${lang}` : '/forgot-password';
   const logoHref = lang === 'en' ? 'https://inflee.app/en' : (lang === 'pl' ? 'https://inflee.app/pl' : 'https://inflee.app');
 
-  // ✅ Automatyczne wykrywanie języka przy wejściu bez parametru
+  // ✅ Ustalenie języka przy wejściu bez parametru.
+  // Hierarchia: ?lang= (URL) → appLanguage (świadomy wybór z localStorage) → język przeglądarki → 'en'.
+  // appLanguage MA pierwszeństwo przed detekcją przeglądarki — polska przeglądarka nie nadpisze
+  // świadomie wybranego angielskiego (celujemy w rynek EN, zero wycieku PL).
   useEffect(() => {
     if (!lang && typeof window !== 'undefined') {
-      // Wykryj język przeglądarki
-      const browserLang = navigator.language.split('-')[0]; // np. 'pl-PL' -> 'pl'
-
-      // Jeśli polski -> ustaw pl, w przeciwnym razie -> en
-      const detectedLang = browserLang === 'pl' ? 'pl' : 'en';
-
-      // Przekieruj z parametrem języka
-      router.replace(`/login?lang=${detectedLang}`);
+      let resolved: 'en' | 'pl' = 'en';
+      try {
+        const saved = localStorage.getItem('appLanguage');
+        if (saved === 'en' || saved === 'pl') {
+          resolved = saved;
+        } else {
+          resolved = navigator.language.split('-')[0] === 'pl' ? 'pl' : 'en';
+        }
+      } catch {
+        resolved = navigator.language.split('-')[0] === 'pl' ? 'pl' : 'en';
+      }
+      router.replace(`/login?lang=${resolved}`);
     }
   }, [lang, router]);
 
@@ -79,6 +86,8 @@ export default function LoginForm() {
   // ✅ Logika logowania przez Google
   const handleGoogleSignIn = () => {
     localStorage.setItem('appLanguage', lang || 'en');
+    // Ślad "ten user ma konto" — żeby /register pokazał mu "masz już konto".
+    try { localStorage.setItem('inflee_has_account', '1'); } catch {}
     signIn('google', { callbackUrl: `/ebooks?lang=${lang || 'en'}` });
   };
 
@@ -110,6 +119,7 @@ export default function LoginForm() {
         // lang będzie zawsze ustawiony dzięki useEffect, ale na wszelki wypadek:
         const languageToSave = lang || 'en';
         localStorage.setItem('appLanguage', languageToSave);
+        try { localStorage.setItem('inflee_has_account', '1'); } catch {}
 
         // Sukces - przekierowujemy na ebooki z parametrem języka
         window.location.href = `/ebooks?lang=${languageToSave}`;

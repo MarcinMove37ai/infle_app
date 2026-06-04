@@ -4,10 +4,11 @@
 import React, { useState, useRef, useEffect } from 'react';
 import SourcePreviewModal from '@/components/ebooks/SourcePreviewModal';
 import { useAuth } from '@/hooks/useAuth';
-import { X, AlertCircle } from 'lucide-react';
+import { X, AlertCircle, ArrowRight, RefreshCw } from 'lucide-react';
 
 // Import typów
 import { TocItem, ScrapedContent, EbookCoverData, EbookGeneratorModalProps } from './types';
+import { getChapterLimits } from '@/lib/chapterLimits';
 
 // Import kroków
 import { Step1Details } from './steps/Step1Details';
@@ -23,7 +24,7 @@ import {
   ImagePreviewModal
 } from './common/PreviewModals';
 
-export default function EbookGeneratorModal({ isOpen, onClose, onEbookCreated, ebookId }: EbookGeneratorModalProps) {
+export default function EbookGeneratorModal({ isOpen, onClose, onEbookCreated, ebookId, lang = 'en' }: EbookGeneratorModalProps & { lang?: string }) {
   const modalContentRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -54,7 +55,7 @@ export default function EbookGeneratorModal({ isOpen, onClose, onEbookCreated, e
           <h2 className="text-lg sm:text-xl font-semibold text-gray-800">Create your ebook with AI</h2>
           <button
             onClick={onClose}
-            className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+            className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
           >
             <X size={20} />
           </button>
@@ -64,14 +65,15 @@ export default function EbookGeneratorModal({ isOpen, onClose, onEbookCreated, e
           id="modal-scroll-container"
           className="overflow-y-auto h-[calc(100%-80px)] sm:h-[calc(95vh-80px)] scrollbar-hide"
         >
-          <EbookGeneratorContent isOpen={isOpen} ebookId={ebookId} onEbookCreated={onEbookCreated} onClose={onClose} />
+          <EbookGeneratorContent isOpen={isOpen} ebookId={ebookId} onEbookCreated={onEbookCreated} onClose={onClose} lang={lang} />
         </div>
       </div>
     </div>
   );
 }
 
-function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { isOpen: boolean, ebookId?: number | null, onEbookCreated?: () => void, onClose: () => void }) {
+function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose, lang = 'en' }: { isOpen: boolean, ebookId?: number | null, onEbookCreated?: () => void, onClose: () => void, lang?: string }) {
+  const pl = lang === 'pl';
   const { userRole } = useAuth();
   const [isSavingDraft, setIsSavingDraft] = useState(false);
   const draftSavedByUser = useRef(false);
@@ -103,6 +105,9 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
   const [step, setStep] = useState(1);
   const [title, setTitle] = useState('');
   const [subtitle, setSubtitle] = useState('');
+  // Liczba rozdziałów do wygenerowania — domyślnie max dla roli (zero regresji).
+  // Slider w Step1Details ogranicza zakres, route i tak klampuje server-side.
+  const [chapterCount, setChapterCount] = useState(() => getChapterLimits(userRole).default);
   const [isGeneratingToc, setIsGeneratingToc] = useState(false);
   const [tocItems, setTocItems] = useState<TocItem[]>([]);
   const [newItemTitle, setNewItemTitle] = useState('');
@@ -163,6 +168,146 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
 
   // NEW STATE for Intro
   const [introContent, setIntroContent] = useState('');
+
+  // Seedy z zaproszenia (3 propozycje tytułów) — spotlight na kroku 1 dla NOWEGO ebooka.
+  const [seedSuggestions, setSeedSuggestions] = useState<{ position: number; title: string; subtitle: string; description?: string }[]>([]);
+  const [showSeedSpotlight, setShowSeedSpotlight] = useState(false);
+  const [seedSpotlightDismissed, setSeedSpotlightDismissed] = useState(false);
+  const [seedsLoading, setSeedsLoading] = useState(false);
+
+  // Spotlight pojawia się NATYCHMIAST przy otwarciu (nowy ebook, jeśli user nie wyłączył),
+  // a seedy doładowują się w tle ze skeletonem. Eliminuje dysonans "najpierw formularz, potem nakładka".
+  // Brak seedów po załadowaniu → cicho zamykamy. Cache `inflee_has_seeds` chroni userów bez seedów
+  // przed migotaniem nakładki przy kolejnych otwarciach.
+  useEffect(() => {
+    if (!isOpen || ebookId) return; // tylko nowy ebook
+    let hidden = false;
+    let knownNoSeeds = false;
+    try {
+      hidden = localStorage.getItem('inflee_seed_spotlight_hidden') === '1';
+      knownNoSeeds = localStorage.getItem('inflee_has_seeds') === '0';
+    } catch {}
+    let cancelled = false;
+    if (!hidden && !knownNoSeeds) {
+      setShowSeedSpotlight(true);
+      setSeedsLoading(true);
+    }
+    (async () => {
+      try {
+        const res = await fetch('/api/my-seeds', { credentials: 'same-origin' });
+        const data = await res.json();
+        if (cancelled) return;
+        const seeds = Array.isArray(data.seeds) ? data.seeds : [];
+        setSeedSuggestions(seeds);
+        setSeedsLoading(false);
+        try { localStorage.setItem('inflee_has_seeds', seeds.length > 0 ? '1' : '0'); } catch {}
+        if (seeds.length === 0) setShowSeedSpotlight(false); // nie ma czego pokazać
+      } catch {
+        if (cancelled) return;
+        setSeedSuggestions([]);
+        setSeedsLoading(false);
+        setShowSeedSpotlight(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [isOpen, ebookId]);
+
+  // Checkbox "show on start" — odbicie stanu z localStorage (domyślnie zaznaczony).
+  const [seedShowOnStart, setSeedShowOnStart] = useState(true);
+  useEffect(() => {
+    try { setSeedShowOnStart(localStorage.getItem('inflee_seed_spotlight_hidden') !== '1'); } catch {}
+  }, []);
+  const toggleSeedShowOnStart = (checked: boolean) => {
+    setSeedShowOnStart(checked);
+    try {
+      if (checked) localStorage.removeItem('inflee_seed_spotlight_hidden');
+      else localStorage.setItem('inflee_seed_spotlight_hidden', '1');
+    } catch {}
+  };
+
+  // "Inspire me" — ręczne przywołanie spotlightu (zawsze, niezależnie od preferencji).
+  const openSeedSpotlight = () => setShowSeedSpotlight(true);
+
+  // Gdy rola usera się ustali (useAuth bywa null na 1. renderze), dociągnij domyślną
+  // liczbę rozdziałów do limitu roli — żeby slider startował od poprawnej wartości max.
+  useEffect(() => {
+    setChapterCount(getChapterLimits(userRole).default);
+  }, [userRole]);
+
+  // Spotlight źródeł — wyróżnienie sekcji źródeł po wyborze seeda (gdy brak źródeł i niewyłączony).
+  const [showSourcesHighlight, setShowSourcesHighlight] = useState(false);
+  const sourcesRef = useRef<HTMLDivElement>(null);
+  const [sourcesSpotlightHidden, setSourcesSpotlightHidden] = useState(false);
+  useEffect(() => {
+    try { setSourcesSpotlightHidden(localStorage.getItem('inflee_sources_spotlight_hidden') === '1'); } catch {}
+  }, []);
+  const toggleSourcesSpotlightHidden = (checked: boolean) => {
+    setSourcesSpotlightHidden(checked);
+    try {
+      if (checked) localStorage.setItem('inflee_sources_spotlight_hidden', '1');
+      else localStorage.removeItem('inflee_sources_spotlight_hidden');
+    } catch {}
+  };
+  const [bounceGenerate, setBounceGenerate] = useState(false);
+  const triggerGenerateBounce = () => {
+    setBounceGenerate(true);
+    setTimeout(() => setBounceGenerate(false), 1200);
+  };
+  const dismissSourcesHighlight = () => {
+    setShowSourcesHighlight(false);
+    triggerGenerateBounce();
+    setTimeout(() => {
+      const sc = document.getElementById('modal-scroll-container');
+      if (sc) sc.scrollTo({ top: sc.scrollHeight, behavior: 'smooth' });
+    }, 80);
+  };
+  // Gdy user doda źródło przy aktywnym wyróżnieniu — chowamy je (cel osiągnięty) i robimy bounce.
+  useEffect(() => {
+    if (showSourcesHighlight && scrapedContent.length > 0) {
+      setShowSourcesHighlight(false);
+      triggerGenerateBounce();
+    }
+  }, [scrapedContent.length, showSourcesHighlight]);
+
+  const handlePickSeed = (seedTitle: string, seedSubtitle: string, seedDescription?: string) => {
+    setTitle(seedTitle);
+    setSubtitle(seedSubtitle);
+    if (seedDescription && seedDescription.trim()) setDescription(seedDescription);
+    setShowSeedSpotlight(false);
+    setSeedSpotlightDismissed(true);
+
+    // Po wyborze seeda: jeśli user nie ma jeszcze źródeł i nie wyłączył podpowiedzi,
+    // wyróżnij sekcję źródeł (reszta przygasa) i przewiń do niej. Inaczej zwykły scroll na dół.
+    let hidden = false;
+    try { hidden = localStorage.getItem('inflee_sources_spotlight_hidden') === '1'; } catch {}
+    const shouldHighlight = scrapedContent.length === 0 && !hidden;
+    if (shouldHighlight) setShowSourcesHighlight(true);
+    // Dociągamy scroll na sam dół — sekcja źródeł i CTA są na końcu formularza.
+    // Dwa podejścia czasowe: raz szybko, raz po zamontowaniu nakładki (pewność dojścia do końca).
+    const scrollDown = () => {
+      const sc = document.getElementById('modal-scroll-container');
+      if (sc) sc.scrollTo({ top: sc.scrollHeight, behavior: 'smooth' });
+    };
+    setTimeout(scrollDown, 180);
+    setTimeout(scrollDown, 420);
+  };
+
+  const dismissSeedSpotlight = () => {
+    setShowSeedSpotlight(false);
+    setSeedSpotlightDismissed(true);
+  };
+
+  // "Write my own" — zamyka spotlight i czyści pola, ALE tylko jeśli ich wartość
+  // pochodzi z propozycji (nie kasujemy tekstu, który user wpisał samodzielnie).
+  const handleWriteMyOwn = () => {
+    if (seedSuggestions.some((s) => s.title === title)) setTitle('');
+    if (seedSuggestions.some((s) => s.subtitle === subtitle)) setSubtitle('');
+    if (seedSuggestions.some((s) => (s.description || '') === description && description !== '')) setDescription('');
+    setShowSeedSpotlight(false);
+    setSeedSpotlightDismissed(true);
+    // Fokus na pole tytułu, gotowe do pisania.
+    setTimeout(() => { titleInputRef.current?.focus(); }, 120);
+  };
 
   // Element references
   const pdfInputRef = useRef<HTMLInputElement>(null);
@@ -273,6 +418,7 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
           const chapters = data.chapters as TocItem[];
           setTocItems(chapters);
           setTocGenerated(true);
+          setChapterCount(chapters.length); // suwak = faktyczna liczba rozdziałów wczytanego ebooka
 
           const hasContent = chapters.some(ch => ch.content && ch.content.trim() !== '');
           if (hasContent) {
@@ -313,7 +459,7 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
                 method: 'POST',
                 headers: getUserHeaders(),
                 body: JSON.stringify({
-                    title: "Nowy Ebook (roboczy)",
+                    title: "New Ebook (draft)",
                     status: "draft",
                 }),
             });
@@ -363,7 +509,8 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
       subtitle,
       description,
       scrapedContent,
-      tocGenerated
+      tocGenerated,
+      userHeaders: getUserHeaders()
     };
   });
 
@@ -371,17 +518,34 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
     return () => {
       const state = cleanupStateRef.current;
       if (state.isNewEbookSession && !state.wasSuccessfullyCompleted && state.currentEbookId) {
-        const isDefaultTitle = !state.title || state.title === "Nowy Ebook (roboczy)";
+        const isDefaultTitle = !state.title || state.title === "New Ebook (draft)";
         const hasNoMeaningfulData = !state.subtitle && !state.description && state.scrapedContent.length === 0;
         const tocWasNotGenerated = !state.tocGenerated;
 
         if (isDefaultTitle && hasNoMeaningfulData && tocWasNotGenerated) {
+          // Pusty/domyślny szkic bez danych → usuń (zachowanie jak dotąd).
           console.log(`🗑️ Usuwanie nieużywanego szkicu ebooka (ID: ${state.currentEbookId})...`);
           fetch(`/api/ebooks/${state.currentEbookId}`, {
             method: 'DELETE',
             headers: { 'Content-Type': 'application/json' },
           }).catch(err => {
             console.error("Błąd podczas usuwania nieużywanego szkicu ebooka:", err);
+          });
+        } else if (!isDefaultTitle && !state.draftSavedByUser && !state.tocGenerated) {
+          // Sensowny tytuł (np. wybrany z propozycji), ale user nie kliknął "Save & Close"
+          // i nie wygenerował spisu treści → AUTO-ZAPIS, żeby szkic trafił na listę z tytułem.
+          console.log(`💾 Auto-zapis szkicu przy zamknięciu (ID: ${state.currentEbookId})...`);
+          fetch(`/api/ebooks/${state.currentEbookId}`, {
+            method: 'PUT',
+            headers: state.userHeaders,
+            body: JSON.stringify({
+              title: state.title,
+              subtitle: state.subtitle?.trim() || null,
+              description: state.description?.trim() || null,
+              status: 'draft',
+            }),
+          }).catch(err => {
+            console.error("Błąd podczas auto-zapisu szkicu ebooka:", err);
           });
         }
       }
@@ -477,13 +641,15 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
       const hasDescriptionChanged = description !== originalDescription;
       const hasUrlsChanged = JSON.stringify(urlInputs) !== JSON.stringify(originalUrlInputs);
       const hasSourcesChanged = !areSourcesEqual(scrapedContent, originalScrapedContent);
+      const hasChapterCountChanged = chapterCount !== tocItems.length;
 
       if (newStep === 2 && step === 1 && tocGenerated &&
           (title !== originalTitle ||
           subtitle !== originalSubtitle ||
           hasDescriptionChanged ||
           hasUrlsChanged ||
-          hasSourcesChanged)) {
+          hasSourcesChanged ||
+          hasChapterCountChanged)) {
         setShowRegeneratePopup(true);
       }
       else if (newStep === 3) {
@@ -1059,7 +1225,8 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
           title,
           subtitle: subtitle.trim() || undefined,
           description: description.trim() || undefined,
-          scrapedContent: scrapedContent
+          scrapedContent: scrapedContent,
+          chapterCount
         }),
       });
 
@@ -1081,6 +1248,7 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
       if (data.tocItems && Array.isArray(data.tocItems)) {
         setTocItems(data.tocItems);
         setTocGenerated(true);
+        setChapterCount(data.tocItems.length); // suwak = faktyczna liczba (brak fałszywego "zmieniono")
         setOriginalTitle(title);
         setOriginalSubtitle(subtitle);
         setOriginalDescription(description);
@@ -2264,10 +2432,20 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
           generateTableOfContents={generateTableOfContents}
           userRole={userRole}
           isInitializing={isInitializing}
+          seedSuggestions={seedSuggestions}
+          onInspireMe={openSeedSpotlight}
           titleInputRef={titleInputRef}
           subtitleInputRef={subtitleInputRef}
           descriptionInputRef={descriptionInputRef}
           pdfInputRef={pdfInputRef}
+          highlightSources={showSourcesHighlight}
+          sourcesRef={sourcesRef}
+          onDismissHighlight={dismissSourcesHighlight}
+          sourcesSpotlightHidden={sourcesSpotlightHidden}
+          toggleSourcesSpotlightHidden={toggleSourcesSpotlightHidden}
+          bounceGenerate={bounceGenerate}
+          chapterCount={chapterCount}
+          setChapterCount={setChapterCount}
         />
       )}
 
@@ -2450,6 +2628,107 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose }: { i
           to { opacity: 1; transform: translateY(0); }
         }
       `}</style>
+
+      {/* Spotlight propozycji tytułów — nakładka na CAŁY modal, panel wyśrodkowany */}
+      {showSeedSpotlight && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-[#0a0f1e]/75 backdrop-blur-sm animate-fadeIn">
+          <div className="relative w-full max-w-lg bg-white rounded-2xl shadow-2xl overflow-hidden">
+            <button
+              type="button"
+              onClick={dismissSeedSpotlight}
+              aria-label="Close"
+              className="absolute top-3.5 right-3.5 z-10 w-7 h-7 rounded-full bg-white/15 hover:bg-white/25 cursor-pointer flex items-center justify-center text-white transition-colors"
+            >
+              <X size={16} />
+            </button>
+
+            {/* Nagłówek akcentowy */}
+            <div className="bg-indigo-700 px-6 pt-6 pb-5">
+              <div className="inline-flex items-center gap-1.5 bg-white/15 px-2.5 py-1 rounded-full mb-3">
+                <span className="w-1.5 h-1.5 rounded-full bg-green-400" />
+                <span className="text-[11px] font-medium uppercase tracking-wider text-white">
+                  {pl ? 'Zgodnie z obietnicą' : 'As promised'}
+                </span>
+              </div>
+              <h3 className="text-xl font-semibold text-white leading-snug">
+                {pl
+                  ? 'Przyjrzeliśmy się temu, co robisz, i stworzyliśmy mocne tytuły na start z inflee.app'
+                  : 'We looked at your work and crafted strong titles to help you start with inflee.app'}
+              </h3>
+              <p className="text-sm text-white/80 mt-2.5 leading-relaxed">
+                {pl
+                  ? 'Każdy z nich łączy Twoją wiedzę z tym, czego naprawdę pragną Twoi idealni klienci. Wybierz jeden, aby maksymalizować konwersję i zacząć zbierać wartościowe leady.'
+                  : 'Each one connects your expertise with what your perfect clients actually want. Pick one to maximize conversion and start collecting valuable leads.'}
+              </p>
+            </div>
+
+            {/* Karty */}
+            <div className="px-6 pt-5 pb-6">
+              <div className="space-y-2.5">
+                {seedsLoading ? (
+                  [0, 1, 2].map((i) => (
+                    <div key={i} className="rounded-xl border border-gray-200 bg-white p-3.5 animate-pulse">
+                      <div className="h-4 bg-gray-200 rounded w-3/4 mb-2" />
+                      <div className="h-3 bg-gray-100 rounded w-1/2" />
+                    </div>
+                  ))
+                ) : (
+                  seedSuggestions.map((seed) => (
+                    <button
+                      key={seed.position}
+                      type="button"
+                      onClick={() => handlePickSeed(seed.title, seed.subtitle, seed.description)}
+                      className="group w-full text-left rounded-xl border border-gray-200 bg-white p-3.5 hover:border-indigo-400 hover:bg-indigo-50/40 transition-all cursor-pointer flex items-center justify-between gap-3"
+                    >
+                      <span className="flex-1">
+                        <span className="block text-[15px] font-semibold text-gray-800 leading-snug">{seed.title}</span>
+                        <span className="block text-xs text-gray-500 mt-0.5 leading-snug">{seed.subtitle}</span>
+                      </span>
+                      <span className="flex-shrink-0 w-8 h-8 rounded-full bg-indigo-100 group-hover:bg-indigo-600 flex items-center justify-center transition-colors">
+                        <ArrowRight size={15} className="text-indigo-600 group-hover:text-white transition-colors" />
+                      </span>
+                    </button>
+                  ))
+                )}
+              </div>
+
+              {!seedsLoading && (
+                <>
+                  <div className="flex items-center justify-between gap-3 mt-4 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => { /* placeholder — logika z generatorem później */ }}
+                      className="inline-flex items-center gap-1.5 border border-gray-300 hover:bg-gray-50 px-3 py-1.5 rounded-lg cursor-pointer text-[13px] text-gray-700 transition-colors"
+                    >
+                      <RefreshCw size={14} />
+                      Generate a new set
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleWriteMyOwn}
+                      className="text-[13px] text-gray-500 hover:text-gray-700 cursor-pointer transition-colors"
+                    >
+                      or write my own
+                    </button>
+                  </div>
+
+                  <div className="border-t border-gray-200 mt-4 pt-3.5">
+                    <label className="flex items-center gap-2 cursor-pointer text-[13px] text-gray-500 select-none">
+                      <input
+                        type="checkbox"
+                        checked={seedShowOnStart}
+                        onChange={(e) => toggleSeedShowOnStart(e.target.checked)}
+                        className="w-4 h-4 cursor-pointer accent-indigo-700"
+                      />
+                      Show this when I start a new ebook
+                    </label>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

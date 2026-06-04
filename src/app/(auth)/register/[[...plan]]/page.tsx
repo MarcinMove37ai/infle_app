@@ -5,10 +5,11 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
-import { Check, Sparkles } from 'lucide-react';
+import { Check, Sparkles, X } from 'lucide-react';
 import { LazyMotion, domAnimation, m as motion } from "framer-motion";
 import { trackHybridEvent } from '@/lib/fbPixel';
-import { signIn } from 'next-auth/react';
+import { signIn, useSession } from 'next-auth/react';
+import ApplyPanel from '../ApplyPanel';
 
 interface InstagramProfileResponse {
   profilepic_url: string | null;
@@ -46,10 +47,35 @@ export default function RegisterPage({
   // Stan dla asynchronicznego params
   const [planSlug, setPlanSlug] = useState<string | null>(null);
 
-  // Zmienne URL (źródło ruchu)
-  const lang = searchParams.get('lang') || 'pl';
+  // Zmienne URL (źródło ruchu).
+  // Język: brak ?lang= NIE defaultuje już na 'pl'. Resolve (URL → appLanguage → przeglądarka → 'en')
+  // robi useEffect niżej i przekierowuje z ?lang=, zachowując wszystkie parametry (invite, source, ref, plan).
+  // Do czasu redirectu używamy 'en' jako bezpiecznego fallbacku (rynek EN, zero wycieku PL).
+  const langParam = searchParams.get('lang');
+  const lang = langParam || 'en';
   const source = searchParams.get('source') || 'direct';
   const refParam = searchParams.get('ref') || null;
+
+  // Ustalenie języka przy wejściu bez parametru (spójnie z login/forgot/reset).
+  // Zachowujemy ścieżkę (plan slug) i wszystkie istniejące query params — zwłaszcza invite/source/ref.
+  useEffect(() => {
+    if (!langParam && typeof window !== 'undefined') {
+      let resolved: 'en' | 'pl' = 'en';
+      try {
+        const saved = localStorage.getItem('appLanguage');
+        if (saved === 'en' || saved === 'pl') {
+          resolved = saved;
+        } else {
+          resolved = navigator.language.split('-')[0] === 'pl' ? 'pl' : 'en';
+        }
+      } catch {
+        resolved = navigator.language.split('-')[0] === 'pl' ? 'pl' : 'en';
+      }
+      const sp = new URLSearchParams(Array.from(searchParams.entries()));
+      sp.set('lang', resolved);
+      router.replace(`${window.location.pathname}?${sp.toString()}`);
+    }
+  }, [langParam, searchParams, router]);
 
   // 🔥 TRACKING: PageView przy wejściu (Raz na montowanie)
   const isTracked = useRef(false);
@@ -130,6 +156,76 @@ const heroItemVariants = {
   const [showSocialProfile, setShowSocialProfile] = useState(false);
 
   const [checkedProfileId, setCheckedProfileId] = useState<string | null>(null);
+
+  // ── Welcome modal dla zaproszonych (wejście z ?invite={code}) ──────────────
+  // Dociągamy seedy z /api/invite/{code}. Kod prawidłowy → modal z powitaniem
+  // i 3 tytułami. Brak/nieprawidłowy kod → modalu nie ma, zwykła rejestracja.
+  const inviteCode = searchParams.get('invite');
+  const [inviteSeeds, setInviteSeeds] = useState<{ position: number; title: string; subtitle: string }[]>([]);
+  const [showWelcomeModal, setShowWelcomeModal] = useState(false);
+
+  // Bramka invite-only:
+  //   'checking' — kod jest w URL, czekamy na walidację (nie pokazujemy nic rozstrzygającego)
+  //   'invited'  — kod prawidłowy → formularz rejestracji + welcome modal
+  //   'no_access'— brak kodu lub kod nieprawidłowy → Apply modal, brak formularza
+  // 'already_known' — wracający user (sesja → redirect /ebooks; albo ślad → modal "masz konto")
+  const [accessState, setAccessState] = useState<'checking' | 'invited' | 'no_access' | 'already_known'>(
+    inviteCode ? 'checking' : 'no_access',
+  );
+
+  const { status: sessionStatus } = useSession();
+  const googleDenied = searchParams.get('denied') === 'google';
+
+  // Zalogowany → nie pokazujemy rejestracji, kierujemy do aplikacji.
+  useEffect(() => {
+    if (sessionStatus === 'authenticated') {
+      window.location.href = `/ebooks?lang=${lang || 'en'}`;
+    }
+  }, [sessionStatus, lang]);
+
+  useEffect(() => {
+    // Odrzucony Google ma trafić na Apply nawet jeśli przeglądarka go "zna".
+    if (googleDenied) {
+      setAccessState('no_access');
+      return;
+    }
+    // Niezalogowany, ale znany (ślad po wcześniejszym logowaniu) → modal "masz już konto".
+    try {
+      if (localStorage.getItem('inflee_has_account') === '1') {
+        setAccessState('already_known');
+        return;
+      }
+    } catch {}
+    if (!inviteCode) {
+      setAccessState('no_access');
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/invite/${encodeURIComponent(inviteCode)}`);
+        const data = await res.json();
+        if (cancelled) return;
+        if (data?.valid && Array.isArray(data.seeds) && data.seeds.length > 0) {
+          setInviteSeeds(data.seeds);
+          setShowWelcomeModal(true);
+          setAccessState('invited');
+        } else if (data?.valid) {
+          // Kod ważny, ale bez seedów (np. furtka /move37th) — wpuszczamy na
+          // formularz BEZ welcome modalu. Nie ma czego podsuwać.
+          setAccessState('invited');
+        } else {
+          // kod jest, ale nieprawidłowy/zużyty → traktujemy jak brak dostępu
+          setAccessState('no_access');
+        }
+      } catch {
+        if (!cancelled) setAccessState('no_access');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [inviteCode]);
 
   const formatNumber = (num: number | null): string => {
     if (num === null) return 'N/A';
@@ -273,6 +369,11 @@ const heroItemVariants = {
 
   const handleGoogleSignUp = () => {
     localStorage.setItem('appLanguage', lang || 'en');
+    // Przenosimy kod przez przelot OAuth w krótkim cookie (10 min) — callback
+    // signIn w auth.ts odczyta go, zwaliduje i skonsumuje. Bez kodu cookie nie ma.
+    if (inviteCode) {
+      document.cookie = `invite_code=${encodeURIComponent(inviteCode)}; path=/; max-age=600; samesite=lax`;
+    }
     signIn('google', { callbackUrl: `/ebooks?lang=${lang || 'en'}` });
   };
 
@@ -322,8 +423,10 @@ const heroItemVariants = {
           profilePicture: socialProfile?.profilepic_url || null,
           password: formData.password,
           checkedProfileId: checkedProfileId,
+          inviteCode: inviteCode,
           termsAccepted: formData.termsAccepted,
           marketingConsent: formData.marketingConsent,
+          lang: lang || 'en',
         }),
       });
 
@@ -349,6 +452,7 @@ const heroItemVariants = {
             lastName: formData.lastName
         });
 
+        try { localStorage.setItem('inflee_has_account', '1'); } catch {}
         setRegistrationSuccess(true);
         window.location.hash = 'sukces';
       } else {
@@ -417,6 +521,10 @@ const heroItemVariants = {
             /* Usunięto: max-height, scrollbar-width, scrollbar-color */
           }
           /* Usunięto style ::-webkit-scrollbar */
+
+          /* Ukryty scrollbar (welcome modal) — Chrome/Safari/Firefox */
+          .no-scrollbar::-webkit-scrollbar { display: none; }
+          .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         `}</style>
 
         <header className="fixed top-0 left-0 right-0 z-50 bg-black/30 backdrop-blur-md border-b border-white/10 h-20">
@@ -449,6 +557,116 @@ const heroItemVariants = {
             </Link>
           </div>
         </header>
+
+        {/* Welcome modal — zaproszony user z prawidłowym kodem */}
+        {showWelcomeModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="fixed inset-0 z-[60] flex items-center justify-center p-3 sm:p-4 bg-black/70 backdrop-blur-sm"
+          >
+            <motion.div
+              initial={{ scale: 0.97, opacity: 0, y: 10 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              transition={{ type: 'spring', stiffness: 220, damping: 22 }}
+              className="relative w-full max-w-lg bg-[#0F0F0F] border border-white/10 rounded-2xl shadow-2xl flex flex-col max-h-[calc(100dvh-1.5rem)] sm:max-h-[88dvh] overflow-hidden"
+            >
+              {/* Header — stały, nie scrolluje */}
+              <div className="flex-shrink-0 flex items-start justify-between gap-3 px-5 pt-5 sm:px-7 sm:pt-7">
+                <div>
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <Sparkles className="w-4 h-4 text-purple-400" />
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-purple-400">
+                      {lang === 'pl' ? 'Dostęp specjalny' : 'Special access'}
+                    </span>
+                  </div>
+                  <h2 className="text-xl sm:text-2xl font-bold text-white leading-tight">
+                    {lang === 'pl'
+                      ? 'Otrzymałeś dostęp do inflee.app'
+                      : 'You’ve been granted access to inflee.app'}
+                  </h2>
+                </div>
+                <button
+                  onClick={() => setShowWelcomeModal(false)}
+                  aria-label={lang === 'pl' ? 'Zamknij' : 'Close'}
+                  className="flex-shrink-0 -mr-1 -mt-1 p-1 text-slate-400 hover:text-white transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Treść — jedyna część, która się przewija; scrollbar ukryty */}
+              <div className="no-scrollbar flex-1 overflow-y-auto px-5 sm:px-7 mt-3">
+                <p className="text-sm leading-relaxed text-slate-300">
+                  {lang === 'pl'
+                    ? 'Wraz z darmowym okresem próbnym. Przeanalizowaliśmy Twój profil oraz Twoich odbiorców i — aby zmaksymalizować konwersję i skuteczność — przygotowaliśmy następujące tytuły ebooków:'
+                    : 'Along with a free trial. We analyzed your profile and your audience and — to maximize conversion and impact — prepared the following ebook titles for you:'}
+                </p>
+
+                <div className="mt-4 space-y-2.5">
+                  {inviteSeeds.map((seed) => (
+                    <div
+                      key={seed.position}
+                      className="rounded-xl border border-white/10 bg-white/5 p-3.5"
+                    >
+                      <p className="font-semibold text-white text-sm leading-snug">{seed.title}</p>
+                      <p className="mt-0.5 text-xs text-slate-400 leading-snug">{seed.subtitle}</p>
+                    </div>
+                  ))}
+                </div>
+
+                <p className="mt-4 text-sm leading-relaxed text-slate-300">
+                  {lang === 'pl'
+                    ? 'Nie musisz ich zapamiętywać — czekają na Ciebie jako gotowa opcja przy tworzeniu nowego ebooka. Zamknij to okno, zarejestruj się i zacznij zbierać wartościowe leady jeszcze dziś.'
+                    : 'No need to remember them — they’ll be waiting for you as a ready option when you create a new ebook. Close this window, sign up, and start collecting valuable leads today.'}
+                </p>
+
+                <div className="mt-4 mb-1 rounded-lg bg-amber-500/10 border border-amber-500/20 px-3.5 py-2.5">
+                  <p className="text-xs font-medium text-amber-300">
+                    {lang === 'pl'
+                      ? 'Dokończ rejestrację w ciągu 5 minut od tego komunikatu.'
+                      : 'Please complete your registration within 5 minutes of this message.'}
+                  </p>
+                </div>
+              </div>
+
+              {/* CTA — przyklejony do dołu, poza obszarem scrolla */}
+              <div className="flex-shrink-0 px-5 pb-4 pt-3 sm:px-7 sm:pb-5">
+                <button
+                  onClick={() => setShowWelcomeModal(false)}
+                  className="w-full py-3 px-6 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-semibold rounded-xl hover:opacity-90 transition-all shadow-lg"
+                >
+                  {lang === 'pl' ? 'Zamknij i zarejestruj się' : 'Close and sign up'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {/* Apply modal — wejście BEZ prawidłowego kodu (invite-only). Tłem jest register. */}
+        {accessState === 'no_access' && <ApplyPanel lang={lang} />}
+
+        {/* Modal "masz już konto" — wracający user (ślad w przeglądarce). */}
+        {accessState === 'already_known' && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+            <div className="w-full max-w-md bg-[#0F0F0F] border border-white/10 rounded-2xl shadow-2xl p-7 text-center">
+              <h2 className="text-2xl font-bold text-white">
+                {lang === 'pl' ? 'Masz już konto' : 'You already have an account'}
+              </h2>
+              <p className="mt-3 text-sm leading-relaxed text-slate-300">
+                {lang === 'pl'
+                  ? 'Wygląda na to, że logowałeś się tu wcześniej. Zaloguj się, aby kontynuować.'
+                  : 'Looks like you’ve signed in here before. Log in to continue.'}
+              </p>
+              <a
+                href={`/login?lang=${lang || 'en'}`}
+                className="mt-6 inline-block w-full py-3 px-6 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-semibold rounded-xl hover:opacity-90 transition-all shadow-lg"
+              >
+                {lang === 'pl' ? 'Zaloguj się' : 'Log in'}
+              </a>
+            </div>
+          </div>
+        )}
 
         {/* ✅ ZMIANA 2: Zmiana struktury <main> na 'relative', 'min-h-screen' i 'flex' */}
         <main className="pt-20 min-h-screen relative flex flex-col justify-center">
@@ -522,7 +740,12 @@ const heroItemVariants = {
                   transition={{ duration: 0.6, delay: 0.3 }}
                   className="w-full max-w-md py-0 lg:p-0"
                 >
-                  {registrationSuccess ? (
+                  {accessState !== 'invited' ? (
+                    // Brak prawidłowego kodu → żadnego formularza (invite-only).
+                    // Apply modal renderujemy osobno, nad stroną (patrz niżej).
+                    // Dla 'checking' nie pokazujemy nic, by formularz nie mignął.
+                    null
+                  ) : registrationSuccess ? (
                   <div className="bg-black/40 border border-white/10 backdrop-blur-sm rounded-2xl p-8 w-full">
                     <div className="text-center space-y-6">
                       <motion.div

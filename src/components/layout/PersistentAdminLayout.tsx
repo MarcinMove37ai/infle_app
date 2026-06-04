@@ -90,6 +90,7 @@ const translations = {
     ebooks: 'Ebooki',
     landingPages: 'Strony Pobierania',
     leads: 'Kontakty',
+    users: 'Users',
     statistics: 'Statystyki',
     files: 'Pliki',
     settings: 'Ustawienia',
@@ -107,6 +108,7 @@ const translations = {
     ebooks: 'Ebooks',
     landingPages: 'Landing Pages',
     leads: 'Leads',
+    users: 'Users',
     statistics: 'Statistics',
     files: 'Files',
     settings: 'Settings',
@@ -656,7 +658,7 @@ const getMenuItems = (lang: 'pl' | 'en'): MenuItem[] => [
     IconComponent: Home,
     label: translations[lang].dashboard,
     path: '/dashboard',
-    roles: ['ADMIN', 'USER', 'GOD', 'payd'],
+    roles: ['ADMIN', 'USER', 'payd'],
     requiredStatus: ['active'],
     fullWidth: true
   },
@@ -664,24 +666,8 @@ const getMenuItems = (lang: 'pl' | 'en'): MenuItem[] => [
     IconComponent: Users,
     label: translations[lang].creatorReport,
     path: '/raport-tworcy',
-    roles: ['ADMIN', 'GOD'],
+    roles: ['ADMIN'],
     requiredStatus: ['active']
-  },
-  {
-    IconComponent: InstagramIcon,
-    label: translations[lang].instagramApp,
-    path: '/instagram_app',
-    roles: ['ADMIN', 'USER', 'GOD'],
-    requiredStatus: ['active'],
-    iconType: 'instagram'
-  },
-  {
-    IconComponent: LinkedInIcon,
-    label: translations[lang].linkedinApp,
-    path: '/linkedin_app',
-    roles: ['ADMIN', 'USER', 'GOD'],
-    requiredStatus: ['active'],
-    iconType: 'linkedin'
   },
   {
     IconComponent: BookOpen,
@@ -708,7 +694,7 @@ const getMenuItems = (lang: 'pl' | 'en'): MenuItem[] => [
     IconComponent: BarChart3,
     label: translations[lang].statistics,
     path: '/statystyki',
-    roles: ['ADMIN', 'USER', 'GOD'],
+    roles: ['ADMIN', 'USER'],
     requiredStatus: ['active']
   },
   {
@@ -719,10 +705,17 @@ const getMenuItems = (lang: 'pl' | 'en'): MenuItem[] => [
     requiredStatus: ['active']
   },
   {
+    IconComponent: Users,
+    label: translations[lang].users,
+    path: '/prospecting',
+    roles: ['GOD'],
+    requiredStatus: ['active']
+  },
+  {
     IconComponent: Settings,
     label: translations[lang].settings,
     path: '/settings',
-    roles: ['ADMIN', 'USER', 'GOD','free', 'rookie', 'creator', 'unlimited', 'free_ver', 'demo'],
+    roles: ['ADMIN', 'USER', 'GOD', 'free', 'rookie', 'creator', 'unlimited', 'free_ver', 'demo'],
     requiredStatus: ['active']
   }
 ];

@@ -3,6 +3,7 @@ import CredentialsProvider from 'next-auth/providers/credentials';
 import GoogleProvider from 'next-auth/providers/google';
 import { prisma } from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
+import { cookies } from 'next/headers';
 
 // Rozszerzenie typów NextAuth
 declare module 'next-auth' {
@@ -242,24 +243,70 @@ export const authOptions: NextAuthOptions = {
             return true;
           }
 
-          // 3. Nowy user → auto-rejestracja
+          // 3. Nowy user → rejestracja TYLKO z ważnym kodem (invite-only).
+          // Kod przyjechał z frontu w cookie 'invite_code' (przeżywa redirect OAuth).
+          const cookieStore = await cookies();
+          const inviteCode = cookieStore.get('invite_code')?.value || null;
+
+          // Flaga inviteOnly (singleton). Brak rekordu → traktujemy jak true.
+          const appSetting = await prisma.appSetting.findUnique({ where: { id: 'app' } });
+          const inviteOnly = appSetting?.inviteOnly ?? true;
+
+          // Walidacja kodu (istnieje, issued, niezużyty).
+          let validInvite: { id: string; applicationId: string | null } | null = null;
+          if (inviteCode) {
+            const invite = await prisma.inviteCode.findUnique({
+              where: { code: inviteCode },
+              select: { id: true, status: true, usedByUserId: true, applicationId: true },
+            });
+            if (invite && invite.status === 'issued' && invite.usedByUserId === null) {
+              validInvite = { id: invite.id, applicationId: invite.applicationId };
+            }
+          }
+
+          // Bez ważnego kodu (gdy invite-only) → ODRZUCAMY i kierujemy na Apply.
+          // Zwrócenie URL-a z callbacku signIn = NextAuth zrobi redirect tam.
+          if (inviteOnly && !validInvite) {
+            return '/register?denied=google';
+          }
+
+          // Tworzymy usera + konsumujemy kod atomowo.
           const nameParts = (user.name || '').split(' ');
           const firstName = nameParts[0] || 'User';
           const lastName = nameParts.slice(1).join(' ') || '';
 
-          await prisma.user.create({
-            data: {
-              email,
-              firstName,
-              lastName,
-              password: null,
-              googleId,
-              authProvider: 'google',
-              emailVerified: new Date(),
-              profilePicture: user.image || null,
-              role: 'free',
-            },
+          await prisma.$transaction(async (tx) => {
+            const created = await tx.user.create({
+              data: {
+                email,
+                firstName,
+                lastName,
+                password: null,
+                googleId,
+                authProvider: 'google',
+                emailVerified: new Date(),
+                profilePicture: user.image || null,
+                role: 'free',
+              },
+            });
+
+            if (validInvite) {
+              const consumed = await tx.inviteCode.updateMany({
+                where: { id: validInvite.id, status: 'issued', usedByUserId: null },
+                data: { status: 'used', usedByUserId: created.id, usedAt: new Date() },
+              });
+              if (consumed.count === 0) throw new Error('INVITE_CONSUMED_RACE');
+              if (validInvite.applicationId) {
+                await tx.application.update({
+                  where: { id: validInvite.applicationId },
+                  data: { status: 'invited' },
+                });
+              }
+            }
           });
+
+          // Sprzątamy cookie po konsumpcji (jednorazowe).
+          cookieStore.delete('invite_code');
 
           return true;
         } catch (error) {

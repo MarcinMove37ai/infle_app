@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { NextResponse } from 'next/server';
 import { getApiKeyForEndpoint, getUserAiSettings } from '@/lib/user-api-keys';
+import { getChapterLimits } from '@/lib/chapterLimits';
 
 // Jawna definicja runtime
 export const runtime = 'nodejs';
@@ -41,7 +42,7 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const { title, subtitle, description, scrapedContent } = body;
+    const { title, subtitle, description, scrapedContent, chapterCount } = body;
 
     if (!title || title.trim() === '') {
       return NextResponse.json(
@@ -121,17 +122,17 @@ export async function POST(request: Request) {
       return `\n\n=== PREFERENCJE UŻYTKOWNIKA ===\n${userDescription.trim()}\n\n=== INSTRUKCJE DLA PREFERENCJI ===\n• Uwzględnij powyższe preferencje przy generowaniu struktury spisu treści\n• Dostosuj poziom szczegółowości do grupy docelowej\n• Zachowaj spójność ze stylem pisania preferowanym przez użytkownika\n• Priorytetyzuj tematy wskazane przez użytkownika\n\n`;
     };
 
-    let maxChapters = 15; // Domyślna wartość (dla Unlimited/God)
-    let minChapters = 10;
+    // Limity rozdziałów per rola — JEDNO źródło prawdy (współdzielone z frontem).
     const role = userRole.toLowerCase();
+    const { min: minChapters, max: maxChapters } = getChapterLimits(role);
 
-    if (role === 'free' || role === 'free_ver' || role === 'rookie') {
-      maxChapters = 6;
-      minChapters = 4;
-    } else if (role === 'creator') {
-      maxChapters = 12;
-      minChapters = 8;
-    }
+    // Liczba rozdziałów wskazana przez użytkownika (step 1), przycięta TWARDO do limitów
+    // jego roli — egzekwujemy server-side, nie do obejścia z frontu. Brak/niepoprawna
+    // wartość → domyślnie maksimum (zachowanie jak dotychczas, bez regresji).
+    const requestedCount = Number(chapterCount);
+    const targetChapters = Number.isFinite(requestedCount)
+      ? Math.max(minChapters, Math.min(maxChapters, Math.round(requestedCount)))
+      : maxChapters;
 
     // Przygotowanie rozszerzonego promptu
     let prompt = `Wygeneruj spis treści do e-booka o tytule: "${title}"`;
@@ -154,7 +155,7 @@ export async function POST(request: Request) {
 
     // Dodaj podstawowe instrukcje generowania
     prompt += `=== WYMAGANIA SPISU TREŚCI ===\n`;
-    prompt += `• Spis powinien zawierać optymalnie ${maxChapters} rozdziałów (minimum ${minChapters}, maksimum ${maxChapters}).\n`;
+    prompt += `• Spis treści musi zawierać DOKŁADNIE ${targetChapters} rozdziałów — nie mniej i nie więcej. To wymaganie jest bezwzględne.\n`;
     prompt += `• Rozdziały powinny być logicznie uporządkowane i tworzyć spójną całość\n`;
     prompt += `• Każdy rozdział powinien mieć konkretny, praktyczny cel\n`;
 
@@ -173,7 +174,7 @@ export async function POST(request: Request) {
 
     // Instrukcje formatowania
     prompt += `\n=== FORMAT ODPOWIEDZI ===\n`;
-    prompt += `Format odpowiedzi: lista w formacie JSON, gdzie każdy element ma strukturę { "title": "Tytuł rozdziału" }.\n`;
+    prompt += `Format odpowiedzi: lista w formacie JSON zawierająca DOKŁADNIE ${targetChapters} elementów, gdzie każdy element ma strukturę { "title": "Tytuł rozdziału" }.\n`;
     prompt += `Odpowiedź MUSI być tylko w formie JSON, bez dodatkowego tekstu.\n`;
     prompt += `Nie używaj w nazwach rozdziałów żadnej formy ich numerowania takich jak "rozdział 1: ..."\n`;
     prompt += `Tytuły rozdziałów powinny być konkretne i wartościowe dla czytelnika.\n\n`;
@@ -204,8 +205,9 @@ export async function POST(request: Request) {
       subtitle: subtitle || 'brak',
       hasDescription: !!description,
       sourcesCount: scrapedContent?.length || 0,
-      userRole: role, // <-- DODANY LOG
+      userRole: role,
       chapterLimit: `${minChapters}-${maxChapters}`,
+      targetChapters,
       promptLength: prompt.length,
       model: modelToUse,
       keySource: keySource
@@ -274,7 +276,7 @@ export async function POST(request: Request) {
 
       console.log('Wyciągnięto JSON:', jsonContent.substring(0, 200) + '...');
 
-      const tocItems = JSON.parse(jsonContent);
+      let tocItems = JSON.parse(jsonContent);
 
       // Walidacja struktury
       if (!Array.isArray(tocItems)) {
@@ -288,13 +290,20 @@ export async function POST(request: Request) {
         }
       }
 
+      // Zabezpieczenie końcowe: gdyby model zwrócił inną liczbę niż żądana, docinamy nadmiar.
+      // (Nie dorabiamy brakujących — lepiej mniej niż wymyślone wypełniacze.)
+      if (tocItems.length > targetChapters) {
+        console.warn(`⚠️ Model zwrócił ${tocItems.length} rozdziałów, przycinam do ${targetChapters}`);
+        tocItems = tocItems.slice(0, targetChapters);
+      }
+
       // Dodajemy unikalne ID dla każdego elementu
       const tocItemsWithIds: TocItem[] = tocItems.map((item: any, index: number) => ({
         id: (index + 1).toString(),
         title: item.title.trim()
       }));
 
-      console.log(`✅ Pomyślnie wygenerowano spis treści z ${tocItemsWithIds.length} rozdziałami (${keySource})`);
+      console.log(`✅ Pomyślnie wygenerowano spis treści z ${tocItemsWithIds.length} rozdziałami (cel: ${targetChapters}, ${keySource})`);
 
       return NextResponse.json({
         tocItems: tocItemsWithIds,
@@ -304,7 +313,8 @@ export async function POST(request: Request) {
           hasSubtitle: !!subtitle,
           // ✅ NOWE: Informacja o użytym modelu i źródle klucza
           modelUsed: modelToUse,
-          keySource: keySource
+          keySource: keySource,
+          targetChapters
         }
       });
 
