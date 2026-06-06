@@ -178,9 +178,17 @@ async function getPageData(
       return `/api/assets/uploads/${imagePath}`;
     };
 
-    const mockupUrl = getAssetUrl(
+    const mockupUrlBase = getAssetUrl(
       ebook?.final_mockup_url || ebook?.cover_image_webp_url
     );
+
+    // Cache-bust na updated_at ebooka — plik mockupu (_finalMOK.png) ma stałą
+    // nazwę, więc bez tego /_next/image serwuje starą zbuforowaną wersję po
+    // regeneracji okładki. ?t=updated_at zmienia URL źródłowy → świeży obraz.
+    const mockupBust = ebook?.updated_at ? new Date(ebook.updated_at).getTime() : '';
+    const mockupUrl = mockupUrlBase && mockupBust
+      ? `${mockupUrlBase}${mockupUrlBase.includes('?') ? '&' : '?'}t=${mockupBust}`
+      : mockupUrlBase;
 
 
     // Dołącz obliczone dane do obiektu strony

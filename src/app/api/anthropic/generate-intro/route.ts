@@ -42,8 +42,9 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const { ebookId, debug } = body;
+    const { ebookId, debug, lang } = body;
     const isDebugMode = debug === true;
+    const pl = lang === 'pl'; // język aplikacji; brak → EN
 
     // Konwertuj ebookId na number jeśli przyszedł jako string
     const ebookIdNumber = typeof ebookId === 'string' ? parseInt(ebookId, 10) : ebookId;
@@ -152,7 +153,8 @@ export async function POST(request: Request) {
       subtitle: ebook.subtitle || undefined,
       chapters: chapters.map(ch => ch.title),
       authorProfile: authorProfile || undefined,
-      audienceProfile: audienceProfile || undefined
+      audienceProfile: audienceProfile || undefined,
+      pl
     });
 
     const requestBody: AnthropicRequest = {
@@ -401,12 +403,16 @@ function buildIntroPrompt(params: {
   chapters: string[];
   authorProfile?: string;
   audienceProfile?: string;
+  pl?: boolean;
 }): string {
-  const { title, subtitle, chapters, authorProfile, audienceProfile } = params;
+  const { title, subtitle, chapters, authorProfile, audienceProfile, pl } = params;
 
   let prompt = `# PROMPT DO GENEROWANIA WSTĘPU EBOOKA (+ CTA DO ROLKI)
 
-Jesteś ekspertem copywritingu i StoryBrand Framework. Twoim zadaniem jest napisanie emocjonalnego, 3-sekcyjnego wstępu do ebooka oraz dwóch CTA do rolki w social media.
+${pl ? '' : `## ⚠️ OUTPUT LANGUAGE: ENGLISH
+Write ALL output content (every XML tag: p1, p2, p3, cta_1..cta_5) in ENGLISH. The instructions below are written in Polish, but your generated text MUST be in English. Keep the XML tag names exactly as specified; translate only the content inside them. All the rules below (structure, "you/your" capitalization becomes natural English second person, no repetition, drill-vs-hole, etc.) apply equally in English.
+
+`}Jesteś ekspertem copywritingu i StoryBrand Framework. Twoim zadaniem jest napisanie emocjonalnego, 3-sekcyjnego wstępu do ebooka oraz dwóch CTA do rolki w social media.
 
 ## DANE WEJŚCIOWE:
 

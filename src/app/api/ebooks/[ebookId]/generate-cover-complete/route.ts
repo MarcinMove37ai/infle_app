@@ -102,7 +102,9 @@ export async function POST(
               // Przekaż session cookies dla autoryzacji w wywołanym endpoint
               'Cookie': request.headers.get('Cookie') || ''
             },
-            timeout: 90000
+            // Generujemy do 5 wariantów równolegle — pojedyncza okładka 2K bywa
+            // wolna, więc dajemy duży zapas, by orkiestrator nie uciął przed końcem.
+            timeout: 240000
           });
 
           coverData = coverResponse.data; // axios automatycznie parsuje JSON
@@ -285,6 +287,7 @@ export async function GET(
         subtitle: true,
         cover_image_url: true,
         cover_image_prompt: true,
+        cover_variants: true,
         created_at: true,
         updated_at: true,
         ebook_chapters: {
@@ -346,6 +349,8 @@ export async function GET(
         margin_optimized: coverAnalysis.has_margin_optimization,
         supplement_safe: coverAnalysis.has_supplement_restrictions
       },
+      // Lista wszystkich wariantów okładki (do modala wyboru). Pusta tablica = brak wariantów.
+      cover_variants: Array.isArray(ebook.cover_variants) ? ebook.cover_variants : [],
       recommendations: {
         can_generate_cover: coverAnalysis.ready_for_generation,
         should_regenerate: !coverAnalysis.complete ||

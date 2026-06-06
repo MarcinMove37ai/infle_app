@@ -92,13 +92,9 @@ export async function GET(request: Request) {
       prisma.ebooks.findMany({
         where: filteredWhereCondition,
         include: {
-          pages: {       // Dołącz powiązane rekordy z tabeli 'pages'
-            select: {
-              id: true   // Wystarczy nam tylko ID, aby potwierdzić istnienie
-            }
-          }
+          pages: { select: { id: true } },
+          _count: { select: { ebook_chapters: true } },
         },
-        // Ważne: usuwamy 'select', aby pobrać wszystkie pola potrzebne do mapowania
         orderBy: { created_at: 'desc' },
         skip: skip,
         take: validatedLimit,
@@ -131,6 +127,7 @@ export async function GET(request: Request) {
       return {
         ...ebook, // Kopiujemy wszystkie dane z bazy
         hasLandingPage: ebook.pages.length > 0,
+        chapterCount: ebook._count?.ebook_chapters ?? 0,
         cover_image_webp_url: coverFilename ? `uploads/${coverFilename}` : null,
       };
     });
@@ -182,7 +179,7 @@ export async function POST(request: Request) {
     const userId = session.user.id;
 
     const data = await request.json();
-    const { title, subtitle, description, authorDisplayName, authorLogoUrl } = data;
+    const { title, subtitle, description, authorDisplayName, authorLogoUrl, language } = data;
 
     if (!title || title.trim() === '') {
       return NextResponse.json({ error: 'Title is required' }, { status: 400 });
@@ -205,6 +202,7 @@ export async function POST(request: Request) {
         image_ai_provider: userSettings.imageAiProvider,
         image_ai_model: userSettings.imageAiModel,
         ai_generation_timestamp: new Date(),
+        language: (language === 'pl' || language === 'en') ? language : 'en',
       },
       select: {
         id: true,

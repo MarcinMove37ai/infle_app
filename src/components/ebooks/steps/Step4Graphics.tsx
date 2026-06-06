@@ -21,6 +21,8 @@ interface Step4GraphicsProps {
   isGeneratingAllImages: boolean;
   uploadingCoverImage: boolean;
   handleOpenCoverFileDialog: () => void;
+  openCoverPicker: () => void;
+  openChapterPicker: (chapterId: string) => void;
   handleOpenFileDialog: (chapterId: string) => void;
   isSaving: boolean;
   uploadingImageForChapter: string | null;
@@ -51,6 +53,8 @@ export const Step4Graphics: React.FC<Step4GraphicsProps> = ({
   isGeneratingAllImages,
   uploadingCoverImage,
   handleOpenCoverFileDialog,
+  openCoverPicker,
+  openChapterPicker,
   handleOpenFileDialog,
   isSaving,
   uploadingImageForChapter,
@@ -154,51 +158,44 @@ export const Step4Graphics: React.FC<Step4GraphicsProps> = ({
                 )}
               </div>
 
-              {/* Buttons: Generate left, Upload right */}
-              <div className="flex flex-col sm:flex-row gap-2 mt-auto">
-                <button
-                  onClick={() => generateCover(true, false)}
-                  disabled={isGeneratingCover || isGeneratingAllImages || uploadingCoverImage}
-                  className={`flex-1 px-3 py-2 rounded-lg transition-colors flex items-center justify-center text-sm ${
-                    isGeneratingCover || isGeneratingAllImages || uploadingCoverImage
-                      ? 'bg-gray-400 text-white cursor-not-allowed'
-                      : 'bg-blue-600 text-white hover:bg-blue-700 cursor-pointer'
-                  }`}
-                >
-                  {isGeneratingCover ? (
-                    <>
-                      <Loader size={14} className="animate-spin mr-1.5" />
-                      <span className="truncate">Generating...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles size={14} className="mr-1.5 flex-shrink-0" />
-                      <span className="truncate">{coverData?.cover_url ? 'Regenerate' : 'Generate with AI'}</span>
-                    </>
-                  )}
-                </button>
-
-                <button
-                  onClick={handleOpenCoverFileDialog}
-                  disabled={isGeneratingCover || isGeneratingAllImages || uploadingCoverImage}
-                  className={`flex-1 px-3 py-2 border border-gray-300 rounded-lg transition-colors flex items-center justify-center text-sm ${
-                    isGeneratingCover || isGeneratingAllImages || uploadingCoverImage
-                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                      : 'text-gray-700 hover:bg-gray-50 cursor-pointer'
-                  }`}
-                >
-                  {uploadingCoverImage ? (
-                    <>
-                      <Loader size={14} className="animate-spin mr-1.5" />
-                      <span className="truncate">Uploading...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Upload size={14} className="mr-1.5 flex-shrink-0" />
-                      <span className="truncate">Upload</span>
-                    </>
-                  )}
-                </button>
+              {/* Jeden przycisk, dwa stany: Generate (brak okładki) / Edit (jest okładka → modal wyboru) */}
+              <div className="flex mt-auto">
+                {coverData?.cover_url ? (
+                  <button
+                    onClick={openCoverPicker}
+                    disabled={isGeneratingCover || isGeneratingAllImages}
+                    className={`flex-1 px-3 py-2 rounded-lg transition-colors flex items-center justify-center text-sm ${
+                      isGeneratingCover || isGeneratingAllImages
+                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                        : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 cursor-pointer'
+                    }`}
+                  >
+                    <Palette size={14} className="mr-1.5 flex-shrink-0" />
+                    <span className="truncate">Edit</span>
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => generateCover(true, false)}
+                    disabled={isGeneratingCover || isGeneratingAllImages || uploadingCoverImage}
+                    className={`flex-1 px-3 py-2 rounded-lg transition-colors flex items-center justify-center text-sm ${
+                      isGeneratingCover || isGeneratingAllImages || uploadingCoverImage
+                        ? 'bg-gray-400 text-white cursor-not-allowed'
+                        : 'bg-blue-600 text-white hover:bg-blue-700 cursor-pointer'
+                    }`}
+                  >
+                    {isGeneratingCover ? (
+                      <>
+                        <Loader size={14} className="animate-spin mr-1.5" />
+                        <span className="truncate">Generating...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles size={14} className="mr-1.5 flex-shrink-0" />
+                        <span className="truncate">Generate with AI</span>
+                      </>
+                    )}
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -274,49 +271,51 @@ export const Step4Graphics: React.FC<Step4GraphicsProps> = ({
 
                   {/* Buttons: Generate left, Upload right */}
                   <div className="flex flex-col sm:flex-row gap-2 mt-auto">
-                    <button
-                      onClick={() => handleGenerateAIImage(item.id, !!item.image_url)}
-                      disabled={
-                        !((completedChapterIds.includes(item.id) || (item.content && item.content.trim().length > 0)))
-                        || isSaving || generatingAIImageForChapter === item.id || isGeneratingAllImages || uploadingCoverImage
-                      }
-                      className={`flex-1 px-3 py-2 rounded-lg transition-colors flex items-center justify-center text-sm ${
-                        !((completedChapterIds.includes(item.id) || (item.content && item.content.trim().length > 0)))
-                        || isSaving || generatingAIImageForChapter === item.id || isGeneratingAllImages || uploadingCoverImage
-                          ? 'bg-gray-400 text-white cursor-not-allowed'
-                          : 'bg-blue-600 text-white hover:bg-blue-700 cursor-pointer'
-                      }`}
-                    >
-                      {generatingAIImageForChapter === item.id ? (
-                        <>
-                          <Loader size={14} className="animate-spin mr-1.5 flex-shrink-0" />
-                          <span className="truncate">Generating...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Sparkles size={14} className="mr-1.5 flex-shrink-0" />
-                          <span className="truncate">{item.image_url ? 'Regenerate' : 'Generate with AI'}</span>
-                        </>
-                      )}
-                    </button>
+                    {item.image_url ? (
+                      // Grafika istnieje → "Edit" otwiera picker (wybór wariantu / dogenerowanie / upload w jednym miejscu)
+                      <button
+                        onClick={() => openChapterPicker(item.id)}
+                        disabled={isSaving || isGeneratingAllImages || generatingAIImageForChapter === item.id}
+                        className={`flex-1 px-3 py-2 rounded-lg transition-colors flex items-center justify-center text-sm ${
+                          isSaving || isGeneratingAllImages || generatingAIImageForChapter === item.id
+                            ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                            : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 cursor-pointer'
+                        }`}
+                      >
+                        <Palette size={14} className="mr-1.5 flex-shrink-0" />
+                        <span className="truncate">Edit</span>
+                      </button>
+                    ) : (
+                      // Brak grafiki → "Generate with AI" (1 sztuka)
+                      <button
+                        onClick={() => handleGenerateAIImage(item.id, false)}
+                        disabled={
+                          !((completedChapterIds.includes(item.id) || (item.content && item.content.trim().length > 0)))
+                          || isSaving || generatingAIImageForChapter === item.id || isGeneratingAllImages || uploadingCoverImage
+                        }
+                        className={`flex-1 px-3 py-2 rounded-lg transition-colors flex items-center justify-center text-sm ${
+                          !((completedChapterIds.includes(item.id) || (item.content && item.content.trim().length > 0)))
+                          || isSaving || generatingAIImageForChapter === item.id || isGeneratingAllImages || uploadingCoverImage
+                            ? 'bg-gray-400 text-white cursor-not-allowed'
+                            : 'bg-blue-600 text-white hover:bg-blue-700 cursor-pointer'
+                        }`}
+                      >
+                        {generatingAIImageForChapter === item.id ? (
+                          <>
+                            <Loader size={14} className="animate-spin mr-1.5 flex-shrink-0" />
+                            <span className="truncate">Generating...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles size={14} className="mr-1.5 flex-shrink-0" />
+                            <span className="truncate">Generate with AI</span>
+                          </>
+                        )}
+                      </button>
+                    )}
 
-                    <button
-                      onClick={() => handleOpenFileDialog(item.id)}
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors flex items-center justify-center text-sm cursor-pointer"
-                      disabled={(isSaving && uploadingImageForChapter === item.id) || isGeneratingAllImages || uploadingCoverImage}
-                    >
-                      {isSaving && uploadingImageForChapter === item.id ? (
-                        <>
-                          <Loader size={14} className="animate-spin mr-1.5" />
-                          <span className="truncate">Uploading...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Upload size={14} className="mr-1.5 flex-shrink-0" />
-                          <span className="truncate">Upload</span>
-                        </>
-                      )}
-                    </button>
+                    {/* Upload grafiki rozdziału przeniesiony do pickera (ChapterImageVariantPickerModal) —
+                        na kafelku zostaje tylko jeden przycisk: Generate (brak grafiki) / Edit (jest grafika). */}
                   </div>
 
                   {aiImageGenerationError && generatingAIImageForChapter === item.id && (

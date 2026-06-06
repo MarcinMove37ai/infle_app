@@ -16,6 +16,13 @@ import { Step2Structure } from './steps/Step2Structure';
 import { Step3Content } from './steps/Step3Content';
 import { Step4Graphics } from './steps/Step4Graphics';
 
+// Modal wyboru wariantu okładki
+import { CoverVariantPickerModal } from './CoverVariantPickerModal';
+// Modal wyboru wariantu grafiki rozdziału
+import { ChapterImageVariantPickerModal } from './ChapterImageVariantPickerModal';
+// Limit wariantów wg planu (ile grafik można dogenerować)
+import { getVariantLimit } from '@/lib/image-variant-limits';
+
 // Import wspólnych modali
 import {
   RegeneratePopup,
@@ -162,6 +169,19 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose, lang 
   const [isGeneratingCover, setIsGeneratingCover] = useState(false);
   const [showCoverPrompt, setShowCoverPrompt] = useState(false);
   const [coverGenerated, setCoverGenerated] = useState(false);
+
+  // STATES for cover variants (wybór wariantu okładki)
+  const [coverVariants, setCoverVariants] = useState<{ url: string; prompt?: string; createdAt?: string; source?: string }[]>([]);
+  const [showCoverPicker, setShowCoverPicker] = useState(false);
+  const [isSelectingCoverVariant, setIsSelectingCoverVariant] = useState(false);
+  const [isGeneratingMoreCover, setIsGeneratingMoreCover] = useState(false);   // dogenerowanie kolejnego wariantu okładki (Generate more)
+
+  // STATES for chapter image variants (wybór/dogenerowanie wariantu grafiki rozdziału)
+  const [chapterPickerId, setChapterPickerId] = useState<string | null>(null);   // który rozdział ma otwarty picker (null = zamknięty)
+  const [chapterVariants, setChapterVariants] = useState<{ url: string; prompt?: string; createdAt?: string; source?: string }[]>([]);
+  const [isSelectingChapterVariant, setIsSelectingChapterVariant] = useState(false);
+  const [isGeneratingMoreChapter, setIsGeneratingMoreChapter] = useState(false);
+  const [isChapterPickerLoading, setIsChapterPickerLoading] = useState(false);   // dociąganie puli wariantów przed otwarciem (anty-blink)
 
   // STATE for cache-busting
   const [imageRefreshTimestamp, setImageRefreshTimestamp] = useState(0);
@@ -461,6 +481,7 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose, lang 
                 body: JSON.stringify({
                     title: "New Ebook (draft)",
                     status: "draft",
+                    language: lang,
                 }),
             });
 
@@ -762,6 +783,11 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose, lang 
 
       setCoverData(mappedData);
 
+      // Lista wariantów okładki (do modala wyboru). Pusta tablica = brak wariantów.
+      const variants = Array.isArray(data.cover_variants) ? data.cover_variants : [];
+      setCoverVariants(variants);
+      console.log(`🎛️ Wariantów okładki: ${variants.length}`);
+
       if (mappedData.cover_status.complete && mappedData.cover_url) {
         setCoverGenerated(true);
         console.log('✅ Cover marked as ready');
@@ -845,6 +871,9 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose, lang 
       await fetchCoverStatus();
       setCoverGenerated(true);
       console.log('🔄 Cover status refreshed');
+
+      // Po wygenerowaniu wariantów otwórz modal wyboru — user od razu wybiera aktywną okładkę.
+      setShowCoverPicker(true);
       return true;
 
     } catch (err: any) {
@@ -853,6 +882,230 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose, lang 
       return false;
     } finally {
       setIsGeneratingCover(false);
+    }
+  };
+
+  // Wybór aktywnego wariantu okładki (z modala) — woła endpoint, który ustawia
+  // wskazany wariant jako aktywny i przegenerowuje mockup. Nic nie kasuje.
+  const handleSelectCoverVariant = async (variantUrl: string) => {
+    if (!currentEbookId) return;
+    setIsSelectingCoverVariant(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/ebooks/${currentEbookId}/select-cover-variant`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ variantUrl }),
+      });
+
+      if (!response.ok) {
+        let errorMessage = 'Error selecting cover';
+        try {
+          const errorData = await response.json();
+          if (errorData && errorData.error) errorMessage = errorData.error;
+        } catch {
+          errorMessage = `Server error (${response.status})`;
+        }
+        throw new Error(errorMessage);
+      }
+
+      const data = await response.json();
+      if (!data.success || !data.cover_image_url) {
+        throw new Error(data.error || 'Invalid response from the server');
+      }
+
+      // Zaktualizuj aktywną okładkę w stanie + cache-bust, żeby kafelek/mockup odświeżyły się natychmiast.
+      const timestamp = Date.now();
+      const baseUrl = data.cover_image_url.split('?')[0];
+      const newCoverUrl = `${baseUrl}?t=${timestamp}`;
+
+      setCoverData(prev => prev ? {
+        ...prev,
+        cover_url: newCoverUrl,
+        has_cover_image: true,
+        cover_status: { ...prev.cover_status, image_ready: true, complete: true },
+      } : prev);
+      setCoverGenerated(true);
+      setImageRefreshTimestamp(timestamp);
+      setShowCoverPicker(false);
+      console.log(`✅ Aktywna okładka ustawiona: ${newCoverUrl}`);
+    } catch (err: any) {
+      console.error('❌ Error selecting cover variant:', err);
+      setError(err.message);
+    } finally {
+      setIsSelectingCoverVariant(false);
+    }
+  };
+
+  // Dogenerowanie kolejnego wariantu okładki (przycisk "Generate more" w modalu) — woła SILNIK
+  // generate-cover bezpośrednio (zwraca all_variants), nie orkiestrator complete. Dopisuje 1 wariant
+  // do puli i ustawia go aktywnym. Spójne z handleGenerateMoreChapter dla rozdziałów.
+  const handleGenerateMoreCover = async () => {
+    if (!currentEbookId) return;
+    setIsGeneratingMoreCover(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/ebooks/${currentEbookId}/generate-cover`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ forceRegenerate: true }),
+      });
+      if (!res.ok) {
+        let msg = 'Error generating cover';
+        try { const e = await res.json(); if (e?.error) msg = e.error; } catch { msg = `Server error (${res.status})`; }
+        throw new Error(msg);
+      }
+      const data = await res.json();
+      if (!data.success || !data.cover_image_url) throw new Error(data.error || 'Invalid response from the server');
+
+      const timestamp = Date.now();
+      const newCoverUrl = `${data.cover_image_url.split('?')[0]}?t=${timestamp}`;
+      // Świeżo dogenerowany wariant staje się aktywny; podbijamy pełną pulę i kafelek okładki.
+      if (Array.isArray(data.all_variants)) setCoverVariants(data.all_variants);
+      setCoverData(prev => prev ? {
+        ...prev,
+        cover_url: newCoverUrl,
+        has_cover_image: true,
+        cover_status: { ...prev.cover_status, image_ready: true, complete: true },
+      } : prev);
+      setCoverGenerated(true);
+      setImageRefreshTimestamp(timestamp);
+      console.log(`✅ Dogenerowano wariant okładki (pula: ${Array.isArray(data.all_variants) ? data.all_variants.length : '?'})`);
+    } catch (err: any) {
+      console.error('❌ Error generating more cover variants:', err);
+      setError(err.message);
+    } finally {
+      setIsGeneratingMoreCover(false);
+    }
+  };
+
+  // === PICKER GRAFIK ROZDZIAŁU =========================================
+
+  // Otwiera picker dla danego rozdziału — ładuje jego pulę image_variants ze stanu (tocItems)
+  // lub dociąga z serwera, jeśli stan jest pusty.
+  // Migracja w locie dla starych rozdziałów: jeśli pula image_variants jest pusta,
+  // a rozdział ma już image_url (grafika sprzed tej funkcji), traktujemy ją jako
+  // pierwszy wariant 'generated' — żeby picker pokazał istniejącą grafikę zamiast pustki.
+  const seedFromExisting = (variants: any[], imageUrl?: string) => {
+    if (Array.isArray(variants) && variants.length > 0) return variants;
+    if (imageUrl && imageUrl.trim()) {
+      return [{ url: imageUrl.split('?')[0], createdAt: new Date().toISOString(), source: 'generated' }];
+    }
+    return [];
+  };
+
+  const openChapterPicker = async (chapterId: string) => {
+    const local = tocItems.find(i => i.id === chapterId) as any;
+    const localVariants = Array.isArray(local?.image_variants) ? local.image_variants : [];
+
+    // ANTY-BLINK: otwieramy picker OD RAZU (z id), ale w stanie ładowania.
+    // Pulę ustawiamy dopiero, gdy mamy ŚWIEŻĄ z serwera (źródło prawdy) — żeby nie pokazać
+    // najpierw 1 grafiki (lokalny seed), a potem przeskoku do N. Modal na czas dociągania
+    // pokazuje szkielet (isLoading), nie niepełną listę.
+    setChapterPickerId(chapterId);
+    setIsChapterPickerLoading(true);
+
+    let resolved: any[] | null = null;
+    if (currentEbookId) {
+      try {
+        const ts = Date.now();
+        const res = await fetch(`/api/ebooks/${currentEbookId}/chapters?_t=${ts}`, {
+          headers: { 'Cache-Control': 'no-cache', ...getUserHeaders() }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          // Endpoint GET /chapters zwraca { ebook: { ebook_chapters: [...] } } — pełne image_variants per rozdział.
+          const serverChapters = Array.isArray(data?.ebook?.ebook_chapters)
+            ? data.ebook.ebook_chapters
+            : (Array.isArray(data?.chapters) ? data.chapters : []);
+          const serverCh = serverChapters.find((c: any) => c.id?.toString() === chapterId);
+          if (serverCh) {
+            const serverVariants = Array.isArray(serverCh.image_variants) ? serverCh.image_variants : [];
+            resolved = seedFromExisting(serverVariants, serverCh.image_url);
+          }
+        }
+      } catch (e) {
+        console.warn('⚠️ Nie udało się dociągnąć wariantów rozdziału (użyję lokalnych):', e);
+      }
+    }
+
+    // Fallback na lokalne, jeśli serwer zawiódł — lepsze to niż pusty modal.
+    setChapterVariants(resolved ?? seedFromExisting(localVariants, local?.image_url));
+    setIsChapterPickerLoading(false);
+  };
+
+  // Wybór aktywnego wariantu grafiki rozdziału — woła select-image-variant (kopiuje wariant
+  // pod stałą nazwę i ustawia image_url). Aktualizuje kafelek + cache-bust.
+  const handleSelectChapterVariant = async (variantUrl: string) => {
+    if (!currentEbookId || !chapterPickerId) return;
+    setIsSelectingChapterVariant(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/ebooks/${currentEbookId}/chapters/${chapterPickerId}/select-image-variant`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ variantUrl }),
+      });
+      if (!res.ok) {
+        let msg = 'Error selecting image';
+        try { const e = await res.json(); if (e?.error) msg = e.error; } catch { msg = `Server error (${res.status})`; }
+        throw new Error(msg);
+      }
+      const data = await res.json();
+      if (!data.success || !data.image_url) throw new Error(data.error || 'Invalid response from the server');
+
+      const timestamp = Date.now();
+      const newUrl = `${data.image_url.split('?')[0]}?t=${timestamp}`;
+      // Aktywna grafika rozdziału = stała nazwa; podbijamy też pulę, jeśli zwrócona.
+      setTocItems(items => items.map(it => it.id === chapterPickerId
+        ? { ...it, image_url: newUrl, ...(Array.isArray(data.image_variants) ? { image_variants: data.image_variants } : {}) }
+        : it));
+      if (Array.isArray(data.image_variants)) setChapterVariants(data.image_variants);
+      setImageRefreshTimestamp(timestamp);
+      console.log(`✅ Wariant rozdziału ${chapterPickerId} ustawiony jako aktywny`);
+    } catch (err: any) {
+      console.error('❌ Error selecting chapter variant:', err);
+      setError(err.message);
+    } finally {
+      setIsSelectingChapterVariant(false);
+    }
+  };
+
+  // Dogenerowanie kolejnego wariantu (przycisk "Generate more" w pickerze) — woła istniejący
+  // generator z forceRegenerate:true (nowy obraz tej samej sceny), który dopisuje wariant do puli.
+  const handleGenerateMoreChapter = async () => {
+    if (!currentEbookId || !chapterPickerId) return;
+    setIsGeneratingMoreChapter(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/ebooks/${currentEbookId}/chapters/${chapterPickerId}/generate-image`, {
+        method: 'POST',
+        headers: getUserHeaders(),
+        body: JSON.stringify({ forceRegenerate: true, size: "1024x1024" }),
+      });
+      if (!res.ok) {
+        let msg = 'Error generating image';
+        try { const e = await res.json(); if (e?.error) msg = e.error; } catch { msg = `Server error (${res.status})`; }
+        throw new Error(msg);
+      }
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || 'Invalid response from the server');
+
+      const timestamp = Date.now();
+      const newUrl = data.image_url ? `${data.image_url.split('?')[0]}?t=${timestamp}` : undefined;
+      // Świeżo dogenerowany wariant staje się aktywny; podbijamy pulę i kafelek.
+      if (Array.isArray(data.image_variants)) setChapterVariants(data.image_variants);
+      setTocItems(items => items.map(it => it.id === chapterPickerId
+        ? { ...it, ...(newUrl ? { image_url: newUrl } : {}), ...(Array.isArray(data.image_variants) ? { image_variants: data.image_variants } : {}) }
+        : it));
+      setImageRefreshTimestamp(timestamp);
+      if (!graphicsAdded) setGraphicsAdded(true);
+      console.log(`✅ Dogenerowano wariant rozdziału ${chapterPickerId}`);
+    } catch (err: any) {
+      console.error('❌ Error generating more chapter variants:', err);
+      setError(err.message);
+    } finally {
+      setIsGeneratingMoreChapter(false);
     }
   };
 
@@ -1226,7 +1479,8 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose, lang 
           subtitle: subtitle.trim() || undefined,
           description: description.trim() || undefined,
           scrapedContent: scrapedContent,
-          chapterCount
+          chapterCount,
+          lang
         }),
       });
 
@@ -1307,7 +1561,8 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose, lang 
           chapter: chapter,
           allChapters: tocItems,
           description: description.trim() || undefined,
-          scrapedContent: scrapedContent
+          scrapedContent: scrapedContent,
+          lang
         }),
       });
 
@@ -1410,7 +1665,7 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose, lang 
       const response = await fetch('/api/anthropic/generate-intro', {
         method: 'POST',
         headers: getUserHeaders(),
-        body: JSON.stringify({ ebookId: currentEbookId, debug: true })
+        body: JSON.stringify({ ebookId: currentEbookId, debug: true, lang })
       });
       const data = await response.json();
       if (data.success && data.intro) {
@@ -1497,7 +1752,8 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose, lang 
                 chapter: chapter,
                 allChapters: updatedTocItems,
                 description: description.trim() || undefined,
-                scrapedContent: scrapedContent
+                scrapedContent: scrapedContent,
+                lang
               }),
             });
 
@@ -1863,22 +2119,30 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose, lang 
             }
           } : null);
           setCoverGenerated(true);
+
+          // Upload to nowy wariant okładki — odśwież listę wariantów ze zwróconych danych,
+          // żeby modal pokazał wgrany plik (już ustawiony przez backend jako aktywny).
+          if (Array.isArray(data.all_variants)) {
+            setCoverVariants(data.all_variants);
+            console.log(`🎛️ Po uploadzie wariantów okładki: ${data.all_variants.length}`);
+          }
           console.log(`✅ Cover has been successfully uploaded: ${newImageUrl}`);
 
-          // ✅ TRIGGER MOCKUP GENERATION IN BACKGROUND
-          fetch(`/api/ebooks/${currentEbookId}/generate-mockups`, {
-            method: 'POST',
-            headers: getUserHeaders(),
-          })
-          .then(() => console.log('🚀 Mockup generation triggered after upload'))
-          .catch(e => console.warn('⚠️ Failed to trigger mockup generation:', e));
+          // Mockup jest już przegenerowany po stronie endpointu uploadu — nie wołamy ponownie.
 
         } else if (uploadingImageForChapter) {
+          // Upload to nowy wariant 'uploaded' — zapisz image_url ORAZ pulę wariantów na rozdziale,
+          // żeby picker (jeśli otwarty dla tego rozdziału) od razu pokazał wgrany wariant.
+          const uploadedVariants = Array.isArray(data.all_variants) ? data.all_variants : null;
           setTocItems(prevItems => prevItems.map(item =>
             item.id === uploadingImageForChapter
-              ? { ...item, image_url: newImageUrl }
+              ? { ...item, image_url: newImageUrl, ...(uploadedVariants ? { image_variants: uploadedVariants } : {}) }
               : item
           ));
+          if (uploadedVariants && uploadingImageForChapter === chapterPickerId) {
+            setChapterVariants(uploadedVariants);
+            console.log(`🎛️ Po uploadzie wariantów rozdziału: ${uploadedVariants.length}`);
+          }
           if (previewImage && previewImage.startsWith(baseUrl)) {
             setPreviewImage(newImageUrl);
           }
@@ -1899,15 +2163,35 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose, lang 
     }
   };
 
+  // Otwiera natywny dialog wyboru pliku i wykrywa ANULOWANIE.
+  // Gdy okno odzyska focus, a żaden plik nie został wybrany, resetuje flagi uploadu —
+  // bez tego uploadingCoverImage / uploadingImageForChapter "wisiały" na true po anulowanym
+  // dialogu i blokowały przyciski (change w modalu, upload grafik rozdziałów).
+  const triggerFilePicker = () => {
+    if (!fileInputRef.current) return;
+    fileInputRef.current.click();
+    const handleFocusBack = () => {
+      window.removeEventListener('focus', handleFocusBack);
+      setTimeout(() => {
+        if (fileInputRef.current && (fileInputRef.current.files?.length ?? 0) === 0) {
+          setUploadingCoverImage(false);
+          setUploadingImageForChapter(null);
+        }
+      }, 400);
+    };
+    window.addEventListener('focus', handleFocusBack);
+  };
+
   const handleOpenFileDialog = (chapterId: string) => {
+    setUploadingCoverImage(false);
     setUploadingImageForChapter(chapterId);
-    if (fileInputRef.current) fileInputRef.current.click();
+    triggerFilePicker();
   };
 
   const handleOpenCoverFileDialog = () => {
     setUploadingCoverImage(true);
     setUploadingImageForChapter(null);
-    if (fileInputRef.current) fileInputRef.current.click();
+    triggerFilePicker();
   };
 
   const handleAddItem = async () => {
@@ -2530,6 +2814,8 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose, lang 
           isGeneratingAllImages={isGeneratingAllImages}
           uploadingCoverImage={uploadingCoverImage}
           handleOpenCoverFileDialog={handleOpenCoverFileDialog}
+          openCoverPicker={() => setShowCoverPicker(true)}
+          openChapterPicker={openChapterPicker}
           handleOpenFileDialog={handleOpenFileDialog}
           isSaving={isSaving}
           uploadingImageForChapter={uploadingImageForChapter}
@@ -2596,6 +2882,44 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose, lang 
           isGeneratingAllImages={isGeneratingAllImages}
         />
       )}
+
+      <CoverVariantPickerModal
+        isOpen={showCoverPicker}
+        variants={coverVariants}
+        activeUrl={coverData?.cover_url}
+        userRole={userRole}
+        variantLimit={getVariantLimit(userRole)}
+        cacheBust={imageRefreshTimestamp}
+        isSelecting={isSelectingCoverVariant}
+        isUploading={uploadingCoverImage}
+        isGenerating={isGeneratingMoreCover}
+        onSelect={handleSelectCoverVariant}
+        onZoom={(variantUrl) => handleImagePreview(variantUrl, `Cover preview: ${title}`, `cover_${title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.png`)}
+        onUploadOwn={handleOpenCoverFileDialog}
+        onGenerateMore={handleGenerateMoreCover}
+        onUpgrade={(targetRole) => {
+          console.log('🔼 Upgrade CTA →', targetRole);
+          // TODO: podpiąć realną ścieżkę weryfikacji/planów
+        }}
+        onClose={() => setShowCoverPicker(false)}
+      />
+
+      <ChapterImageVariantPickerModal
+        isOpen={chapterPickerId !== null}
+        chapterTitle={tocItems.find(i => i.id === chapterPickerId)?.title}
+        variants={chapterVariants}
+        activeUrl={tocItems.find(i => i.id === chapterPickerId)?.image_url}
+        variantLimit={getVariantLimit(userRole)}
+        cacheBust={imageRefreshTimestamp}
+        isLoading={isChapterPickerLoading}
+        isSelecting={isSelectingChapterVariant}
+        isUploading={isSaving && uploadingImageForChapter === chapterPickerId}
+        isGenerating={isGeneratingMoreChapter}
+        onSelect={handleSelectChapterVariant}
+        onUploadOwn={() => chapterPickerId && handleOpenFileDialog(chapterPickerId)}
+        onGenerateMore={handleGenerateMoreChapter}
+        onClose={() => setChapterPickerId(null)}
+      />
 
       <style jsx global>{`
         #modal-scroll-container {

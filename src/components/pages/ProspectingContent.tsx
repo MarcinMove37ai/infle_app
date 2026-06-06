@@ -136,6 +136,19 @@ const translations = {
 
 const emptySeed = (position: number): Seed => ({ position, title: '', subtitle: '', description: '' });
 
+// Skrót kontaktu na wąskie ekrany: link IG/LI → "Instagram · nick" / "LinkedIn · nick".
+// Zwykłe www i tekst (notatka) zostawiamy bez zmian.
+const shortRecipient = (raw: string): string => {
+  if (!raw) return raw;
+  const s = raw.trim();
+  const ig = s.match(/instagram\.com\/([a-zA-Z0-9._]+)/i);
+  if (ig?.[1]) return `Instagram · ${ig[1].replace(/\/+$/, '')}`;
+  const li = s.match(/linkedin\.com\/in\/([a-zA-Z0-9._-]+)/i);
+  if (li?.[1]) return `LinkedIn · ${li[1].replace(/\/+$/, '')}`;
+  if (s.startsWith('@')) return `Instagram · ${s.slice(1).replace(/\/+$/, '')}`;
+  return s; // www / dowolny inny tekst — bez zmian
+};
+
 const buildChannels = (app: Application) => {
   const out: { label: string; url: string; Icon: any }[] = [];
   const norm = (u: string) => (/^https?:\/\//i.test(u) ? u : `https://${u}`);
@@ -508,6 +521,47 @@ export default function ProspectingContent() {
     cancelled: -2, expired: -1, new: 0, invited: 1, clicked: 2, registered: 3, ebook: 4, landing: 5, leads: 6,
   };
 
+  // Wersja MOBILE lejka: pasek 7 segmentów + nazwa bieżącego etapu i licznik.
+  // Te same dane co renderPath (stageRank), ale zwięźle — chipy nie mieszczą się na wąskim ekranie.
+  const renderPathMobile = (appStatus: AppStatus, code?: InviteCode | null) => {
+    if (appStatus === 'rejected') {
+      return <span className="text-[11px] font-medium text-gray-500 bg-gray-100 px-2.5 py-1 rounded-full inline-flex items-center gap-1">{t.statusCancelled}</span>;
+    }
+    if (code?.stage === 'expired') {
+      return (
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] font-medium text-gray-500 bg-gray-100 px-2.5 py-1 rounded-full">{t.stageExpired}</span>
+          {!code.clickedAt && <span className="text-xs text-gray-400">{t.linkNeverOpened}</span>}
+        </div>
+      );
+    }
+    const stage: Stage = appStatus === 'pending' ? 'new' : (code?.stage || 'invited');
+    const current = stageRank[stage]; // 0..6
+    const reachedCount = current + 1;  // ile z 7 osiągnięto
+    const currentLabel = PATH.find((p) => p.key === stage)?.label() || '';
+    const isNew = stage === 'new';
+    return (
+      <div>
+        <div className="flex items-center justify-between mb-1.5">
+          <span className="text-[12px] font-medium text-gray-600 inline-flex items-center gap-1">
+            {isNew ? <Clock size={12} className="text-blue-500" /> : <Check size={12} className="text-green-600" />}
+            {currentLabel}
+          </span>
+          <span className="text-[11px] text-gray-400">{reachedCount} / {PATH.length}</span>
+        </div>
+        <div className="flex gap-[3px]">
+          {PATH.map((s) => {
+            const reached = current >= stageRank[s.key];
+            return (
+              <div key={s.key}
+                   className={`flex-1 h-[5px] rounded-full ${reached ? (isNew ? 'bg-blue-500' : 'bg-green-500') : 'bg-gray-200'}`} />
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
   // appStatus: status wniosku (pending/invited/rejected) — dla New/Cancelled bez kodu.
   // code: powiązany kod (gdy zaproszony) — niesie stage z lejka.
   const renderPath = (appStatus: AppStatus, code?: InviteCode | null) => {
@@ -589,11 +643,19 @@ export default function ProspectingContent() {
         </div>
         {activeTab === 'invites' && (
           <button onClick={openNewInvite}
-                  className="inline-flex items-center gap-1.5 bg-indigo-700 text-white hover:bg-indigo-800 px-3.5 py-2 rounded-md text-[13px] font-medium cursor-pointer transition-colors mb-1.5">
+                  className="hidden sm:inline-flex items-center gap-1.5 bg-indigo-700 text-white hover:bg-indigo-800 px-3.5 py-2 rounded-md text-[13px] font-medium cursor-pointer transition-colors mb-1.5">
             <Plus size={15} /> {t.newInvitation}
           </button>
         )}
       </div>
+
+      {/* New invitation — osobny wiersz, wyśrodkowany, tylko na mobile */}
+      {activeTab === 'invites' && (
+        <button onClick={openNewInvite}
+                className="sm:hidden w-full inline-flex items-center justify-center gap-1.5 bg-indigo-700 text-white hover:bg-indigo-800 px-3.5 py-2.5 rounded-md text-[13px] font-medium cursor-pointer transition-colors">
+          <Plus size={15} /> {t.newInvitation}
+        </button>
+      )}
 
       {activeTab === 'applications' && (
         <>
@@ -611,8 +673,7 @@ export default function ProspectingContent() {
             <div className="flex flex-col gap-2.5">
               {sorted.map((app) => (
                 <div key={app.id}
-                     className={`bg-white border border-gray-200 rounded-xl px-4 py-3.5 grid items-center gap-4 ${app.status === 'rejected' ? 'opacity-60' : ''}`}
-                     style={{ gridTemplateColumns: '1.3fr 1.6fr 3.2fr 0.7fr 120px' }}>
+                     className={`bg-white border border-gray-200 rounded-xl px-4 py-3.5 flex flex-col gap-3 sm:grid sm:items-center sm:gap-4 sm:[grid-template-columns:1.3fr_1.6fr_3.2fr_0.7fr_120px] ${app.status === 'rejected' ? 'opacity-60' : ''}`}>
                   <div className="min-w-0">
                     <div className="text-sm font-medium text-gray-900 whitespace-nowrap">{app.firstName}</div>
                     <div className="text-xs text-gray-400 mt-0.5 truncate">{app.email}</div>
@@ -630,19 +691,22 @@ export default function ProspectingContent() {
                     })}
                   </div>
                   <div className="min-w-0">
-                    {renderPath(app.status, codeByApp[app.id])}
+                    <div className="hidden sm:block">{renderPath(app.status, codeByApp[app.id])}</div>
+                    <div className="sm:hidden">{renderPathMobile(app.status, codeByApp[app.id])}</div>
                   </div>
-                  <div className="text-xs text-gray-400 whitespace-nowrap">{formatDate(app.createdAt)}</div>
-                  <div className="flex justify-end">
-                    <button
-                      onClick={() => setSelectedId(app.id)}
-                      className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-md text-[13px] font-medium transition-colors cursor-pointer whitespace-nowrap ${
-                        app.status === 'pending'
-                          ? 'bg-blue-100 text-blue-700 hover:bg-blue-200'
-                          : 'border border-gray-300 text-gray-700 hover:bg-gray-50'
-                      }`}>
-                      <Eye size={14} /> {app.status === 'pending' ? t.review : t.view}
-                    </button>
+                  <div className="pt-3 border-t border-gray-100 sm:border-0 sm:pt-0 sm:contents">
+                    <span className="block text-xs text-gray-400 whitespace-nowrap mb-2.5 sm:mb-0">{formatDate(app.createdAt)}</span>
+                    <div className="flex sm:justify-end">
+                      <button
+                        onClick={() => setSelectedId(app.id)}
+                        className={`flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-md text-[13px] font-medium transition-colors cursor-pointer whitespace-nowrap ${
+                          app.status === 'pending'
+                            ? 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                            : 'border border-gray-300 text-gray-700 hover:bg-gray-50'
+                        }`}>
+                        <Eye size={14} /> {app.status === 'pending' ? t.review : t.view}
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -665,27 +729,32 @@ export default function ProspectingContent() {
               const live = c.isLive && !c.usedByUserId;
               return (
                 <div key={c.id}
-                     className={`bg-white border border-gray-200 rounded-xl px-4 py-3.5 grid items-center gap-4 ${c.stage === 'expired' ? 'opacity-60' : ''}`}
-                     style={{ gridTemplateColumns: '1.5fr 3.2fr 0.7fr 220px' }}>
+                     className={`bg-white border border-gray-200 rounded-xl px-4 py-3.5 flex flex-col gap-3 overflow-hidden sm:grid sm:items-center sm:gap-4 sm:overflow-visible sm:[grid-template-columns:1.5fr_3.2fr_0.7fr_220px] ${c.stage === 'expired' ? 'opacity-60' : ''}`}>
                   <div className="min-w-0">
-                    <div className="text-sm font-medium text-gray-900 truncate">{recipient}</div>
+                    <div className="text-sm font-medium text-gray-900 truncate">
+                      <span className="sm:hidden">{shortRecipient(recipient)}</span>
+                      <span className="hidden sm:inline">{recipient}</span>
+                    </div>
                     <div className="text-xs text-gray-400 mt-0.5 truncate">{c.usedBy?.email || ''}</div>
                   </div>
                   <div className="min-w-0">
-                    {renderPath('invited', c)}
+                    <div className="hidden sm:block">{renderPath('invited', c)}</div>
+                    <div className="sm:hidden">{renderPathMobile('invited', c)}</div>
                   </div>
-                  <div className="text-xs text-gray-400 whitespace-nowrap">{formatDate(c.expiresAt)}</div>
-                  <div className="flex items-center justify-end gap-2">
-                    {live && (
-                      <button onClick={() => handleCopy(magicLink(c.code))}
-                              className="inline-flex items-center gap-1.5 bg-blue-100 text-blue-700 hover:bg-blue-200 px-3 py-2 rounded-md text-[13px] font-medium cursor-pointer transition-colors whitespace-nowrap">
-                        {copied ? <><Check size={14} /> {t.copied}</> : <><Link2 size={14} /> {t.copyLink}</>}
+                  <div className="pt-3 border-t border-gray-100 sm:border-0 sm:pt-0 sm:contents">
+                    <span className="block text-xs text-gray-400 whitespace-nowrap mb-2.5 sm:mb-0">{formatDate(c.expiresAt)}</span>
+                    <div className="flex items-center gap-2 sm:justify-end">
+                      {live && (
+                        <button onClick={() => handleCopy(magicLink(c.code))}
+                                className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 bg-blue-100 text-blue-700 hover:bg-blue-200 px-3 py-2 rounded-md text-[13px] font-medium cursor-pointer transition-colors whitespace-nowrap">
+                          {copied ? <><Check size={14} /> {t.copied}</> : <><Link2 size={14} /> {t.copyLink}</>}
+                        </button>
+                      )}
+                      <button onClick={() => setSelectedCodeId(c.id)}
+                              className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 border border-gray-300 text-gray-700 hover:bg-gray-50 px-3 py-2 rounded-md text-[13px] font-medium cursor-pointer transition-colors whitespace-nowrap">
+                        <Eye size={14} /> {live ? t.review : t.view}
                       </button>
-                    )}
-                    <button onClick={() => setSelectedCodeId(c.id)}
-                            className="inline-flex items-center gap-1.5 border border-gray-300 text-gray-700 hover:bg-gray-50 px-3 py-2 rounded-md text-[13px] font-medium cursor-pointer transition-colors whitespace-nowrap">
-                      <Eye size={14} /> {live ? t.review : t.view}
-                    </button>
+                    </div>
                   </div>
                 </div>
               );

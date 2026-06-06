@@ -28,7 +28,7 @@ const MODEL_CONFIGS = {
     maxPromptLength: 4000,
     optimalLength: 1500,
     quality: "high" as const,
-    costEstimate: 0.03,
+    costEstimate: 0.087,
     sizes: ['1536x1024'],
     landscape_size: '1536x1024',
     enhancement_level: "standard",
@@ -36,7 +36,7 @@ const MODEL_CONFIGS = {
     supports_text_rendering: true,
     always_returns_base64: true,
     requires_user_key: true,
-    api_model: "gemini-2.5-flash-image",
+    api_model: "gemini-3.1-flash-image",
     api_method: "generateContent"
   ,
     max_images: 4
@@ -667,17 +667,41 @@ export async function POST(
     const storageBasePath = process.env.FILE_STORAGE_PATH || '/data';
     const uploadsDir = path.join(storageBasePath, 'uploads');
     await fs.mkdir(uploadsDir, { recursive: true });
-    const fileName = `${session.user.id}_EB${ebookIdNum}_CH${chapterIdNum}.webp`;
-    const filePath = path.join(uploadsDir, fileName);
-    await fs.writeFile(filePath, processedImageBuffer);
 
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
-    const finalImageUrl = `${baseUrl}/api/assets/uploads/${fileName}`;
-    console.log(`☁️ Image uploaded: ${fileName}`);
+
+    // Wariant pod UNIKALNĄ nazwą (timestamp) — nic nie nadpisujemy, pula wariantów rośnie.
+    const batchStamp = Date.now();
+    const variantFileName = `${session.user.id}_EB${ebookIdNum}_CH${chapterIdNum}_v${batchStamp}.webp`;
+    await fs.writeFile(path.join(uploadsDir, variantFileName), processedImageBuffer);
+    const variantUrl = `${baseUrl}/api/assets/uploads/${variantFileName}`;
+
+    // Kopia świeżego wariantu pod STAŁĄ nazwę — dla ewentualnych konsumentów stałej nazwy (np. PDF).
+    const fileName = `${session.user.id}_EB${ebookIdNum}_CH${chapterIdNum}.webp`;
+    await fs.writeFile(path.join(uploadsDir, fileName), processedImageBuffer);
+    // ALE image_url wskazuje URL WARIANTU (unikalny) — spójnie z okładką (cover_image_url = URL wariantu).
+    // Dzięki temu modal rozpoznaje aktywny wariant (activeUrl === jeden z variants[].url), a unikalny
+    // URL sam w sobie omija cache przeglądarki po odświeżeniu.
+    const finalImageUrl = variantUrl;
+    console.log(`☁️ Wariant zapisany: ${variantFileName} (image_url=wariant, + kopia do stałej ${fileName})`);
+
+    // Dopisz nowy wariant do puli (zachowując poprzednie); świeżo wygenerowany staje się aktywny.
+    const existingImageVariants = Array.isArray((chapter as any).image_variants) ? (chapter as any).image_variants : [];
+    const newImageVariant = {
+      url: variantUrl,
+      prompt: imagePrompt,
+      createdAt: new Date().toISOString(),
+      source: 'generated'
+    };
+    const updatedImageVariants = [...existingImageVariants, newImageVariant];
 
     const updatedChapter = await prisma.ebook_chapters.update({
       where: { id: chapterIdNum },
-      data: { image_url: finalImageUrl, updated_at: new Date() },
+      data: {
+        image_url: finalImageUrl,
+        image_variants: updatedImageVariants,
+        updated_at: new Date()
+      },
       select: { id: true, title: true, image_url: true, image_prompt: true }
     });
     await prisma.ebooks.update({ where: { id: ebookIdNum }, data: { updated_at: new Date() } });
@@ -690,6 +714,7 @@ export async function POST(
       success: true,
       image_url: finalImageUrl,
       chapter: updatedChapter,
+      image_variants: updatedImageVariants,   // pełna pula wariantów rozdziału (dla modala wyboru)
       generation_metrics: {
         model_used: actualModelUsed,
         generation_time_ms: totalTime,

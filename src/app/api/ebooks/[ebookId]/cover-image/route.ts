@@ -94,7 +94,8 @@ export async function POST(
         id: true,
         title: true,
         subtitle: true,
-        cover_image_url: true
+        cover_image_url: true,
+        cover_variants: true
       }
     });
 
@@ -111,7 +112,7 @@ export async function POST(
     console.log('⚙️  Konwersja obrazu okładki do formatu WebP...');
 
     const processedImageBuffer = await sharp(Buffer.from(buffer))
-      .resize(1024, 1024, {    // Kwadratowy format dla okładek
+      .resize(1024, 1365, {    // Format 3:4 — spójny z okładką generowaną przez AI
         fit: 'cover',
         position: 'center',
         withoutEnlargement: false
@@ -131,41 +132,103 @@ export async function POST(
     // Upewnij się, że folder istnieje
     await fs.mkdir(uploadsDir, { recursive: true });
 
-    // Generowanie nazwy pliku dla okładki
-    const fileName = `${session.user.id}_EB${ebookId}_COVER.${fileExtension}`;
+    // Nazwa UNIKALNA — upload to kolejny wariant, nie nadpisujemy poprzednich okładek.
+    const uploadStamp = Date.now();
+    const fileName = `${session.user.id}_EB${ebookId}_COVER_upl_${uploadStamp}.${fileExtension}`;
     const filePath = path.join(uploadsDir, fileName);
 
-    console.log(`💾 Zapisywanie okładki jako ${fileName} w Railway storage`);
+    console.log(`💾 Zapisywanie wgranej okładki jako ${fileName} w Railway storage`);
 
     // Zapisanie pliku w Railway storage
     await fs.writeFile(filePath, processedImageBuffer);
 
-    // Generowanie publicznego URL dla okładki
+    // Skopiuj też do stałej nazwy _COVER.webp, by generate-mockups (czytający stałą nazwę)
+    // zbudował mockup z TEJ wgranej okładki.
+    try {
+      const stableCoverPath = path.join(uploadsDir, `${session.user.id}_EB${ebookId}_COVER.${fileExtension}`);
+      await fs.writeFile(stableCoverPath, processedImageBuffer);
+      console.log(`🧩 Skopiowano wgraną okładkę → stała _COVER.${fileExtension}`);
+    } catch (copyErr: any) {
+      console.warn(`⚠️ Nie udało się zapisać stałej _COVER.${fileExtension}:`, copyErr?.message || copyErr);
+    }
+
+    // Generowanie publicznego URL dla okładki (wskazuje na unikalny plik wariantu)
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
     const imageUrl = `${baseUrl}/api/assets/uploads/${fileName}`;
 
-    // Aktualizacja URL okładki w bazie danych przez Prisma
+    // Upload NIE kumuluje się — w puli jest maks. JEDEN wariant 'uploaded' (najnowszy).
+    // Warianty AI ('generated') zostają nietknięte.
+    type CoverVariant = { url: string; prompt?: string; createdAt?: string; source?: string };
+    const existingVariants: CoverVariant[] = Array.isArray(ebook.cover_variants)
+      ? (ebook.cover_variants as unknown as CoverVariant[])
+      : [];
+
+    // Skasuj z dysku pliki poprzednich uploadów (sprzątanie) — zanim odfiltrujemy je z listy.
+    const previousUploads = existingVariants.filter((v) => v.source === 'uploaded');
+    for (const prev of previousUploads) {
+      try {
+        const noQuery = prev.url.split('?')[0];
+        const prevName = noQuery.split('/').pop();
+        if (prevName && prevName !== fileName) {
+          await fs.unlink(path.join(uploadsDir, prevName));
+          console.log(`🗑️ Usunięto stary plik uploadu: ${prevName}`);
+        }
+      } catch (unlinkErr: any) {
+        // Brak pliku / już usunięty — nie przerywamy.
+        console.warn(`⚠️ Nie udało się usunąć starego uploadu:`, unlinkErr?.message || unlinkErr);
+      }
+    }
+
+    // Zachowaj tylko warianty AI, dołóż nowy upload jako jedyny 'uploaded'.
+    const aiVariants = existingVariants.filter((v) => v.source !== 'uploaded');
+    const uploadedVariant: CoverVariant = {
+      url: imageUrl,
+      createdAt: new Date().toISOString(),
+      source: 'uploaded',
+    };
+    const allVariants = [...aiVariants, uploadedVariant];
+
+    // Aktualizacja: wgrany plik staje się aktywną okładką + dopisany do wariantów.
     const updatedEbook = await prisma.ebooks.update({
       where: {
         id: ebookId
       },
       data: {
         cover_image_url: imageUrl,
+        cover_variants: allVariants as any,
         updated_at: new Date()
       },
       select: {
         id: true,
         title: true,
         subtitle: true,
-        cover_image_url: true
+        cover_image_url: true,
+        cover_variants: true
       }
     });
 
-    console.log(`✅ Pomyślnie zaktualizowano URL okładki dla ebooka ID=${ebookId}`);
+    console.log(`✅ Wgrana okładka dodana jako wariant i ustawiona jako aktywna (ebook ID=${ebookId}). Wariantów łącznie: ${allVariants.length}`);
+
+    // Przegeneruj mockup z nowej okładki (best-effort).
+    try {
+      const mockupRes = await fetch(`${baseUrl}/api/ebooks/${ebookId}/generate-mockups`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Cookie: request.headers.get('cookie') || '',
+        },
+      });
+      if (!mockupRes.ok) {
+        console.warn(`⚠️ Mockup po uploadzie nie został przegenerowany (status ${mockupRes.status})`);
+      }
+    } catch (mockErr: any) {
+      console.warn('⚠️ Błąd przy przegenerowaniu mockupu po uploadzie:', mockErr?.message || mockErr);
+    }
 
     return NextResponse.json({
       success: true,
       image_url: imageUrl,
+      all_variants: updatedEbook.cover_variants,
       ebook: updatedEbook
     });
 

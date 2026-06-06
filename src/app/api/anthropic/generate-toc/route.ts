@@ -42,7 +42,8 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const { title, subtitle, description, scrapedContent, chapterCount } = body;
+    const { title, subtitle, description, scrapedContent, chapterCount, lang } = body;
+    const pl = lang === 'pl'; // język aplikacji; brak → traktujemy jak EN
 
     if (!title || title.trim() === '') {
       return NextResponse.json(
@@ -171,6 +172,12 @@ export async function POST(request: Request) {
     if (description && description.trim()) {
       prompt += `• Dostosuj strukturę do preferencji użytkownika podanych wyżej\n`;
     }
+
+    // Język outputu = język aplikacji (pl/en). Wymuszamy wprost.
+    prompt += `\n=== JĘZYK ===\n`;
+    prompt += pl
+      ? `Wszystkie tytuły rozdziałów napisz w języku POLSKIM.\n`
+      : `Write all chapter titles in ENGLISH.\n`;
 
     // Instrukcje formatowania
     prompt += `\n=== FORMAT ODPOWIEDZI ===\n`;

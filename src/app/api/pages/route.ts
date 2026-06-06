@@ -74,7 +74,11 @@ export async function GET(request: NextRequest) {
         },
         ebook: {
           select: {
-            subtitle: true
+            subtitle: true,
+            final_mockup_url: true,
+            cover_image_webp_url: true,
+            cover_image_url: true,
+            updated_at: true
           }
         }
       }
@@ -123,7 +127,11 @@ export async function GET(request: NextRequest) {
           },
           ebook: {
             select: {
-              subtitle: true
+              subtitle: true,
+              final_mockup_url: true,
+              cover_image_webp_url: true,
+              cover_image_url: true,
+              updated_at: true
             }
           }
         }
@@ -136,6 +144,17 @@ export async function GET(request: NextRequest) {
         return bTime - aTime;
       });
     }
+
+    // Okładka karty/landingu = ZAWSZE świeżo z relacji ebook (jedno źródło prawdy),
+    // kaskada identyczna jak resolveMockupUrl na landingu, + cache-bust na updated_at.
+    // NIE używamy zamrożonego page.coverImage (kopia z momentu tworzenia strony).
+    const resolvePageCover = (page: any): string => {
+      const e = page.ebook;
+      const raw = e?.final_mockup_url || e?.cover_image_webp_url || e?.cover_image_url || page.coverImage || '';
+      if (!raw) return '';
+      const bust = e?.updated_at ? new Date(e.updated_at).getTime() : '';
+      return bust ? `${raw}${raw.includes('?') ? '&' : '?'}t=${bust}` : raw;
+    };
 
     const pages = dbPages.map(page => {
       const creatorName = `${page.user?.firstName || ''} ${page.user?.lastName || ''}`.trim();
@@ -155,7 +174,7 @@ export async function GET(request: NextRequest) {
         createdAt: page.createdAt?.toISOString() ?? new Date().toISOString(),
         url: page.url || '',
         draft_url: page.draft_url || '',
-        coverImage: page.coverImage || '',
+        coverImage: resolvePageCover(page),
         videoPassword: '',
         isOwnedByUser: page.userId === userId,
         customDomainId: page.customDomainId,

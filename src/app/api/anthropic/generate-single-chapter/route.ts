@@ -43,7 +43,8 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const { title, subtitle, chapter, allChapters, description, scrapedContent } = body;
+    const { title, subtitle, chapter, allChapters, description, scrapedContent, lang } = body;
+    const pl = lang === 'pl'; // język aplikacji; brak → EN
 
     // Walidacja podstawowych danych
     if (!title || !chapter || !chapter.title) {
@@ -225,6 +226,11 @@ export async function POST(request: Request) {
     prompt += `PAMIETAJ: Sprawdz czy Twoja odpowiedz zawiera co najmniej 3500 znakow.\n`;
     prompt += `Jesli nie - dodaj wiecej szczegolów, przykladow i rozwiniec do kazdego akapitu.\n`;
     prompt += `To nie jest sugestia - to jest wymaganie.\n\n`;
+
+    prompt += `=== JEZYK / LANGUAGE ===\n`;
+    prompt += pl
+      ? `Napisz CALA tresc rozdzialu w jezyku POLSKIM.\n\n`
+      : `Write the ENTIRE chapter content in ENGLISH.\n\n`;
 
     prompt += `=== FORMAT ODPOWIEDZI ===\n`;
     prompt += `Zwroc tylko czysta tresc rozdzialu bez dodatkowych komentarzy, tytulow czy formatowania.`;

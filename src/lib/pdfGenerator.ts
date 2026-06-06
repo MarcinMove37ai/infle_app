@@ -46,6 +46,36 @@ async function optimizeAndEncodeImages(chapters: Chapter[], baseUrl: string): Pr
   return optimizedChapters;
 }
 
+// Słownik stringów UI w PDF — zależny od języka ebooka (pl/en).
+// Jedno źródło prawdy: zmieniamy tu, nie rozsiane po pliku.
+const PDF_STRINGS = {
+  en: {
+    chapterLabel: (n: number) => `Chapter ${n}.`,
+    chapterNumber: (n: number) => `Chapter ${n}.`,
+    introduction: 'Introduction',
+    tableOfContents: 'Table of contents:',
+    coverAlt: 'Cover',
+    noChapters: 'No chapters to display.',
+    noContent: 'No content for this chapter.',
+  },
+  pl: {
+    chapterLabel: (n: number) => `Rozdział ${n}.`,
+    chapterNumber: (n: number) => `Rozdział ${n}.`,
+    introduction: 'Wstęp',
+    tableOfContents: 'Spis treści:',
+    coverAlt: 'Okładka',
+    noChapters: 'Brak rozdziałów do wyświetlenia.',
+    noContent: 'Brak treści dla tego rozdziału.',
+  },
+} as const;
+
+type PdfLang = keyof typeof PDF_STRINGS;
+
+// Normalizacja: cokolwiek innego niż 'pl' → 'en' (bezpieczny default).
+function resolvePdfLang(language?: string | null): PdfLang {
+  return language === 'pl' ? 'pl' : 'en';
+}
+
 // Interfejsy i typy
 interface Chapter {
   id: number;
@@ -64,6 +94,7 @@ interface EbookData {
   authorDisplayName: string | null;
   authorLogoUrl: string | null;
   intro: string | null;
+  language: string;
   ebook_chapters: Chapter[];
 }
 
@@ -262,7 +293,8 @@ export async function generateEbookPdf(ebookId: number): Promise<PdfGeneratorRes
       throw new Error(`Ebook o ID ${ebookId} nie został znaleziony.`);
     }
 
-    const { title, subtitle, cover_image_url, ebook_chapters: chapters, authorDisplayName, authorLogoUrl, intro } = ebook;
+    const { title, subtitle, cover_image_url, ebook_chapters: chapters, authorDisplayName, authorLogoUrl, intro, language } = ebook;
+    const pdfLang = resolvePdfLang(language);
 
     // 2. OPTYMALIZACJA OBRAZÓW
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
@@ -309,7 +341,7 @@ export async function generateEbookPdf(ebookId: number): Promise<PdfGeneratorRes
     const htmlContent = generateHTMLContent(
       title, subtitle, chaptersWithOptimizedImages,
       cover_image_url, authorDisplayName, authorLogoUrl,
-      placeholderMapping, intro, 0
+      placeholderMapping, intro, 0, pdfLang
     );
 
     const page1 = await browser.newPage();
@@ -340,7 +372,7 @@ export async function generateEbookPdf(ebookId: number): Promise<PdfGeneratorRes
     const finalHtml = generateHTMLContent(
       title, subtitle, chaptersWithOptimizedImages,
       cover_image_url, authorDisplayName, authorLogoUrl,
-      chapterPageMapping, intro, introPageNumber
+      chapterPageMapping, intro, introPageNumber, pdfLang
     );
 
     const page2 = await browser.newPage();
@@ -385,14 +417,14 @@ function generateHTMLContent(
   authorLogoUrl?: string | null,
   chapterPageMapping?: ChapterPageMapping | null,
   introText?: string | null,
-  introPageNumber?: number
+  introPageNumber?: number,
+  lang: PdfLang = 'en'
 ): string {
   const hasIntro = !!(introText && introText.trim());
 
   return `
     <!DOCTYPE html>
-    <html lang="pl">
-    <head>
+    <html lang="${lang}">
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <title>${escapeHtml(title)}</title>
@@ -404,10 +436,10 @@ function generateHTMLContent(
       </style>
     </head>
     <body>
-      ${generateCoverPage(coverImageUrl!, title, subtitle)}
-      ${chapterPageMapping ? generateTableOfContents(chapters, chapterPageMapping, introPageNumber) : ''}
-      ${hasIntro ? generateIntroductionPage(introText!) : ''}
-      ${generateChaptersContent(chapters)}
+      ${generateCoverPage(coverImageUrl!, title, subtitle, lang)}
+      ${chapterPageMapping ? generateTableOfContents(chapters, chapterPageMapping, introPageNumber, lang) : ''}
+      ${hasIntro ? generateIntroductionPage(introText!, lang) : ''}
+      ${generateChaptersContent(chapters, lang)}
     </body>
     </html>
   `;
@@ -415,13 +447,9 @@ function generateHTMLContent(
 
 function generateAdvancedCSS(ebookTitle: string, ebookSubtitle: string | null, authorDisplayName?: string | null): string {
   const authorPart = authorDisplayName ? authorDisplayName.replace(/"/g, '\\"') : 'Inflee.app';
-  let fullTitle = ebookTitle;
-  if (ebookSubtitle) {
-    fullTitle += ` ${ebookSubtitle}`;
-  }
-  const displayFullTitle = fullTitle.length > 80
-    ? fullTitle.substring(0, 80) + '...'
-    : fullTitle;
+  const displayFullTitle = ebookTitle.length > 80
+    ? ebookTitle.substring(0, 80) + '...'
+    : ebookTitle;
 
   return `
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -439,8 +467,8 @@ function generateAdvancedCSS(ebookTitle: string, ebookSubtitle: string | null, a
         letter-spacing: 0.3px;
         margin-top: 12px;
         padding-top: 4px;
-        background-image: linear-gradient(to right, rgb(136, 136, 136) 0%, rgb(136, 136, 136) 100%);
-        background-size: 100% 1px;
+        background-image: linear-gradient(to right, rgb(210, 210, 210) 0%, rgb(210, 210, 210) 100%);
+        background-size: 100% 0.5px;
         background-repeat: no-repeat;
         background-position: top;
       }
@@ -452,8 +480,8 @@ function generateAdvancedCSS(ebookTitle: string, ebookSubtitle: string | null, a
         font-weight: 400;
         margin-top: 12px;
         padding-top: 4px;
-        background-image: linear-gradient(to right, rgb(136, 136, 136) 0%, rgb(136, 136, 136) 100%);
-        background-size: 100% 1px;
+        background-image: linear-gradient(to right, rgb(210, 210, 210) 0%, rgb(210, 210, 210) 100%);
+        background-size: 100% 0.5px;
         background-repeat: no-repeat;
         background-position: top;
       }
@@ -534,7 +562,7 @@ function generateAdvancedCSS(ebookTitle: string, ebookSubtitle: string | null, a
       bottom: 0.45em;
       left: 0;
       right: 0;
-      border-bottom: 1.5px dotted #999;
+      border-bottom: 1px solid #d8d8d8;
     }
 
     .toc-chapter-title {
@@ -645,36 +673,39 @@ function generateAdvancedCSS(ebookTitle: string, ebookSubtitle: string | null, a
   `;
 }
 
-function generateCoverPage(coverImageUrl: string): string {
+function generateCoverPage(coverImageUrl: string, _title?: string | null, _subtitle?: string | null, lang: PdfLang = 'en'): string {
+  const t = PDF_STRINGS[lang];
   return `
     <div class="cover-page">
-      <img src="${coverImageUrl}" alt="Okładka" class="cover-image" />
+      <img src="${coverImageUrl}" alt="${t.coverAlt}" class="cover-image" />
     </div>
   `;
 }
 
-function generateTableOfContents(chapters: Chapter[], chapterPageMapping: ChapterPageMapping, introPageNumber?: number): string {
+function generateTableOfContents(chapters: Chapter[], chapterPageMapping: ChapterPageMapping, introPageNumber?: number, lang: PdfLang = 'en'): string {
   if (!Array.isArray(chapters) || chapters.length === 0) {
     return '';
   }
+
+  const t = PDF_STRINGS[lang];
 
   // Introduction jako pierwszy wpis w TOC
   const introItem = introPageNumber && introPageNumber > 0 ? `
     <li class="toc-item">
       <span class="toc-item-body">
-        <span class="toc-chapter-title">Introduction</span>
-        <span class="toc-page-number">s.${introPageNumber}</span>
+        <span class="toc-chapter-title">${t.introduction}</span>
+        <span class="toc-page-number">${introPageNumber}</span>
       </span>
     </li>
   ` : '';
 
   const tocItems = chapters.map((chapter, index) => {
     const pageNumber = chapterPageMapping[chapter.id] || 0;
-    const pageDisplay = pageNumber > 0 ? `s.${pageNumber}` : 's.0';
+    const pageDisplay = pageNumber > 0 ? `${pageNumber}` : `0`;
 
     return `
       <li class="toc-item">
-        <span class="toc-chapter-label">Chapter ${index + 1}.</span>
+        <span class="toc-chapter-label">${t.chapterLabel(index + 1)}</span>
         <span class="toc-item-body">
           <span class="toc-chapter-title">${escapeHtml(chapter.title || '')}</span>
           <span class="toc-page-number">${pageDisplay}</span>
@@ -685,7 +716,7 @@ function generateTableOfContents(chapters: Chapter[], chapterPageMapping: Chapte
 
   return `
     <div class="toc-page">
-      <h2 class="toc-title">Table of content:</h2>
+      <h2 class="toc-title">${t.tableOfContents}</h2>
       <ul class="toc-list">
         ${introItem}
         ${tocItems}
@@ -698,7 +729,8 @@ function generateTableOfContents(chapters: Chapter[], chapterPageMapping: Chapte
 //  GENEROWANIE STRONY INTRODUCTION
 // =====================================================================
 
-function generateIntroductionPage(introText: string): string {
+function generateIntroductionPage(introText: string, lang: PdfLang = 'en'): string {
+  const t = PDF_STRINGS[lang];
   const paragraphs = introText.split('\n\n').filter(p => p.trim());
 
   let htmlContent = '';
@@ -720,7 +752,7 @@ function generateIntroductionPage(introText: string): string {
 
   return `
     <div class="introduction-page">
-      <h2 class="introduction-title">Introduction</h2>
+      <h2 class="introduction-title">${t.introduction}</h2>
       <div class="introduction-content">
         ${htmlContent}
       </div>
@@ -728,26 +760,28 @@ function generateIntroductionPage(introText: string): string {
   `;
 }
 
-function generateChaptersContent(chapters: Chapter[]): string {
+function generateChaptersContent(chapters: Chapter[], lang: PdfLang = 'en'): string {
+  const t = PDF_STRINGS[lang];
   if (!Array.isArray(chapters) || chapters.length === 0) {
-    return '<div class="no-content">Brak rozdziałów do wyświetlenia.</div>';
+    return `<div class="no-content">${t.noChapters}</div>`;
   }
   return chapters.map((chapter, index) => `
       <div class="chapter" id="chapter-${index + 1}">
         <div class="chapter-header">
-          <div class="chapter-number">Rozdział ${index + 1}.</div>
+          <div class="chapter-number">${t.chapterNumber(index + 1)}</div>
           <h2 class="chapter-title">${escapeHtml(chapter.title || '')}</h2>
         </div>
         <div class="chapter-content">
-          ${generateChapterContent(chapter.content || '', chapter.image_url, chapter, index)}
+          ${generateChapterContent(chapter.content || '', chapter.image_url, chapter, index, lang)}
         </div>
       </div>
     `).join('');
 }
 
-function generateChapterContent(content: string, imageUrl: string | null, chapter: any, chapterIndex: number): string {
+function generateChapterContent(content: string, imageUrl: string | null, chapter: any, chapterIndex: number, lang: PdfLang = 'en'): string {
+  const t = PDF_STRINGS[lang];
   if (!content.trim()) {
-    return '<p class="no-content">Brak treści dla tego rozdziału.</p>';
+    return `<p class="no-content">${t.noContent}</p>`;
   }
 
   const finalImageUrl = chapter.optimizedImageBase64 || imageUrl;
@@ -769,7 +803,8 @@ function generateChapterContent(content: string, imageUrl: string | null, chapte
     const paragraph = contentParagraphs[i].trim();
     if (!paragraph) continue;
     if (finalImageUrl && !imageInserted && i === imagePosition) {
-      htmlContent += `<div class="chapter-image-container"><img src="${finalImageUrl}" alt="Ilustracja rozdziału ${chapterIndex + 1}" class="chapter-image" /></div>`;
+      const imgAlt = lang === 'pl' ? `Ilustracja rozdziału ${chapterIndex + 1}` : `Chapter ${chapterIndex + 1} illustration`;
+      htmlContent += `<div class="chapter-image-container"><img src="${finalImageUrl}" alt="${imgAlt}" class="chapter-image" /></div>`;
       imageInserted = true;
     }
     if (isSectionHeader(paragraph)) {

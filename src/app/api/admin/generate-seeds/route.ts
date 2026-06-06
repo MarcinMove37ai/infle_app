@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { getApiKeyForEndpoint, getUserAiSettings } from '@/lib/user-api-keys';
+import { getApiKeyForEndpoint } from '@/lib/user-api-keys';
 
 export const runtime = 'nodejs';
 
@@ -202,9 +202,8 @@ function buildSeedsPrompt(ctx: CreatorContext, pl: boolean): string {
       creator += `[Source ${i + 1}] ${c}\n`;
     });
   }
-  if (!creator.trim()) {
-    creator = '(Very little data available about this creator. Infer a plausible niche from the handle and produce strong, general-purpose lead-magnet titles for a coach/freelancer/small business.)';
-  }
+  // UWAGA: pusty kontekst NIE jest tu dozwolony — sprawdzamy to wcześniej (guard w handlerze)
+  // i przerywamy zanim w ogóle wejdziemy w prompt. Generator nigdy nie zmyśla treści bez danych.
 
   // Prompt: metodyki Suby + Tracy + StoryBrand zsyntetyzowane w reguły.
   return `You are a world-class lead-magnet strategist. You write ebook titles in the combined tradition of Sabri Suby (irresistible offers, curiosity, specificity), Brian Tracy (benefit clarity, result-orientation), and Donald Miller / StoryBrand (customer-as-hero, clarity over cleverness, the grunt test).
@@ -214,16 +213,40 @@ Your task: based on the creator profile below, generate EXACTLY 3 distinct lead-
 === CREATOR PROFILE ===
 ${creator}
 
-=== HOW TO WRITE THE TITLE + SUBTITLE (the lead magnet hook) ===
+=== STEP 1: REASON ABOUT THE CREATOR AND AUDIENCE (think before writing) ===
+Before writing anything, work through this reasoning from the profile above:
+1. EXPERTISE: From the creator's data, infer what this person is genuinely skilled at and what their product/knowledge actually is. Be grounded in evidence from the profile — do not invent expertise they don't show.
+2. AUDIENCE: Determine who the real audience is — the actual people who follow, hire, or buy from this creator. Be specific about who they are.
+3. BURNING PROBLEMS: Find the audience's most painful, pressing problems that THIS creator is genuinely able to solve. The sweet spot is the intersection: (audience's real pain) ∩ (creator's real competence). Pick the 3 strongest.
+Then build one ebook idea per problem.
+
+=== STEP 2: WRITE THE TITLE + SUBTITLE ===
+TWO FORCES, BOTH REQUIRED:
+1. CLARITY (StoryBrand): "If you want to be mysterious, you'll also enjoy being broke." The title states PLAINLY what real problem it solves and what the reader gets. NEVER hide the payoff behind mystery, "secrets", "what they won't tell you", or curiosity gaps. If the reader has to guess what's inside, it failed.
+2. PUNCH via SABRI SUBY'S TITLE STRUCTURES: clarity is not the same as flat. Suby's power comes from proven SYNTACTIC SKELETONS, not adjectives. Build each of the 3 titles on a DIFFERENT one of these structures (fill the brackets with the real problem/result from Step 1):
+   a) "How to [specific concrete result] without [the real pain/sacrifice they dread]" — e.g. "How to Pass Every Fabric Compliance Test Without Re-Ordering"
+   b) "[Number] [adjective] Mistakes [specific audience] Make When [action]" — e.g. "7 Costly Mistakes Buyers Make When Sourcing Flame-Retardant Fabric"
+   c) "The [specific audience]'s Guide to [concrete result]" — e.g. "The Procurement Manager's Guide to Certified Protective Textiles"
+   d) "Stop [a specific, real loss the reader is suffering]" — e.g. "Stop Approving Fabric That Fails in the Field"
+   e) "Avoid the [number] [thing] That [concrete bad consequence]" — e.g. "Avoid the 5 Spec Errors That Get Protective Orders Rejected"
+Pick the 3 strongest structures for these 3 problems — vary them, do not use the same skeleton twice. These skeletons are DIRECT (no mystery, no hidden payoff) but structured to grab the right reader. Fill them with the visceral language your audience actually uses for their pain — name the specific failure, not a soft abstraction.
+The test: a flat statement ("Your fabric won't protect workers") fails — it is not built on a skeleton and has no pull. You want a Suby skeleton + the real problem + true stakes. Every word must still be TRUE and deliverable in a few free chapters — structure never licenses exaggeration.
+
+EVERYTHING MUST BE TRUE AND DELIVERABLE — this is the hard constraint:
+- This is a FREE ebook of only a FEW chapters. The title must promise ONLY what a few chapters (or a piece of genuinely unique information/insight) can realistically deliver.
+- Do NOT over-promise or promise the impossible. No "double your revenue", no "complete system", no grand transformations a short free ebook cannot honestly fulfill. Right-size the promise to the format.
+- The promise must match the creator's real competence (from Step 1). No exaggeration, no stretching.
+
 Each title MUST:
-- Name ONE specific burning problem or one desired result (never many).
-- Promise a concrete outcome, ideally with a number and/or timeframe.
-- Pass the "grunt test": a stranger instantly understands what it is and what they get.
-- Speak to the reader's world and identity, not the creator's brand or features.
-- Use at most ONE honest curiosity/objection hook where it genuinely fits (e.g. "without [pain]", "even if [obstacle]"). Choose the strongest hook per title; do NOT force the same template on all three. Vary the three titles.
-- Be download-worthy: so compelling that the right person feels they must grab it.
-AVOID: vague cleverness that sacrifices clarity, jargon, multiple competing promises, over-promising, brand-led or feature-led titles.
-Length: title ≈ 6–12 words (front-load the result). Subtitle = ONE line (~8–16 words) that COMPLEMENTS (does not repeat) the title — it adds the clarity layer: who it's for, number of steps, timeframe, or the objection removed.
+- Address ONE real, specific problem from Step 1 and state its solution/result directly.
+- Be concrete and honest — a number or scope is good only if it's realistic for a few chapters.
+- Pass the "grunt test": a stranger instantly knows what it is and what they get, with zero guessing.
+- Speak to the reader's world and the problem they actually feel — not the creator's brand or features.
+- Be precisely matched to THIS creator and THIS audience. A generic title that could belong to anyone is a failure.
+A direct, honest objection-remover is allowed when it's TRUE and achievable (e.g. "without [a real, avoidable pain]", "even if [a real starting point]") — but only if a few chapters can actually back it up. It must clarify, never tease.
+AVOID: mystery/curiosity/"secrets", over-promising, impossible or oversized promises, jargon, multiple competing promises, brand-led or feature-led titles.
+Length — TITLE MUST BE SHORT: aim for 5–8 words, absolute maximum 9. Front-load the result. A title that needs two lines is too long — cut it. Do NOT cram multiple attributes/specs into the title (e.g. listing two fabric types, or appending a standard number) — pick the single sharpest angle and push every secondary detail (specs, standards, audience, timeframe) into the subtitle. Prefer dropping filler like "How to" / "What you must know before" when the title is stronger without it.
+Subtitle = ONE line (~8–16 words) that COMPLEMENTS (does not repeat) the title — it states plainly who it's for and the concrete, realistic result, and is where specifics like standards, numbers, or niche details belong. The subtitle ALWAYS carries a clear reader benefit, never a description of the ebook's contents.
 
 === HOW TO WRITE THE DESCRIPTION (author voice profile — NOT content) ===
 The description captures HOW this author communicates, so an AI can later write every chapter in their voice. It MUST describe ONLY style, never the ebook's actual content or chapter topics. Cover, in 2–4 sentences: tone/energy (calm vs high-energy, warm vs blunt), sentence rhythm (short punchy vs flowing), vocabulary register and any signature words/metaphors, level of formality, how they address the audience (second-person "you", commands, questions), and their emotional palette. Base this on the creator's actual captions/bio above. If data is thin, describe a warm, clear, professional coaching voice. Do NOT mention specific topics, facts, or what the ebook will teach — style only.
@@ -252,7 +275,7 @@ async function callAnthropic(prompt: string, apiKey: string, model: string): Pro
     body: JSON.stringify({
       model,
       max_tokens: 2000,
-      temperature: 0.8,
+      //temperature: 0.8,
       messages: [{ role: 'user', content: prompt }],
     }),
   });
@@ -328,16 +351,45 @@ export async function POST(request: NextRequest) {
         ctx.webContent = await fetchWebContext(baseUrl, cookie, webUrls);
       }
     } else if (instagram) {
-      // Tor INVITATION: jedno pole przyjmuje IG albo LinkedIn — rozpoznajemy po linku.
-      const inputCtx = isLinkedInInput(instagram)
-        ? await fetchLinkedInContext(baseUrl, cookie, instagram)
-        : await fetchInstagramContext(baseUrl, cookie, instagram);
-      Object.assign(ctx, inputCtx);
-      ctx.webContent = ctx.webContent || [];
+      // Tor INVITATION: jedno pole przyjmuje IG, LinkedIn ALBO zwykłą stronę www.
+      const raw = instagram.trim();
+      console.log('🔎 [generate-seeds] invitation input:', JSON.stringify(raw), {
+        isLI: isLinkedInInput(raw),
+        isIG: /instagram\.com/i.test(raw) || raw.startsWith('@'),
+      });
+      if (isLinkedInInput(raw)) {
+        // LinkedIn → profil zawodowy
+        Object.assign(ctx, await fetchLinkedInContext(baseUrl, cookie, raw));
+      } else if (/instagram\.com/i.test(raw) || raw.startsWith('@')) {
+        // Instagram (link lub @nick) → profil + posty
+        Object.assign(ctx, await fetchInstagramContext(baseUrl, cookie, raw));
+      } else if (/^https?:\/\//i.test(raw) || /^[^\s@]+\.[a-z]{2,}/i.test(raw)) {
+        // Każdy inny URL/domena (np. ariteks.net) → SCRAPE strony www
+        ctx.webContent = await fetchWebContext(baseUrl, cookie, [raw]);
+      } else {
+        // Nierozpoznane wejście → guard niżej zwróci czytelny błąd (zero zmyślania)
+      }
     } else {
       return NextResponse.json(
         { error: 'Podaj instagram (invitation) albo applicationId (application)' },
         { status: 400 },
+      );
+    }
+
+    // GUARD: bez realnych danych o twórcy NIE generujemy (żadnego zmyślania).
+    // Wymagamy choć jednego źródła: bio/headline, posty IG albo treść ze stron.
+    const hasRealContext =
+      (!!ctx.bio && ctx.bio.trim().length > 0) ||
+      ctx.posts.length > 0 ||
+      ctx.webContent.length > 0;
+    if (!hasRealContext) {
+      console.warn('⚠️ [generate-seeds] pusty kontekst — przerywam bez generowania');
+      return NextResponse.json(
+        {
+          error:
+            'Nie udało się pobrać danych z podanego źródła (profil prywatny, nieosiągalny albo zły link). Seedy nie zostały wygenerowane.',
+        },
+        { status: 422 },
       );
     }
 
@@ -356,12 +408,10 @@ export async function POST(request: NextRequest) {
     if (!apiKey) {
       return NextResponse.json({ error: 'Brak klucza API Anthropic' }, { status: 500 });
     }
-    const BASIC_AI_MODEL = process.env.BASIC_AI_MODEL || 'claude-3-5-haiku-20241022';
+    // Seedy to copywriting najwyższej próby — własny, dedykowany model (ponad premium).
+    // Fallback: PREMIUM, a gdyby i jego nie było — Sonnet. Generator NIE używa modelu z ustawień usera.
     const PREMIUM_AI_MODEL = process.env.PREMIUM_AI_MODEL || 'claude-sonnet-4-20250514';
-    const userAiSettings = await getUserAiSettings(userId);
-    // Seedy to copywriting wyższej próby — preferujemy mocniejszy model, jeśli dostępny.
-    const model =
-      userAiSettings.textAiModel === 'claude-3-sonnet' ? PREMIUM_AI_MODEL : PREMIUM_AI_MODEL;
+    const model = process.env.SEEDS_AI_MODEL || PREMIUM_AI_MODEL;
 
     const prompt = buildSeedsPrompt(ctx, pl);
     console.log('🌱 [generate-seeds] context:', {

@@ -35,7 +35,8 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const { title, subtitle, chapters } = body; // Dodajemy pobranie podtytułu
+    const { title, subtitle, chapters, lang } = body; // Dodajemy pobranie podtytułu
+    const pl = lang === 'pl'; // język aplikacji; brak → EN
 
     if (!title || !chapters || !Array.isArray(chapters) || chapters.length === 0) {
       return NextResponse.json(
@@ -94,7 +95,9 @@ export async function POST(request: Request) {
       - Zawierać wprowadzenie, rozwinięcie i podsumowanie
       - Napisany profesjonalnym, ale przystępnym językiem
 
-      Nie używaj podtytułów, numeracji ani oznaczeń formatowania.`;
+      Nie używaj podtytułów, numeracji ani oznaczeń formatowania.
+
+      ${pl ? 'Napisz całą treść rozdziału w języku POLSKIM.' : 'Write the entire chapter content in ENGLISH.'}`;
 
       const requestBody: AnthropicRequest = {
         model: modelToUse, // ✅ ZMIANA: Używaj modelu z ustawień użytkownika

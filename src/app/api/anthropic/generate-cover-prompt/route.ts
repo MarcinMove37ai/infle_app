@@ -56,7 +56,7 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const { title, subtitle, intro } = body;
+    const { title, subtitle, intro, chapters } = body;
 
     if (!title) {
       return NextResponse.json(
@@ -65,9 +65,17 @@ export async function POST(request: Request) {
       );
     }
 
-    if (!intro || intro.trim().length === 0) {
+    // Okładka opiera się na realnej treści książki: w pierwszej kolejności na
+    // strukturze rozdziałów, a gdy ich brak — na wstępie. Wymagamy przynajmniej
+    // jednego z tych źródeł.
+    const chapterList: Array<{ position?: number; title?: string; content?: string }> =
+      Array.isArray(chapters) ? chapters : [];
+    const hasChapters = chapterList.length > 0;
+    const hasIntro = typeof intro === 'string' && intro.trim().length > 0;
+
+    if (!hasChapters && !hasIntro) {
       return NextResponse.json(
-        { error: 'Brak treści wstępu (pole intro jest puste).' },
+        { error: 'Brak treści książki (rozdziały i wstęp są puste).' },
         { status: 400 }
       );
     }
@@ -93,60 +101,95 @@ export async function POST(request: Request) {
       );
     }
 
-    const BASIC_AI_MODEL = process.env.BASIC_AI_MODEL || 'claude-haiku-4-5';
+    // Okładka to zadanie kreatywne — używamy mocniejszego modelu (premium),
+    // który potrafi przeanalizować treść i zaprojektować dopasowany kierunek
+    // artystyczny, zamiast produkować bezpieczną sztampę.
+    const PREMIUM_AI_MODEL = process.env.PREMIUM_AI_MODEL || 'claude-sonnet-4-6';
 
-    // Przytnij intro do rozsądnej długości (model graficzny nie potrzebuje więcej)
-    const introExcerpt = intro.trim().substring(0, 1500);
+    // Zbuduj zwięzłą STRUKTURĘ TREŚCI książki na podstawie rozdziałów:
+    // każdy rozdział = jego tytuł + krótki wycinek treści (pierwsze zdania).
+    // To realna zawartość książki — okładka ma ją odzwierciedlać, nie zgadywać.
+    // Limitujemy liczbę rozdziałów i długość wycinka, by prompt był zwarty.
+    const sortedChapters = [...chapterList].sort(
+      (a, b) => (a.position ?? 0) - (b.position ?? 0)
+    );
 
-    const prompt = `Jesteś ekspertem w tworzeniu promptów dla modeli generowania obrazów AI, specjalizującym się w okładkach książek.
+    const chaptersStructure = sortedChapters
+      .slice(0, 12)
+      .map((ch, idx) => {
+        const chTitle = (ch.title ?? '').trim();
+        const snippet = (ch.content ?? '')
+          .replace(/\s+/g, ' ')
+          .trim()
+          .substring(0, 220);
+        const num = ch.position ?? idx + 1;
+        if (chTitle && snippet) return `${num}. ${chTitle} — ${snippet}`;
+        if (chTitle) return `${num}. ${chTitle}`;
+        return snippet ? `${num}. ${snippet}` : '';
+      })
+      .filter(Boolean)
+      .join('\n');
 
-Stwórz szczegółowy prompt dla modelu Gemini 3 Pro Image (Nano Banana Pro), który wygeneruje KOMPLETNĄ, gotową okładkę ebooka — z tytułem i podtytułem wkomponowanymi bezpośrednio w grafikę.
+    // Fallback: gdy z jakiegoś powodu nie ma użytecznej struktury rozdziałów,
+    // użyj wstępu (przyciętego), żeby brief nie został bez treści.
+    const introExcerpt = (intro ?? '').trim().substring(0, 1500);
+    const contentForBrief = chaptersStructure.trim().length > 0
+      ? chaptersStructure
+      : introExcerpt;
+
+    const prompt = `Jesteś dyrektorem artystycznym projektującym okładki książek dla najlepszych wydawnictw. Twoje okładki wygrywają nagrody za to, że są odważne, zapadają w pamięć i idealnie oddają ducha treści. Brzydzisz się generyczną, korporacyjną sztampą — żadnych nudnych gradientów, oklepanych ikon żarówki, banalnych zdjęć stockowych.
+
+Twoim zadaniem jest napisanie szczegółowego promptu (po angielsku) dla modelu Gemini 3 Pro Image, który wygeneruje KOMPLETNĄ, gotową do druku okładkę ebooka — z tytułem i podtytułem wkomponowanymi w grafikę.
 
 DANE EBOOKA:
 - Tytuł: "${title}"${subtitle ? `\n- Podtytuł: "${subtitle}"` : ''}
 
-WSTĘP DO EBOOKA (na podstawie którego określ tematykę i nastrój okładki):
-${introExcerpt}
+STRUKTURA TREŚCI KSIĄŻKI (tytuły rozdziałów i wycinki — to jest REALNA zawartość, którą okładka musi oddać):
+${contentForBrief}
 
 ---
 
-INSTRUKCJE TWORZENIA PROMPTU:
+ETAP 1 — ANALIZA I KIERUNEK ARTYSTYCZNY (przemyśl, zanim napiszesz prompt):
+Przeanalizuj POWYŻSZĄ STRUKTURĘ ROZDZIAŁÓW — to jest faktyczna treść książki. Ustal: o czym KONKRETNIE jest ta książka, jaki problem rozwiązuje i jaki jest jej główny, namacalny temat przewodni wynikający z rozdziałów? Jaka jest jej emocja i obietnica? Kto ją czyta?
 
-**Format wyjściowy obrazu:**
-- Wymiary: format 3:4 (pionowy — standardowy format okładki książki)
-- Rozdzielczość: 2K
-- Wynik ma być finalną, drukowaną okładką — nie szkicem
+Następnie dobierz JEDEN kierunek wizualny, który (a) wyróżni się na tle setek nudnych okładek poradników ORAZ (b) WIERNIE reprezentuje konkretną treść z rozdziałów. Styl może być dowolny (fotograficzny, ilustracyjny, typograficzny, konceptualny, surrealistyczny, abstrakcyjny, malarski) — ale koncept wizualny MUSI bezpośrednio wynikać z tego, o czym jest książka.
 
-**Tekst na okładce (OBOWIĄZKOWY):**
-- TYTUŁ: "${title}" — umieszczony wyraźnie, czytelnie, w górnej lub centralnej części okładki
-${subtitle ? `- PODTYTUŁ: "${subtitle}" — umieszczony w DOLNEJ części okładki, mniejszą czcionką, z wyraźnym odstępem od tytułu (nie bezpośrednio pod nim)` : ''}
-- Podaj konkretny styl fontu (np. "bold serif font", "elegant sans-serif", "handwritten style")
-- Określ kolor tekstu tak, aby kontrastował z tłem
-- Tekst ma być integralną częścią kompozycji, nie naklejką
+ZASADA NADRZĘDNA — SPÓJNOŚĆ TREŚCI Z GRAFIKĄ:
+Główny motyw okładki musi reprezentować RZECZYWISTY temat książki widoczny w rozdziałach. Czytelnik, patrząc na okładkę, ma od razu wyczuć, o czym jest środek. ABSOLUTNIE ZAKAZANE są ozdobne, "efektowne" metafory oderwane od treści (np. płonąca zapałka, filiżanka kawy, przypadkowe abstrakcje), jeśli nie reprezentują wprost zawartości książki. Lepszy jest trafny, mocno zaprojektowany motyw niż ładny obrazek bez związku z tematem. Jeśli kusi Cię metafora — sprawdź, czy wprost odsyła do treści rozdziałów; jeśli nie, odrzuć ją.
 
-**Kompozycja wizualna:**
-- Stwórz spójną kompozycję graficzną nawiązującą do tematyki wstępu
-- Określ główny motyw wizualny, kolorystykę, nastrój i styl (np. fotograficzny, ilustracyjny, abstrakcyjny)
-- Okładka ma wyglądać profesjonalnie i marketingowo atrakcyjnie
-- Cała powierzchnia powinna być wypełniona — brak pustych margingesów
-- Tytuł zajmuje górną część okładki, podtytuł dolną — między nimi przestrzeń wypełniona grafiką
-- ZERO marginesów, ZERO obramowań, ZERO paddingu — grafika zaczyna się od absolutnej krawędzi obrazu
-- Tło i elementy graficzne muszą dosięgać każdego piksela przy krawędzi — bez żadnych ciemnych obwódek ani ramek
-- Nie dodawaj efektu "okładki książki w 3D" ani cienia sugerującego ramkę
+ETAP 2 — NAPISZ PROMPT w tym kierunku. Prompt MUSI precyzyjnie określać:
+- GŁÓWNY KONCEPT WIZUALNY: jeden mocny, konkretny obraz lub motyw, ZAKORZENIONY w temacie książki (nie zlepek ogólników, nie metafora bez związku z treścią)
+- KIEROWANIE ŚWIATŁEM: dramatyczne, nastrojowe, kontrastowe — światło buduje emocję
+- KOMPOZYCJĘ: odważną, z wyraźnym punktem skupienia i hierarchią; coś, co zatrzymuje wzrok
+- PALETĘ KOLORÓW: konkretną i celową, budującą nastrój (podaj realne kolory, nie "ładne barwy")
+- TECHNIKĘ I FAKTURĘ: styl renderowania spójny z kierunkiem (np. cinematic photography, bold flat illustration, oil-painted texture, high-contrast graphic design)
+- NASTRÓJ: jedno-dwa słowa-klucze emocji, które okładka ma wywołać
 
-**Długość promptu:** około 300-500 słów, w języku angielskim.
+WYMAGANIA DOTYCZĄCE TEKSTU NA OKŁADCE (bezwzględne):
+- Na okładce mają być WYŁĄCZNIE dwa napisy, oba dokładnie jak podano — słowo w słowo, bez zmian, bez tłumaczenia, bez dopisków.
+- Główny napis (tytuł), wyraźny i czytelny, w górnej lub centralnej części, brzmi dokładnie: ${title}
+${subtitle ? `- Drugi, mniejszy napis (podtytuł), w DOLNEJ części, mniejszą czcionką, z wyraźnym odstępem od tytułu (nie tuż pod nim), brzmi dokładnie: ${subtitle}` : '- NIE umieszczaj żadnego podtytułu ani drugiego napisu — tylko sam tytuł.'}
+- KRYTYCZNE: w prompcie dla modelu graficznego NIGDZIE nie używaj słów-etykiet typu "TITLE", "SUBTITLE", "TYTUŁ", "PODTYTUŁ", "MAIN TITLE", "HEADING", ani dwukropków przed napisami. Model rysuje tekst dosłownie. Opisuj napisy zdaniem (np. 'the cover displays the following title text, rendered exactly as written: ...') i NIGDY nie poprzedzaj cytowanego tekstu etykietą z dwukropkiem.
+- Typografia ma być częścią projektu, nie naklejką: dobierz krój i kolor fontu tak, by wspierał kierunek artystyczny i mocno kontrastował z tłem. Tekst ma współgrać z kompozycją.
+- Okładka musi zawierać TYLKO ten tekst (tytuł${subtitle ? ' i podtytuł' : ''}) — żadnych dodatkowych słów, etykiet, placeholderów ("subtitle", "your text here") ani powtórzeń.
 
-Napisz TYLKO gotowy prompt (bez komentarzy, nagłówków ani wyjaśnień):
-Zawsze zaczynaj od: "Create a ..." bez prefiksu w formie "PROMPT: "`;
+WYMAGANIA TECHNICZNE FORMATU:
+- Format 3:4 (pionowy), rozdzielczość 2K, finalna okładka gotowa do druku (nie szkic, nie makieta)
+- Grafika wypełnia CAŁĄ powierzchnię do absolutnej krawędzi — ZERO marginesów, ZERO ramek, ZERO paddingu, żadnych ciemnych obwódek
+- NIE pokazuj okładki jako obiektu 3D ani z cieniem sugerującym brzeg książki — to ma być sama płaska grafika wypełniająca kadr
+
+Długość promptu: około 350-550 słów, bogaty i konkretny, po angielsku.
+
+Napisz TYLKO gotowy prompt (bez komentarzy, bez nagłówków, bez opisu swojej analizy). Zacznij od słowa "Create" — bez prefiksu "PROMPT:".`;
 
     const requestBody: AnthropicRequest = {
-      model: BASIC_AI_MODEL,
-      max_tokens: 1000,
-      temperature: 0.3,
+      model: PREMIUM_AI_MODEL,
+      max_tokens: 1200,
+      temperature: 0.65,
       messages: [{ role: 'user', content: prompt }]
     };
 
-    console.log(`📤 Wysyłanie do Claude (${BASIC_AI_MODEL})...`);
+    console.log(`📤 Wysyłanie do Claude (${PREMIUM_AI_MODEL})...`);
     console.log('📤 REQUEST TO ANTHROPIC:', JSON.stringify(requestBody, null, 2));
     const response = await fetchWithRetry(
       'https://api.anthropic.com/v1/messages',
@@ -184,7 +227,7 @@ Zawsze zaczynaj od: "Create a ..." bez prefiksu w formie "PROMPT: "`;
       coverPrompt,
       promptLength: coverPrompt.length,
       targetModel: 'gemini-3-pro-image-preview',
-      sourceField: 'intro',
+      sourceField: chaptersStructure.trim().length > 0 ? 'chapters' : 'intro',
     });
 
   } catch (error) {

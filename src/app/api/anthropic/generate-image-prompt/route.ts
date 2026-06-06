@@ -145,13 +145,15 @@ export async function POST(request: Request) {
     } = body;
 
     // ✅ LOGIKA KLUCZY API
+    // Ilustracje rozdziałów to zadanie kreatywne wymagające spójnego art direction
+    // w obrębie całej książki — używamy mocniejszego modelu (premium).
     const BASIC_AI_MODEL = process.env.BASIC_AI_MODEL || 'claude-haiku-4-5';
-    const PREMIUM_AI_MODEL = process.env.PREMIUM_AI_MODEL || 'claude-sonnet-4-5';
+    const PREMIUM_AI_MODEL = process.env.PREMIUM_AI_MODEL || 'claude-sonnet-4-6';
 
     let anthropicApiKey: string | null = null;
     let keySource: 'user' | 'env' | 'none' = 'none';
     let userAiSettings: any = null;
-    let modelToUse: string = BASIC_AI_MODEL;
+    let modelToUse: string = PREMIUM_AI_MODEL;
 
     if (!isInternalRequest) {
       const session = await getServerSession(authOptions);
@@ -167,9 +169,6 @@ export async function POST(request: Request) {
         keySource = source;
 
         userAiSettings = await getUserAiSettings(userId);
-        modelToUse = userAiSettings.textAiModel === 'claude-3-sonnet'
-          ? PREMIUM_AI_MODEL
-          : BASIC_AI_MODEL;
       }
     } else {
       anthropicApiKey = process.env.ANTHROPIC_API_KEY ?? null;
@@ -229,78 +228,68 @@ export async function POST(request: Request) {
       }
     }
 
-    // 🔥 PROMPT DLA IMAGEN-3
-    const prompt = `Jesteś ekspertem w tworzeniu PHOTOREALISTIC promptów dla systemów generowania obrazów AI. Twoim zadaniem jest stworzenie PRECYZYJNEGO promptu (${finalConfig.optimalLength} znaków) który wygeneruje ULTRA-REALISTYCZNĄ ilustrację ebooka.
+    // 🎨 PROMPT — spektakularny fotorealizm: spójny styl serii + scena z treści rozdziału
+    const prompt = `Jesteś dyrektorem artystycznym i fotografem tworzącym SERIĘ spektakularnych, fotorealistycznych ilustracji do książki — po jednej na rozdział. Cała seria ma wyglądać jak dzieło jednego twórcy: ten sam fotograficzny styl, paleta i nastrój w każdym rozdziale. Twoje obrazy są ostre, bogate w detale, przemyślane kompozycyjnie i robią wrażenie — nigdy banalne.
 
-DANE EBOOKA:
-Tytuł: "${title}"${subtitle ? `\nPodtytuł: "${subtitle}"` : ''}
-Rozdział: "${chapterTitle}"${contextInfo}
+Twoim zadaniem jest napisanie promptu (po angielsku) dla modelu generowania obrazów, który stworzy ilustrację do JEDNEGO rozdziału tej książki.
 
-TREŚĆ ROZDZIAŁU:
+KSIĄŻKA (wspólny kontekst dla całej serii ilustracji):
+- Tytuł: "${title}"${subtitle ? `\n- Podtytuł: "${subtitle}"` : ''}${contextInfo}
+
+ROZDZIAŁ DO ZILUSTROWANIA:
+- Tytuł rozdziału: "${chapterTitle}"
+
+TREŚĆ ROZDZIAŁU (źródło konkretnej sceny):
 ${chapterContent}
 
-OPTYMALIZACJE DLA GOOGLE IMAGEN-3:
-- Wykorzystaj ${finalConfig.enhancement_level} level enhancement
-- Maksymalna długość: ${finalConfig.optimalLength} znaków dla optymalnej jakości
-- Używaj szczegółowych instrukcji technicznych
-- Skupienie na ${finalConfig.qualityTarget}
-- Provider: Google AI Studio compatible
+---
 
-🎯 KLUCZOWE WYMAGANIA PHOTOREALISTIC PROMPTU:
+DWIE WARSTWY, KTÓRE MUSISZ POGODZIĆ:
 
-1. **PODSTAWOWA STRUKTURA (200-250 znaków):**
-   - Rozpocznij od "Professional ebook illustration:"
-   - Opisz GŁÓWNĄ SCENĘ w 1-2 konkretnych zdaniach
-   - Bazuj BEZPOŚREDNIO na treści rozdziału "${chapterTitle}"
+WARSTWA 1 — STYL CAŁEJ SERII (MUSI być identyczny w każdym rozdziale tej książki):
+Medium jest USTALONE: wysokiej klasy FOTOREALIZM — albo realistyczna fotografia, albo hiperrealistyczny render 3D (wybierz to, co lepiej pasuje do tematu książki, i trzymaj się jednego w całej serii). Obraz ma być ostry, pełen detali, z realistycznym światłem, fakturami i głębią — jak profesjonalna fotografia lub kadr z high-endowej reklamy.
+Wyprowadź spójny klucz wizualny WYŁĄCZNIE z tytułu i tematu CAŁEJ książki (nie z treści tego konkretnego rozdziału — bo wtedy każdy rozdział wyszedłby inny) i opisuj go zawsze tak samo:
+- CHARAKTER ŚWIATŁA: jeden konsekwentny rodzaj (np. ciepłe naturalne światło dzienne, dramatyczne kinowe światło z głębokimi cieniami, czyste studyjne) — buduje nastrój i spójność.
+- PALETA KOLORÓW: konkretna, ograniczona paleta (podaj realne kolory), spójna dla całej serii.
+- NASTRÓJ: jedna konsekwentna atmosfera (np. warm and aspirational, focused and calm, bold and energetic).
+- JAKOŚĆ: realistic, crisp focus, rich fine detail, professional photography quality, striking and memorable composition, depth and atmosphere.
+BEZWZGLĘDNIE ZAKAZANE: flat illustration, vector art, cartoon, clip-art, minimalist corporate graphics, anime — wszystko, co płaskie lub uproszczone. To MA wyglądać realistycznie i bogato.
 
-2. **PARAMETRY APARATU (150-200 znaków) - OBOWIĄZKOWE:**
-   ${forceRegenerate ? `- Użyj: "${photoElements.camera}"` : '- Dodaj parametry aparatu: Canon/Sony/Nikon + obiektyw + przysłona'}
-   - Zawsze dodaj "f/1.4-2.8, ISO 100-400"
-   - To jest KLUCZOWE dla realizmu
+WARSTWA 2 — SYMBOLICZNA SCENA TEGO ROZDZIAŁU (różna w każdym rozdziale; ŚCIŚLE powiązana z jego TYTUŁEM):
+Punktem wyjścia jest TYTUŁ tego rozdziału: "${chapterTitle}". To on, a nie ogólny temat książki, wyznacza, co przedstawia ilustracja.
 
-3. **OŚWIETLENIE (100-150 znaków) - OBOWIĄZKOWE:**
-   ${forceRegenerate ? `- Użyj: "${photoElements.lighting}"` : '- Określ konkretne oświetlenie: golden hour/studio/natural window'}
-   - Dodaj "volumetric lighting" lub "natural shadows"
+Pomyśl dwustopniowo, zanim opiszesz scenę:
+1) Wydobądź z tytułu rozdziału JEDNĄ kluczową ideę lub pojęcie — to, co ten konkretny rozdział komunikuje (treść rozdziału powyżej służy tylko do doprecyzowania detali i kontekstu, nie do rozmycia tematu).
+2) Zaprojektuj jeden WYRAŹNY, fotorealistyczny SYMBOL lub wizualną METAFORĘ tej idei — konkretny obraz, który czytelnik natychmiast i jednoznacznie skojarzy z tytułem rozdziału. Powiązanie ma być ścisłe i czytelne, nie luźne.
 
-4. **JAKOŚĆ I STYL (150-200 znaków) - OBOWIĄZKOWE:**
-   ${forceRegenerate ? `- Użyj: "${photoElements.quality}"` : '- Zawsze dodaj: "photorealistic, hyperrealistic, 8K UHD"'}
-   - Dodaj "professional photography, ultra-sharp focus"
-   - ${maximumQuality ? 'Dodaj "commercial photography quality, HDR"' : ''}
+Scena musi być wyraźnie różna od scen innych rozdziałów — bo każdy tytuł niesie inną ideę. To jedyny element zmienny w serii; fotograficzny styl, paleta i nastrój (Warstwa 1) pozostają wspólne.
 
-5. **KOMPOZYCJA (100-150 znaków):**
-   ${forceRegenerate ? `- Użyj: "${photoElements.composition}"` : '- Dodaj kompozycję: "rule of thirds" lub "centered composition"'}
-   - Zawsze dodaj "shallow depth of field" dla realizmu
+UNIKAJ generycznych scen rodzajowych (osoba przy laptopie, biurko, uścisk dłoni, wykres na ekranie), CHYBA że taki obraz jest faktycznym, mocnym symbolem idei z tytułu. Domyślnie szukaj świeższej, bardziej symbolicznej metafory — pomysłowej, ale czytelnej.
 
-6. **WYMAGANIA TECHNICZNE (100-150 znaków):**
-   - "ABSOLUTELY NO TEXT anywhere in image"
-   ${enableTransparency ? '- "transparent background, clean edges"' : ''}
-   - "DO NOT include images of children, infants, or minors. Focus on symbolic or adult representations ONLY."
+WYMAGANIA TECHNICZNE (bezwzględne):
+- Format poziomy 16:9, wysoka rozdzielczość, ostrość, mnóstwo detali
+- NO promotional or marketing text: no advertising banners, no call-to-action, no slogans, headlines, posters, billboards, big captions, titles overlaid on the image, logos or watermarks. The image must never look like an ad. Natural, incidental environmental text is fine when the scene calls for it (e.g. a handwritten sticky note, a book spine, a faint shop sign in the background) — keep it minimal, secondary and contextual, never the focal point, and never leave artificial blank signs or empty screens where text would naturally be
+- DO NOT include children, infants, or minors — adult or symbolic representations only
+- No face looking directly at the camera, no direct eye contact with the viewer
+- NEVER censor, cover, blur, pixelate, black-bar, smudge or obscure any face. No black bars, no blur over faces, no objects placed to hide a face. Achieve anonymity through framing only (profile, three-quarter, from behind, face turned away or out of frame, focus on hands or silhouette). Any face shown must be natural, sharp and uncensored — simply not looking at the camera
+- Kompozycja czysta, z jednym wyraźnym punktem skupienia, ale bogata w realistyczny detal
 
-${forceRegenerate ? `
-🔄 REGENERATION MODE (Timestamp: ${timestamp}):
-- Użyj INNYCH elementów fotograficznych niż wcześniej
-- Zmień perspektywę i kompozycję dramatycznie
-- Zastosuj INNE oświetlenie i nastrój
-- Stwórz KOMPLETNIE RÓŻNĄ interpretację wizualną
-` : ''}
+ZASADA NADRZĘDNA:
+Spójność fotorealistycznego stylu (Warstwa 1) jest nienaruszalna — wszystkie ilustracje mają wyglądać jak jedna seria zdjęć/renderów. Różnorodność dotyczy WYŁĄCZNIE sceny (Warstwa 2), a każda scena musi być wyraźnym, symbolicznym odzwierciedleniem TYTUŁU swojego rozdziału — powiązanie ścisłe i natychmiast czytelne, nigdy ozdobnik oderwany od tematu.
 
-📝 WZORZEC IDEALNEGO PROMPTU:
-"Professional ebook illustration: [KONKRETNY OPIS GŁÓWNEJ SCENY z treści rozdziału]. Shot with [PARAMETRY APARATU], f/1.8, ISO 100. [KONKRETNE OŚWIETLENIE] with natural shadows and volumetric lighting. Photorealistic, hyperrealistic, 8K UHD resolution, professional photography, ultra-sharp focus${maximumQuality ? ', commercial quality, HDR' : ''}. [KOMPOZYCJA] with shallow depth of field. Perfect visual representation of "${chapterTitle}" chapter. ABSOLUTELY NO TEXT anywhere in image. Image must not contain children or minors."
+WYMAGANIA TECHNICZNE (bezwzględne):
+- Format poziomy 16:9, wysoka rozdzielczość, ostrość, mnóstwo detali
+- ABSOLUTELY NO TEXT, no letters, no words, no numbers anywhere in the image
+- DO NOT include children, infants, or minors — adult or symbolic representations only
+- No face looking directly at the camera, no direct eye contact with the viewer
+- Kompozycja czysta, z jednym wyraźnym punktem skupienia, ale bogata w realistyczny detal
 
-KRYTYCZNE INSTRUKCJE:
-- Prompt MUSI mieć ${finalConfig.optimalLength} znaków (OPTIMAL dla ${finalConfig.provider} imagen-3)
-- ZAWSZE dodaj parametry aparatu i oświetlenie
-- ZAWSZE użyj "photorealistic, hyperrealistic, 8K UHD"
-- ZAWSZE dodaj "ABSOLUTELY NO TEXT anywhere"
-- ZAWSZE przestrzegaj zakazu generowania obrazów dzieci: "DO NOT include images of children or minors"
-- Bazuj BEZPOŚREDNIO na treści rozdziału
-- ${forceRegenerate ? 'STWÓRZ KOMPLETNIE INNĄ wizualną interpretację' : ''}
-- ŻADNYCH komentarzy - tylko czysty prompt
+Napisz prompt po angielsku, długość około ${finalConfig.optimalLength} znaków. Zacznij prompt od precyzyjnego opisu sceny i fotorealistycznego stylu. NIE używaj słów-etykiet ani komentarzy — tylko gotowy prompt obrazu, bez prefiksu "PROMPT:".`;
 
-NAPISZ PHOTOREALISTIC PROMPT (${finalConfig.optimalLength} znaków):`;
-
-    // Temperatura dla regeneracji
-    const temperature = forceRegenerate ? 0.5 : 0.2;
+    // Temperatura: na tyle wysoka, by sceny rozdziałów były zróżnicowane treściowo,
+    // ale nie na tyle, by rozjechać spójny styl serii (ten trzyma instrukcja w promptcie).
+    // Regeneracja dostaje odrobinę więcej swobody dla wariantu sceny.
+    const temperature = forceRegenerate ? 0.7 : 0.55;
 
     const requestBody: AnthropicRequest = {
       model: modelToUse,
@@ -340,140 +329,72 @@ NAPISZ PHOTOREALISTIC PROMPT (${finalConfig.optimalLength} znaków):`;
     const responseData = await response.json();
     let imagePrompt = responseData.content[0].text.trim();
 
-    // 🔥 WALIDACJA PHOTOREALISTIC ELEMENTS
-    const photorealisticElements = {
-      'camera_params': /(?:Canon|Sony|Nikon|DSLR).+?(?:mm|f\/)/i.test(imagePrompt),
-      'aperture': /f\/[0-9.]+/i.test(imagePrompt),
-      'photorealistic': /(?:photorealistic|hyperrealistic|ultra-realistic)/i.test(imagePrompt),
-      'resolution': /(?:8K|UHD|4K|high.resolution)/i.test(imagePrompt),
-      'professional': /professional/i.test(imagePrompt),
-      'lighting_specific': /(?:golden hour|studio|natural|soft|dramatic|cinematic|volumetric)/i.test(imagePrompt),
-      'depth_of_field': /(?:shallow depth|bokeh|depth of field)/i.test(imagePrompt),
-      'sharp_focus': /(?:sharp focus|ultra.sharp|crisp)/i.test(imagePrompt),
-      'no_text': /(?:no text|absolutely no text)/i.test(imagePrompt),
-      'ebook': /ebook/i.test(imagePrompt),
-      'transparent_bg': enableTransparency ? /transparent/i.test(imagePrompt) : true,
-      'chapter_ref': imagePrompt.toLowerCase().includes(chapterTitle.toLowerCase().substring(0, 10))
+    // Usuń ewentualny prefiks/cudzysłowy okalające
+    imagePrompt = imagePrompt.replace(/^#+\s*PROMPT:?\s*/i, '').trim();
+    imagePrompt = imagePrompt.replace(/^['"]+|['"]+$/g, '').trim();
+
+    // ✅ WALIDACJA STYLOWO-NEUTRALNA
+    // Nie narzucamy żadnej techniki (fotografia/ilustracja/3D — o tym decyduje styl
+    // serii dobrany przez model). Pilnujemy WYŁĄCZNIE twardych, uniwersalnych wymogów:
+    // brak tekstu, brak wizerunków dzieci, odniesienie do rozdziału.
+    const requiredElements = {
+      // Pilnujemy braku tekstu PROMOCYJNEGO/reklamowego (banery, CTA, slogany, logo) — naturalny
+      // tekst środowiskowy (karteczka, grzbiet książki, szyld w tle) jest dozwolony i NIE jest wymuszany.
+      'no_text': /(?:no promotional|no marketing|no advertising|no call-to-action|no slogan|no banner|no logo|never look like an ad|no headline)/i.test(imagePrompt),
+      'no_minors': /(?:no children|no minors|no infants|adult|symbolic)/i.test(imagePrompt),
+      'chapter_ref': imagePrompt.toLowerCase().includes(
+        chapterTitle.toLowerCase().substring(0, 12)
+      ),
     };
 
-    const missingCritical = Object.entries(photorealisticElements)
-      .filter(([key, present]) => !present && ['camera_params', 'photorealistic', 'no_text'].includes(key))
+    const missingRequired = Object.entries(requiredElements)
+      .filter(([, present]) => !present)
       .map(([key]) => key);
 
-    const missingOptional = Object.entries(photorealisticElements)
-      .filter(([key, present]) => !present && !['camera_params', 'photorealistic', 'no_text'].includes(key))
-      .map(([key]) => key);
-
-    // AUTO-KOREKTA KRYTYCZNYCH ELEMENTÓW
-    if (missingCritical.length > 0 || missingOptional.length > 2) {
-      console.warn(`🔧 FIXING photorealistic elements - Critical: ${missingCritical.join(', ')}, Optional: ${missingOptional.join(', ')}`);
-
+    if (missingRequired.length > 0) {
+      console.warn(`🔧 Uzupełniam brakujące wymogi: ${missingRequired.join(', ')}`);
       let correctedPrompt = imagePrompt;
 
-      if (!photorealisticElements['camera_params']) {
-        correctedPrompt += ` Shot with ${photoElements.camera}, f/1.8, ISO 100.`;
-        console.log(`🔧 Added CAMERA PARAMETERS`);
+      if (!requiredElements['no_text']) {
+        correctedPrompt += ` No promotional or marketing text, no advertising banners, no call-to-action, no slogans, headlines, posters, logos or watermarks; the image must never look like an ad. Natural incidental environmental text is fine when the scene calls for it, kept minimal and secondary.`;
+      }
+      if (!requiredElements['no_minors']) {
+        correctedPrompt += ` Do not include children, infants, or minors — adult or symbolic representations only.`;
+      }
+      if (!requiredElements['chapter_ref']) {
+        correctedPrompt += ` A fitting illustration for the chapter "${chapterTitle}".`;
       }
 
-      if (!photorealisticElements['photorealistic']) {
-        correctedPrompt += ` Photorealistic, hyperrealistic, 8K UHD resolution.`;
-        console.log(`🔧 Added PHOTOREALISTIC terms`);
-      }
-
-      if (!photorealisticElements['no_text']) {
-        correctedPrompt += ` ABSOLUTELY NO TEXT anywhere in image.`;
-        console.log(`🔧 Added NO TEXT clause`);
-      }
-
-      if (!photorealisticElements['lighting_specific']) {
-        correctedPrompt += ` ${photoElements.lighting}.`;
-        console.log(`🔧 Added LIGHTING`);
-      }
-
-      if (!photorealisticElements['depth_of_field']) {
-        correctedPrompt += ` Shallow depth of field with bokeh effect.`;
-        console.log(`🔧 Added DEPTH OF FIELD`);
-      }
-
-      if (enableTransparency && !photorealisticElements['transparent_bg']) {
-        correctedPrompt += ` Transparent background with clean edges.`;
-        console.log(`🔧 Added TRANSPARENT BACKGROUND`);
-      }
-
+      // Przytnij do limitu modelu, gdyby uzupełnienia przekroczyły maxLength
       if (correctedPrompt.length > finalConfig.maxLength) {
-        const excess = correctedPrompt.length - finalConfig.maxLength;
-        const originalTrimmed = imagePrompt.substring(0, imagePrompt.length - excess - 100);
-
-        correctedPrompt = originalTrimmed;
-        if (!photorealisticElements['camera_params']) correctedPrompt += ` ${photoElements.camera.split(',')[0]}.`;
-        if (!photorealisticElements['photorealistic']) correctedPrompt += ` Photorealistic, 8K UHD.`;
-        if (!photorealisticElements['no_text']) correctedPrompt += ` NO TEXT.`;
-        if (!photorealisticElements['lighting_specific']) correctedPrompt += ` ${photoElements.lighting.split(',')[0]}.`;
-        if (enableTransparency && !photorealisticElements['transparent_bg']) correctedPrompt += ` Transparent background.`;
-
-        console.log(`🔧 Trimmed and corrected to fit limit`);
+        correctedPrompt = correctedPrompt.substring(0, finalConfig.maxLength);
       }
+
+      // Po korekcie zaktualizuj flagi (na potrzeby metryk poniżej)
+      requiredElements['no_text'] = true;
+      requiredElements['no_minors'] = true;
+      requiredElements['chapter_ref'] = true;
 
       imagePrompt = correctedPrompt;
     }
 
-    // 📊 METRYKI JAKOŚCI PHOTOREALISTIC
-    const realismScore = (
-      (photorealisticElements['camera_params'] ? 0.20 : 0) +
-      (photorealisticElements['photorealistic'] ? 0.20 : 0) +
-      (photorealisticElements['lighting_specific'] ? 0.15 : 0) +
-      (photorealisticElements['depth_of_field'] ? 0.10 : 0) +
-      (photorealisticElements['sharp_focus'] ? 0.10 : 0) +
-      (photorealisticElements['resolution'] ? 0.10 : 0) +
-      (photorealisticElements['professional'] ? 0.05 : 0) +
-      (photorealisticElements['no_text'] ? 0.10 : 0)
+    // 📊 METRYKI JAKOŚCI (stylowo-neutralne)
+    const overallQuality = (
+      (requiredElements['no_text'] ? 0.34 : 0) +
+      (requiredElements['no_minors'] ? 0.33 : 0) +
+      (requiredElements['chapter_ref'] ? 0.33 : 0)
     );
+    const isOptimalLength = imagePrompt.length >= (finalConfig.optimalLength - 200) &&
+                           imagePrompt.length <= (finalConfig.optimalLength + 400);
 
-    const technicalScore = (
-      (photorealisticElements['ebook'] ? 0.33 : 0) +
-      (photorealisticElements['transparent_bg'] ? 0.33 : 0) +
-      (photorealisticElements['chapter_ref'] ? 0.34 : 0)
-    );
-
-    const overallQuality = (realismScore * 0.7) + (technicalScore * 0.3);
-    const isOptimalLength = imagePrompt.length >= (finalConfig.optimalLength - 100) &&
-                           imagePrompt.length <= (finalConfig.optimalLength + 100);
-
-    console.log(`📊 === PHOTOREALISTIC QUALITY METRICS ===`);
+    console.log(`📊 === QUALITY METRICS ===`);
     console.log(`   Target Model: ${targetModel} (${finalConfig.provider})`);
     console.log(`   Length: ${imagePrompt.length}/${finalConfig.maxLength} chars`);
-    console.log(`   Optimal Length: ${isOptimalLength ? '✅ PERFECT' : '⚠️'} (target: ${finalConfig.optimalLength}±100)`);
-    console.log(`   Realism Score: ${(realismScore * 100).toFixed(1)}% (Critical elements)`);
-    console.log(`   Technical Score: ${(technicalScore * 100).toFixed(1)}% (Ebook requirements)`);
-    console.log(`   Overall Quality: ${(overallQuality * 100).toFixed(1)}%`);
-    console.log(`   Enhancement Level: ${finalConfig.enhancement_level}`);
-    console.log(`   Cost Estimate: $${finalConfig.costEstimate}`);
-
-    console.log(`   === PHOTOREALISTIC ELEMENTS ===`);
-    console.log(`   📷 Camera Parameters: ${photorealisticElements['camera_params'] ? '✅' : '❌ CRITICAL!'}`);
-    console.log(`   📸 Aperture Info: ${photorealisticElements['aperture'] ? '✅' : '❌'}`);
-    console.log(`   📸 Photorealistic Terms: ${photorealisticElements['photorealistic'] ? '✅' : '❌ CRITICAL!'}`);
-    console.log(`   📐 High Resolution: ${photorealisticElements['resolution'] ? '✅' : '❌'}`);
-    console.log(`   💡 Specific Lighting: ${photorealisticElements['lighting_specific'] ? '✅' : '❌'}`);
-    console.log(`   🎭 Depth of Field: ${photorealisticElements['depth_of_field'] ? '✅' : '❌'}`);
-    console.log(`   ⚡ Sharp Focus: ${photorealisticElements['sharp_focus'] ? '✅' : '❌'}`);
-    console.log(`   🚫 No Text Clause: ${photorealisticElements['no_text'] ? '✅' : '❌ CRITICAL!'}`);
-
-    if (forceRegenerate) {
-      console.log(`🔄 === DIVERSITY ELEMENTS ===`);
-      console.log(`   - Camera: ${photoElements.camera}`);
-      console.log(`   - Lighting: ${photoElements.lighting}`);
-      console.log(`   - Quality: ${photoElements.quality}`);
-      console.log(`   - Composition: ${photoElements.composition}`);
-    }
-
-    const qualityThreshold = 0.85;
-    if (overallQuality < qualityThreshold) {
-      console.warn(`⚠️ QUALITY WARNING! Score: ${(overallQuality * 100).toFixed(1)}% (target: 85%+)`);
-    } else {
-      console.log(`✅ EXCELLENT PHOTOREALISTIC PROMPT! Ready for ${finalConfig.provider} ${targetModel} generation`);
-    }
-
+    console.log(`   No-text clause: ${requiredElements['no_text'] ? '✅' : '❌'}`);
+    console.log(`   No-minors clause: ${requiredElements['no_minors'] ? '✅' : '❌'}`);
+    console.log(`   Chapter reference: ${requiredElements['chapter_ref'] ? '✅' : '❌'}`);
+    console.log(`   Overall: ${(overallQuality * 100).toFixed(1)}%`);
+    console.log(`   Model: ${modelToUse}, Temperature: ${temperature}`);
     console.log(`📝 Preview: ${imagePrompt.substring(0, 150)}...`);
 
     return NextResponse.json({
@@ -481,45 +402,23 @@ NAPISZ PHOTOREALISTIC PROMPT (${finalConfig.optimalLength} znaków):`;
       imagePrompt: imagePrompt,
       promptLength: imagePrompt.length,
       targetModel: targetModel,
-      realismScore: realismScore,
-      technicalScore: technicalScore,
       overallQuality: overallQuality,
-      photorealisticElements: photorealisticElements,
+      requiredElements: requiredElements,
       isOptimalLength: isOptimalLength,
-      optimizedFor: `${targetModel}-photorealistic-ebook${maximumQuality ? '-ultra-quality' : ''}${enableTransparency ? '-transparent' : ''}`,
-      photoElements: forceRegenerate ? photoElements : null,
       diversityApplied: forceRegenerate,
-      transparencyApplied: enableTransparency,
-      maximumQualityApplied: maximumQuality,
       modelUsed: modelToUse,
       keySource: keySource,
       modelConfig: {
         provider: finalConfig.provider,
         maxLength: finalConfig.maxLength,
         optimalLength: finalConfig.optimalLength,
-        style: finalConfig.style,
-        enhancementLevel: finalConfig.enhancement_level,
         costEstimate: finalConfig.costEstimate,
-        supportsComplexInstructions: finalConfig.supportsComplexInstructions
       },
       qualityValidation: {
-        criticalElementsMissing: missingCritical,
-        optionalElementsMissing: missingOptional,
-        autoCorrectionsApplied: missingCritical.length > 0 || missingOptional.length > 2,
-        readyForGeneration: overallQuality >= qualityThreshold,
-        qualityThreshold: qualityThreshold
+        requiredElementsMissing: missingRequired,
+        autoCorrectionsApplied: missingRequired.length > 0,
+        readyForGeneration: missingRequired.length === 0,
       },
-      optimizationNote: isOptimalLength ?
-        `✅ Prompt length OPTIMAL for ${finalConfig.provider} ${targetModel} generation` :
-        `⚠️ Prompt length outside optimal range for ${targetModel} (target: ${finalConfig.optimalLength}±100 chars)`,
-      providerInfo: {
-        selected: finalConfig.provider,
-        enhancementLevel: finalConfig.enhancement_level,
-        costPerGeneration: `$${finalConfig.costEstimate}`,
-        supportsTransparency: enableTransparency,
-        complexInstructionsSupport: finalConfig.supportsComplexInstructions,
-        qualityTarget: finalConfig.qualityTarget
-      }
     });
 
   } catch (error) {

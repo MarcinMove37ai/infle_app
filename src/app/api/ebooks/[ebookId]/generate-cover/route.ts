@@ -112,9 +112,16 @@ export async function POST(
     console.log(`   - Ebook ID: ${ebookIdNum}`);
     console.log(`   - Force regenerate: ${forceRegenerate}`);
 
-    // Pobierz dane ebooka — w tym pole intro
+    // Pobierz dane ebooka wraz z rozdziałami (do promptu okładki).
     const ebook = await prisma.ebooks.findFirst({
-      where: { id: ebookIdNum, userId: session.user.id }
+      where: { id: ebookIdNum, userId: session.user.id },
+      include: {
+        ebook_chapters: {
+          orderBy: { position: 'asc' },
+          select: { title: true, content: true, position: true }
+        },
+        user: { select: { role: true } }
+      }
     });
 
     if (!ebook) {
@@ -155,6 +162,11 @@ export async function POST(
           title: ebook.title,
           subtitle: ebook.subtitle,
           intro: ebook.intro,
+          chapters: (ebook.ebook_chapters ?? []).map((ch) => ({
+            position: ch.position,
+            title: ch.title ?? '',
+            content: ch.content ?? '',
+          })),
         },
         {
           headers: {
@@ -182,33 +194,60 @@ export async function POST(
     });
     console.log('💾 Prompt zapisany w bazie');
 
-    // KROK 2: Wygeneruj obraz przez Gemini 3 Pro Image
-    console.log('🔥 KROK 2: Generowanie obrazu...');
-
-    const base64Image = await callNanaBananaPro(coverPrompt, googleApiKey);
-
-    // KROK 3: Optymalizuj obraz
-    console.log('🔥 KROK 3: Optymalizacja obrazu...');
-    const optimizedBuffer = await optimizeCoverImage(base64Image);
-
-    // KROK 4: Zapisz plik
     const uploadsDir = path.join(process.env.FILE_STORAGE_PATH || '/data/uploads', 'uploads');
     await fs.mkdir(uploadsDir, { recursive: true });
-
-    const fileName = `${session.user.id}_EB${ebookIdNum}_COVER.webp`;
-    const filePath = path.join(uploadsDir, fileName);
-    await fs.writeFile(filePath, optimizedBuffer);
-
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
-    const coverImageUrl = `${baseUrl}/api/assets/uploads/${fileName}`;
 
-    console.log(`💾 Okładka zapisana: ${fileName}`);
+    type CoverVariant = { url: string; prompt: string; createdAt: string; source: string };
+    const batchStamp = Date.now();
 
-    // KROK 5: Zaktualizuj bazę danych
+    // MODEL "1 + Generate more" (spójny z grafikami rozdziałów): generujemy JEDEN wariant na wywołanie.
+    // Kolejne warianty użytkownik dorabia z modalu (przycisk "Generate more"), aż do limitu planu.
+    // Dzięki temu nie ma już 5× czasu/kosztu w jednym żądaniu (rozwiązuje też timeout orkiestratora).
+    console.log('🔥 KROK 2-4: Generowanie JEDNEGO wariantu okładki...');
+
+    const newVariants: CoverVariant[] = [];
+    try {
+      const base64Image = await callNanaBananaPro(coverPrompt, googleApiKey);
+      const optimizedBuffer = await optimizeCoverImage(base64Image);
+
+      // Unikalna nazwa pliku — nic nie nadpisujemy, każdy wariant zostaje osobnym plikiem.
+      const fileName = `${session.user.id}_EB${ebookIdNum}_COVER_v${batchStamp}_1.webp`;
+      await fs.writeFile(path.join(uploadsDir, fileName), optimizedBuffer);
+
+      const url = `${baseUrl}/api/assets/uploads/${fileName}`;
+      console.log(`   ✅ Wariant zapisany: ${fileName}`);
+      newVariants.push({
+        url,
+        prompt: coverPrompt,
+        createdAt: new Date().toISOString(),
+        source: 'generated',
+      });
+    } catch (variantError: any) {
+      console.error(`   ❌ Generowanie wariantu nieudane:`, variantError?.message || variantError);
+    }
+
+    if (newVariants.length === 0) {
+      return NextResponse.json({
+        error: 'Nie udało się wygenerować wariantu okładki',
+      }, { status: 500 });
+    }
+
+    // KROK 5: Dopisz nowy wariant do istniejącej listy (kumulacja — nie nadpisujemy archiwum).
+    const existingVariants = Array.isArray(ebook.cover_variants)
+      ? (ebook.cover_variants as unknown as CoverVariant[])
+      : [];
+    const allVariants = [...existingVariants, ...newVariants];
+
+    // Aktywna okładka = URL nowego wariantu (unikalny, spójnie z select/upload i rozdziałami).
+    // Modal rozpoznaje aktywny po cover_image_url === jeden z variants[].url.
+    const activeUrl = newVariants[0].url;
+
     const updatedEbook = await prisma.ebooks.update({
       where: { id: ebookIdNum },
       data: {
-        cover_image_url: coverImageUrl,
+        cover_image_url: activeUrl,
+        cover_variants: allVariants as any,
         updated_at: new Date()
       },
       select: {
@@ -216,7 +255,8 @@ export async function POST(
         title: true,
         subtitle: true,
         cover_image_url: true,
-        cover_image_prompt: true
+        cover_image_prompt: true,
+        cover_variants: true
       }
     });
 
@@ -224,19 +264,23 @@ export async function POST(
 
     console.log(`✅ === OKŁADKA WYGENEROWANA ===`);
     console.log(`   - Model: ${MODEL_ID}`);
+    console.log(`   - Wariantów łącznie w puli: ${allVariants.length}`);
     console.log(`   - Czas: ${totalTime}ms`);
-    console.log(`   - URL: ${coverImageUrl}`);
+    console.log(`   - Aktywny URL: ${activeUrl}`);
 
     return NextResponse.json({
       success: true,
-      cover_image_url: coverImageUrl,
-      cache_bust_url: `${coverImageUrl}?t=${Date.now()}`,
+      cover_image_url: activeUrl,
+      cache_bust_url: `${activeUrl}?t=${Date.now()}`,
+      variants: newVariants,          // świeżo wygenerowany wariant (1)
+      all_variants: allVariants,      // pełna pula (z archiwum)
       ebook: updatedEbook,
       prompt_used: coverPrompt,
       generation_metrics: {
         model_used: MODEL_ID,
         generation_time_ms: totalTime,
-        image_size_kb: Math.round(optimizedBuffer.length / 1024),
+        variants_generated: newVariants.length,
+        variants_requested: 1,
         cover_format: '3:4',
         resolution: '2K → 1024x1365',
       }

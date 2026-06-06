@@ -24,6 +24,8 @@ interface Ebook {
   updated_at: string;
   cover_image_webp_url: string | null;
   hasLandingPage: boolean;
+  total_pages: number | null;
+  chapterCount?: number;
 }
 
 interface Pagination {
@@ -75,6 +77,8 @@ const translations = {
     created: 'Utworzono:',
     coverImage: 'Obraz okładki',
     noCoverImage: 'Brak obrazu okładki',
+    chaptersLabel: 'Rozdziały:',
+    pagesLabel: 'Strony:',
 
     // Komunikaty
     noEbooksFound: 'Nie znaleziono e-booków',
@@ -147,6 +151,8 @@ const translations = {
     created: 'Created:',
     coverImage: 'Cover image',
     noCoverImage: 'No cover image',
+    chaptersLabel: 'Chapters:',
+    pagesLabel: 'Pages:',
 
     // Messages
     noEbooksFound: 'No e-books found',
@@ -537,21 +543,10 @@ export default function EbookiContent() {
     if (ebook.cover_image_webp_url) {
         setLoadingPreviewId(ebook.id);
         setPreviewEbook(ebook);
-        const originalFilename = ebook.cover_image_webp_url;
-        const lastDotIndex = originalFilename.lastIndexOf('.');
-        let previewFilename;
-
-        if (lastDotIndex !== -1) {
-            let baseName = originalFilename.substring(0, lastDotIndex);
-            const extension = originalFilename.substring(lastDotIndex);
-            baseName = baseName.replace('_COVER', '');
-            previewFilename = `${baseName}_rawMOCK${extension}`;
-        } else {
-            let baseName = originalFilename;
-            baseName = baseName.replace('_COVER', '');
-            previewFilename = `${baseName}_rawMOCK`;
-        }
-        const previewImageUrl = `/api/assets/${previewFilename}`;
+        // Modal pokazuje DOKŁADNIE tę samą grafikę co karta (sama okładka _COVER),
+        // z tym samym cache-bustem na updated_at. Żadnych mockupów (_rawMOCK) tutaj.
+        const cacheBust = ebook.updated_at ? new Date(ebook.updated_at).getTime() : '';
+        const previewImageUrl = `/api/assets/${ebook.cover_image_webp_url}?t=${cacheBust}`;
         setPreviewImage(previewImageUrl);
         setPreviewImageTitle(`Cover preview: ${ebook.title}`);
         setPreviewImageName(`cover_${ebook.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.png`);
@@ -906,7 +901,7 @@ export default function EbookiContent() {
                             {ebook.cover_image_webp_url ? (
                                 <div className="relative">
                                   <img
-                                    src={`/api/assets/${ebook.cover_image_webp_url}`}
+                                    src={`/api/assets/${ebook.cover_image_webp_url}?t=${ebook.updated_at ? new Date(ebook.updated_at).getTime() : ''}`}
                                     alt={`Cover: ${ebook.title}`}
                                     className="w-full h-auto object-contain rounded-md bg-gray-200 cursor-pointer"
                                     loading="lazy"
@@ -945,6 +940,18 @@ export default function EbookiContent() {
                                   <>
                                     <div className="border-t border-gray-200 my-2"></div>
                                     <div className="flex"><dt className="w-1/3 text-gray-500">Author:</dt><dd className="w-2/3 font-medium text-gray-800 truncate">{ebook.authorDisplayName}</dd></div>
+                                  </>
+                                )}
+                                {typeof ebook.chapterCount === 'number' && ebook.chapterCount > 0 && (
+                                  <>
+                                    <div className="border-t border-gray-200 my-2"></div>
+                                    <div className="flex"><dt className="w-1/3 text-gray-500">{translations[currentLang].chaptersLabel}</dt><dd className="w-2/3 font-medium text-gray-800 truncate">{ebook.chapterCount}</dd></div>
+                                  </>
+                                )}
+                                {typeof ebook.total_pages === 'number' && ebook.total_pages > 0 && (
+                                  <>
+                                    <div className="border-t border-gray-200 my-2"></div>
+                                    <div className="flex"><dt className="w-1/3 text-gray-500">{translations[currentLang].pagesLabel}</dt><dd className="w-2/3 font-medium text-gray-800 truncate">{ebook.total_pages}</dd></div>
                                   </>
                                 )}
                             </div>
@@ -1087,7 +1094,7 @@ export default function EbookiContent() {
                   className="w-auto h-auto max-w-full max-h-full object-contain rounded-md"
                   onError={(e) => {
                     e.currentTarget.onerror = null;
-                    e.currentTarget.src = `/api/assets/${previewEbook.cover_image_webp_url}`;
+                    e.currentTarget.src = `/api/assets/${previewEbook.cover_image_webp_url}?t=${previewEbook.updated_at ? new Date(previewEbook.updated_at).getTime() : ''}`;
                   }}
                 />
               </div>

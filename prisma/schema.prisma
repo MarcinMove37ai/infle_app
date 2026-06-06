@@ -250,6 +250,7 @@ model ebook_chapters {
   position     Int
   image_url    String?   @db.VarChar(1024)
   image_prompt String?
+  image_variants Json    @default("[]")
   created_at   DateTime? @default(now()) @db.Timestamp(6)
   updated_at   DateTime? @default(now()) @db.Timestamp(6)
   ebooks       ebooks    @relation(fields: [ebook_id], references: [id], onDelete: Cascade)
@@ -284,6 +285,7 @@ model ebooks {
   raw_intro                       String?
   cover_image_url                 String?
   cover_image_prompt              String?
+  cover_variants                  Json             @default("[]")
   userId                          String?
   ai_generation_timestamp         DateTime?        @db.Timestamp(6)
   image_ai_model                  String?          @db.VarChar(100)
@@ -295,6 +297,7 @@ model ebooks {
   cover_image_webp_url            String?
   final_mockup_url                String?
   total_pages                     Int?
+  language                        String           @default("en") @db.VarChar(5)
   ebook_chapters                  ebook_chapters[]
   sources                         EbookSource[]
   user                            User?            @relation(fields: [userId], references: [id])

@@ -132,6 +132,18 @@ export async function GET(
       page.s3_file_key ||
       null;
 
+    // Cache-bust na updated_at ebooka — plik mockupu (_finalMOK.png) ma stałą
+    // nazwę, więc bez tego /_next/image serwuje starą zbuforowaną wersję po
+    // regeneracji okładki. ?t=updated_at zmienia URL źródłowy → świeży obraz.
+    const mockupBust = ebook?.updated_at ? new Date(ebook.updated_at).getTime() : '';
+    const resolvedMockup = mockupCandidate
+      ? (() => {
+          const base = buildAssetUrl(mockupCandidate);
+          if (!base || !mockupBust) return base;
+          return `${base}${base.includes('?') ? '&' : '?'}t=${mockupBust}`;
+        })()
+      : '';
+
     // ─── Response ───────────────────────────────────────────────────────
     return NextResponse.json({
       // Metadata strony
@@ -195,7 +207,7 @@ export async function GET(
         : null,
 
       // Resolved mockup URL — gotowy do wstawienia w <Image src={...} />
-      resolvedMockupUrl: buildAssetUrl(mockupCandidate),
+      resolvedMockupUrl: resolvedMockup,
     });
   } catch (error) {
     console.error('[preview] Błąd:', error);
