@@ -10,6 +10,11 @@ import { useAuth } from '@/hooks/useAuth';
 import { useReelSessionState, clearReelSession } from '@/hooks/useReelSessionState';
 import { ReelModal } from './ReelModal';
 
+// Generator rolek wyłączony przed premierą — funkcja nie jest jeszcze stabilna.
+// Cały kod (hook sesji, handlery, ReelModal) zostaje na miejscu; przełączenie
+// tej stałej na true przywraca przyciski bez żadnych innych zmian.
+const REELS_ENABLED = false;
+
 // Interfaces
 interface PageItem {
   id: string;
@@ -1248,9 +1253,11 @@ const PagesView = () => {
                                 )}
                             </div>
                             <div className="space-x-2">
+                                {REELS_ENABLED && (
                                 <button className="text-sm text-purple-600 hover:text-purple-700 font-medium bg-purple-50 hover:bg-purple-100 px-3 py-1.5 rounded-md transition-colors inline-flex items-center cursor-pointer" onClick={() => handleReelToggle(page.id)} title={reelUrls[page.id] ? t.showReel : t.generateReel}>
                                     <Film size={14} className="inline mr-1.5" />{reelUrls[page.id] ? t.showReel : t.generateReel}
                                 </button>
+                                )}
                                 <button className="text-sm text-red-600 hover:text-red-700 font-medium bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-md transition-colors inline-flex items-center cursor-pointer" onClick={() => handleDeletePage(page)} title={t.delete}>
                                     <Trash2 size={14} className="inline mr-1.5" />{t.delete}
                                 </button>
@@ -1272,9 +1279,11 @@ const PagesView = () => {
                                     <Trash2 size={14} className="inline mr-1.5" />{t.delete}
                                 </button>
                             </div>
+                            {REELS_ENABLED && (
                             <button className="w-full text-sm text-purple-600 hover:text-purple-700 font-medium bg-purple-50 hover:bg-purple-100 px-3 py-2 rounded-md transition-colors inline-flex items-center justify-center cursor-pointer" onClick={() => handleReelToggle(page.id)} title={reelUrls[page.id] ? t.showReel : t.generateReel}>
                                 <Film size={14} className="inline mr-1.5" />{reelUrls[page.id] ? t.showReel : t.generateReel}
                             </button>
+                            )}
                         </div>
                     </div>
                     ))
@@ -1343,7 +1352,7 @@ const PagesView = () => {
       {/* ═══════════════════════════════════════════════════════════
           REEL MODAL — editable preview + config form
           ═══════════════════════════════════════════════════════════ */}
-      {reelModalOpen && (
+      {REELS_ENABLED && reelModalOpen && (
           <ReelModal
             reelModalRef={reelModalRef}
             closeReelModal={closeReelModal}

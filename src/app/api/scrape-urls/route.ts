@@ -63,8 +63,11 @@ function removeUnwantedElements(document: Document): void {
     '.social', '.share', '.comments', '.related', '.popup',
     '.cookie', '.banner', '.modal', '.overlay', '.widget',
     '#navigation', '#menu', '#sidebar', '#footer', '#header',
-    '[class*="nav"]', '[class*="menu"]', '[class*="ad"]',
-    '[class*="sidebar"]', '[class*="widget"]', '[class*="social"]'
+    // UWAGA: nigdy nie używać tu dopasowań podłańcuchowych [class*="..."].
+    // W Tailwindzie "ad" trafia w leading-*, shadow-*, gradient-* — czyli w każdy
+    // akapit, kartę i tabelę. To wycinało 90% treści na stronach Next/Tailwind.
+    '[class~="advertisement"]', '[class~="ads"]', '[class~="sidebar"]',
+    '[class~="social-share"]', '[class~="cookie-banner"]'
   ];
 
   unwantedSelectors.forEach(selector => {
@@ -126,12 +129,16 @@ function extractStructuredData(document: Document): { title?: string; content?: 
 function cleanAndTruncateText(text: string, maxLength: number = 100000): string {
   const originalLength = text.length;
 
+  // Biała lista znaków była błędem: kasowała ź/Ź, tureckie Ş/İ/Ç/ı (nazwy tkanin i adresy
+  // Ariteks), a także / % → | # i myślniki w normach. Zamiast tego usuwamy tylko znaki
+  // sterujące i normalizujemy odstępy — \n ZOSTAJE, bo niesie strukturę.
   let cleaned = text
-    .replace(/\s+/g, ' ')
-    .replace(/[\r\n\t]/g, ' ')
-    .replace(/\u00A0/g, ' ') // Usuń non-breaking spaces
-    // 🔧 NAPRAWIONY REGEX - obsługuje polskie znaki
-    .replace(/[^\wąćęłńóśúżĄĆĘŁŃÓŚÚŻ\s\.\,\!\?\;\:\-\(\)\[\]]/g, ' ')
+    .replace(/\r/g, '')
+    .replace(/\u00A0/g, ' ')
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/ ?\n ?/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
     .trim();
 
   if (cleaned.length > maxLength) {
@@ -1420,6 +1427,69 @@ function extractScientificContent(document: Document, url: string): { title: str
   return result;
 }
 
+// Elementy blokowe — po każdym łamiemy linię, żeby tekst sąsiednich bloków się nie sklejał
+// (textContent nie wstawia żadnego separatora — stąd "Zgodnośćbadaniadokumentacja").
+const BLOCK_TAGS = new Set([
+  'ADDRESS','ARTICLE','ASIDE','BLOCKQUOTE','DD','DIV','DL','DT','FIELDSET','FIGCAPTION',
+  'FIGURE','FOOTER','FORM','HEADER','HR','LI','MAIN','NAV','OL','P','PRE','SECTION','UL'
+]);
+
+/**
+ * Serializuje poddrzewo DOM do czytelnego tekstu z zachowaną strukturą.
+ * Powód istnienia: strony budowane Next/Tailwind nie mają <main> ani .content,
+ * więc "znajdź kontener albo zbierz <p>" gubi nagłówki, tabele i kafle-linki.
+ */
+function serializeReadableText(root: any): string {
+  const out: string[] = [];
+
+  function walk(node: any): void {
+    if (!node) return;
+
+    if (node.nodeType === 3) {                       // węzeł tekstowy
+      const t = (node.textContent || '').replace(/\s+/g, ' ');
+      if (t.trim()) out.push(t);
+      return;
+    }
+    if (node.nodeType !== 1) return;                 // tylko elementy
+
+    const tag = String(node.tagName || '').toUpperCase();
+    if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'NOSCRIPT' || tag === 'SVG') return;
+    if (tag === 'BR') { out.push('\n'); return; }
+
+    // Tabela → wiersze, komórki rozdzielone " | ". Bez tego cała tabela to jeden ciąg znaków.
+    if (tag === 'TABLE') {
+      out.push('\n');
+      Array.from(node.querySelectorAll('tr')).forEach((tr: any) => {
+        const cells = Array.from(tr.querySelectorAll('th, td'))
+          .map((c: any) => (c.textContent || '').replace(/\s+/g, ' ').trim())
+          .filter(Boolean);
+        if (cells.length) out.push(cells.join(' | ') + '\n');
+      });
+      out.push('\n');
+      return;
+    }
+
+    // Nagłówki z prefiksem — hierarchia przeżywa i AI widzi, co jest nazwą, a co opisem.
+    if (/^H[1-6]$/.test(tag)) {
+      out.push('\n\n' + '#'.repeat(Number(tag[1])) + ' ');
+      Array.from(node.childNodes).forEach(walk);
+      out.push('\n');
+      return;
+    }
+
+    Array.from(node.childNodes).forEach(walk);
+    if (BLOCK_TAGS.has(tag)) out.push('\n');
+  }
+
+  walk(root);
+
+  return out.join('')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/ ?\n ?/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 // 🆕 ULEPSZONA: Funkcja do ogólnego wyciągania treści
 function extractGeneralContent(document: Document, url: string): { title: string; content: string; source: string } {
   console.log('\n🌐 ROZPOCZYNANIE EKSTRAKCJI OGÓLNEJ:', url);
@@ -1464,61 +1534,23 @@ function extractGeneralContent(document: Document, url: string): { title: string
     }
   }
 
-  // Spróbuj znaleźć główną treść - więcej opcji
-  const contentSelectors = [
-    'article',
-    'main',
-    '[role="main"]',
-    '.content',
-    '.post-content',
-    '.entry-content',
-    '.article-content',
-    '#content',
-    '.main-content',
-    '.page-content',
-    '.text-content',
-    '.article-body',
-    '.post-body',
-    '.entry-body'
-  ];
+// Preferuj kontener semantyczny, ale bez niego bierz body — i tak serializujemy strukturalnie.
+  const root =
+    document.querySelector('main') ||
+    document.querySelector('article') ||
+    document.querySelector('[role="main"]') ||
+    document.body;
 
-  console.log('🔍 SZUKANIE GŁÓWNEJ TREŚCI...');
-  for (const selector of contentSelectors) {
-    const element = document.querySelector(selector);
-    if (element && element.textContent && element.textContent.length > 200) {
-      content = element.textContent;
-      console.log(`✅ ZNALEZIONO TREŚĆ przez "${selector}" (${content.length} znaków)`);
-      break;
-    }
+  console.log(`🔍 SERIALIZACJA TREŚCI z <${(root as any)?.tagName?.toLowerCase() || 'body'}>...`);
+  content = serializeReadableText(root);
+
+  // Kontener semantyczny bywa dekoracyjny/pusty — wtedy jeszcze raz z całego body.
+  if (content.length < 200 && root !== document.body) {
+    console.log('⚠️ Kontener dał za mało treści — ponawiam z <body>');
+    content = serializeReadableText(document.body);
   }
 
-  // 🆕 NOWY FALLBACK: Zbierz wszystkie paragrafy
-  if (!content) {
-    console.log('⚠️ FALLBACK: Zbieranie paragrafów...');
-    const paragraphs = document.querySelectorAll('p');
-    let paragraphContent = '';
-
-    for (const p of paragraphs) {
-      if (p.textContent && p.textContent.trim().length > 50) {
-        paragraphContent += p.textContent.trim() + '\n\n';
-      }
-    }
-
-    if (paragraphContent.length > 200) {
-      content = paragraphContent;
-      console.log(`✅ FALLBACK: Użyto paragrafów (${content.length} znaków)`);
-    }
-  }
-
-  // Ostateczny fallback - użyj body
-  if (!content) {
-    console.log('⚠️ ULTIMATE FALLBACK: Używanie body jako źródła treści...');
-    const bodyElement = document.querySelector('body');
-    if (bodyElement) {
-      content = bodyElement.textContent || '';
-      console.log(`✅ ULTIMATE FALLBACK: Użyto body (${content.length} znaków)`);
-    }
-  }
+  console.log(`✅ ZSERIALIZOWANO ${content.length} znaków`);
 
   // Użyj opisu z structured data jeśli brak treści
   if (!content && structuredData.description) {

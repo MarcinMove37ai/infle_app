@@ -32,13 +32,37 @@ const isValidColorScheme = (color: any): color is ColorSchemeKey =>
 // Helpery
 // ───────────────────────────────────────────────────────────────────────────
 
-const buildAssetUrl = (path?: string | null): string => {
+const buildAssetUrl = (path?: string | null, bust?: string | Date | null): string => {
   if (!path) return '';
-  if (path.startsWith('http://') || path.startsWith('https://')) return path;
-  if (path.startsWith('/uploads/')) {
-    return `/api/assets/uploads/${path.substring('/uploads/'.length)}`;
+
+  // NASZ asset poznajemy po ścieżce /api/assets/, NIE po tym czy URL ma host.
+  // Endpointy author-settings i profile-picture zapisują do bazy pełny
+  // `${baseUrl}/api/assets/...`, więc test "zaczyna się od https" wyrzucał je
+  // razem z Google i gubił cache-bust — stąd logo i avatar nie reagowały na zmiany.
+  const assetsIdx = path.indexOf('/api/assets/');
+
+  // Prawdziwie zewnętrzne (Google) — bez zmian, ich URL zmienia się sam.
+  if (assetsIdx === -1 && (path.startsWith('http://') || path.startsWith('https://'))) {
+    return path;
   }
-  return `/api/assets/uploads/${path}`;
+
+  // Ścinamy protokół+host → adres relatywny. Działa na app.inflee.app, na custom
+  // domenie i na localhoście, niezależnie od tego, w którym środowisku powstał wiersz.
+  const url =
+    assetsIdx !== -1
+      ? path.substring(assetsIdx)
+      : path.startsWith('/uploads/')
+        ? `/api/assets/uploads/${path.substring('/uploads/'.length)}`
+        : `/api/assets/uploads/${path}`;
+
+  // Assety użytkownika mają STAŁE nazwy (USER_{id}_AVATAR.png, ..._PROFILE.png).
+  // Podmiana pliku nie zmienia URL-a → przeglądarka serwuje starą wersję bez końca.
+  // Ten sam wzorzec co przy mockupie okładki: ?t=updated_at.
+  if (bust) {
+    const t = new Date(bust).getTime();
+    if (!Number.isNaN(t)) return `${url}?t=${t}`;
+  }
+  return url;
 };
 
 /**
@@ -161,7 +185,7 @@ const PublicPageClient = ({ initialPageData }: { initialPageData: any }) => {
 
   const processedPageData = {
     ...initialPageData,
-    author_logo_url: buildAssetUrl(initialPageData.user?.authorLogoUrl),
+    author_logo_url: buildAssetUrl(initialPageData.user?.authorLogoUrl, initialPageData.user?.updatedAt),
     resolvedMockupUrl: mockupUrl,
   };
 
@@ -175,11 +199,11 @@ const PublicPageClient = ({ initialPageData }: { initialPageData: any }) => {
   const resolvedHeaderStyle: 'profile' | 'logo' | 'none' = userHeaderStyle ?? (hasAnyProfilePic ? 'profile' : 'none');
 
   // Brand logo URL — pełne jak authorLogoUrl
-  const brandLogoUrl = buildAssetUrl(initialPageData.user?.authorLogoUrl);
+  const brandLogoUrl = buildAssetUrl(initialPageData.user?.authorLogoUrl, initialPageData.user?.updatedAt);
 
   // Profile picture URLs — oba osobno, DemoView wybierze jaki pokazać wg activeProfileSource
   const googleProfilePicture = buildAssetUrl(initialPageData.user?.profilePicture);
-  const customProfilePicture = buildAssetUrl(initialPageData.user?.customProfilePicture);
+  const customProfilePicture = buildAssetUrl(initialPageData.user?.customProfilePicture, initialPageData.user?.updatedAt);
 
   // ─── Render ────────────────────────────────────────────────────────────
   return (

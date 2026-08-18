@@ -343,6 +343,16 @@ const HEADER_PREVIEW_THEMES: HeaderPreviewTheme[] = [
   },
 ];
 
+// Cache-busting dla assetów o STAŁYCH nazwach (USER_{id}_PROFILE.png, USER_{id}_AVATAR.png).
+// Backend nadpisuje plik pod tym samym URL-em, więc bez ?t= przeglądarka serwuje starą kopię.
+// Zewnętrzne URL-e (Google CDN) pomijamy — ich adres zmienia się sam przy podmianie zdjęcia.
+const withCacheBust = (url: string | null | undefined): string | null => {
+  if (!url) return url ?? null;
+  if (!url.includes('/api/assets/')) return url;
+  const sep = url.includes('?') ? '&' : '?';
+  return `${url}${sep}t=${Date.now()}`;
+};
+
 // --- Tłumaczenia ---
 const translations = {
   pl: {
@@ -2661,7 +2671,23 @@ export default function SettingsContent() {
     authProvider: string | null;
   }
 
-  const [profilePicSettings, setProfilePicSettings] = useState<ProfilePictureSettings | null>(null);
+  const [profilePicSettings, setProfilePicSettingsRaw] = useState<ProfilePictureSettings | null>(null);
+
+  // Każda odpowiedź z /api/user/profile-picture przechodzi przez cache-bust TUTAJ.
+  // Wcześniej bust siedział tylko w handlerze zapisu, więc load/switch/toggle/remove
+  // przywracały goły URL i podgląd wracał do starego pliku po odświeżeniu strony.
+  const setProfilePicSettings = useCallback((s: ProfilePictureSettings | null) => {
+    setProfilePicSettingsRaw(
+      s
+        ? {
+            ...s,
+            customProfilePicture: withCacheBust(s.customProfilePicture),
+            resolvedUrl: withCacheBust(s.resolvedUrl),
+          }
+        : null
+    );
+  }, []);
+
   const [isLoadingProfilePic, setIsLoadingProfilePic] = useState(false);
   const [isSavingProfilePic, setIsSavingProfilePic] = useState(false);
   const [isCropModalOpen, setIsCropModalOpen] = useState(false);
@@ -2992,18 +3018,8 @@ export default function SettingsContent() {
       });
       if (response.ok) {
         const data = await response.json();
-        const settings = data.profilePictureSettings;
-        const cacheBust = (url: string | null): string | null => {
-          if (!url) return url;
-          const sep = url.includes('?') ? '&' : '?';
-          return `${url}${sep}t=${Date.now()}`;
-        };
-        // Dopisz timestamp tylko do customProfilePicture i resolvedUrl (Google URL nie wymaga — zewnętrzny CDN)
-        setProfilePicSettings({
-          ...settings,
-          customProfilePicture: cacheBust(settings.customProfilePicture),
-          resolvedUrl: cacheBust(settings.resolvedUrl),
-        });
+        // Cache-bust dokleja setProfilePicSettings — jedno miejsce dla wszystkich ścieżek.
+        setProfilePicSettings(data.profilePictureSettings);
         setMessage({ type: 'success', text: t.headerPicUpdated });
       } else {
         const errorData = await response.json();

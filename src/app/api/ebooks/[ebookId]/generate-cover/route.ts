@@ -207,9 +207,12 @@ export async function POST(
     console.log('🔥 KROK 2-4: Generowanie JEDNEGO wariantu okładki...');
 
     const newVariants: CoverVariant[] = [];
+    // Bufor aktywnej okładki zachowany do zbudowania mockupu — bez ponownego czytania z dysku.
+    let activeCoverBuffer: Buffer | null = null;
     try {
       const base64Image = await callNanaBananaPro(coverPrompt, googleApiKey);
       const optimizedBuffer = await optimizeCoverImage(base64Image);
+      activeCoverBuffer = optimizedBuffer;
 
       // Unikalna nazwa pliku — nic nie nadpisujemy, każdy wariant zostaje osobnym plikiem.
       const fileName = `${session.user.id}_EB${ebookIdNum}_COVER_v${batchStamp}_1.webp`;
@@ -233,6 +236,48 @@ export async function POST(
       }, { status: 500 });
     }
 
+    // KROK 4.5: Mockup w ramce — ZAWSZE idzie za aktywną okładką.
+    // Świeżo wygenerowany wariant staje się aktywny (cover_image_url niżej), więc mockup musi
+    // powstać już tutaj, a nie dopiero przy ręcznym wyborze wariantu w modalu. Inaczej ebook
+    // po pierwszej generacji nie ma final_mockup_url i landing nie ma czego pokazać.
+    // Pracujemy na buforze z pamięci — bez czytania z dysku i bez self-calla HTTP do generate-mockups.
+    let finalMockupUrl: string | null = null;
+    let coverWebpUrl: string | null = null;
+
+    if (activeCoverBuffer) {
+      try {
+        const stableCoverFileName = `${session.user.id}_EB${ebookIdNum}_COVER.webp`;
+        const finalMockupFileName = `${session.user.id}_EB${ebookIdNum}_finalMOK.png`;
+        const framePath = path.resolve('./public/templates/raw_mokup.png');
+
+        // Stała nazwa _COVER.webp — czytają ją generate-mockups i inni konsumenci stałej nazwy.
+        await fs.writeFile(path.join(uploadsDir, stableCoverFileName), activeCoverBuffer);
+
+        // Ramka wczytana do bufora: sharp(ścieżka) trzyma deskryptor pliku i blokuje go na Windows.
+        const frameBuffer = await fs.readFile(framePath);
+        const resizedCoverBuffer = await sharp(activeCoverBuffer)
+          .resize({ width: 600, height: 840, fit: 'cover' })
+          .toBuffer();
+
+        await sharp(frameBuffer)
+          .composite([{
+            input: resizedCoverBuffer,
+            blend: 'dest-over',
+            top: 220,
+            left: 180,
+          }])
+          .toFile(path.join(uploadsDir, finalMockupFileName));
+
+        // Format ścieżek identyczny jak w generate-mockups (względny) — tak czytają je landing i karty.
+        coverWebpUrl = `/uploads/${stableCoverFileName}`;
+        finalMockupUrl = `/uploads/${finalMockupFileName}`;
+        console.log(`🖼️  Mockup w ramce zbudowany: ${finalMockupFileName}`);
+      } catch (mockupError: any) {
+        // Mockup nie jest blokerem — sama okładka i tak się zapisze.
+        console.error('⚠️ Błąd budowania mockupu (niekrytyczny):', mockupError?.message || mockupError);
+      }
+    }
+
     // KROK 5: Dopisz nowy wariant do istniejącej listy (kumulacja — nie nadpisujemy archiwum).
     const existingVariants = Array.isArray(ebook.cover_variants)
       ? (ebook.cover_variants as unknown as CoverVariant[])
@@ -248,6 +293,10 @@ export async function POST(
       data: {
         cover_image_url: activeUrl,
         cover_variants: allVariants as any,
+        // Zapisywane tylko wtedy, gdy mockup faktycznie powstał — przy błędzie nie kasujemy
+        // poprzednich, poprawnych wartości.
+        ...(coverWebpUrl ? { cover_image_webp_url: coverWebpUrl } : {}),
+        ...(finalMockupUrl ? { final_mockup_url: finalMockupUrl } : {}),
         updated_at: new Date()
       },
       select: {
@@ -256,7 +305,8 @@ export async function POST(
         subtitle: true,
         cover_image_url: true,
         cover_image_prompt: true,
-        cover_variants: true
+        cover_variants: true,
+        final_mockup_url: true
       }
     });
 
@@ -267,11 +317,13 @@ export async function POST(
     console.log(`   - Wariantów łącznie w puli: ${allVariants.length}`);
     console.log(`   - Czas: ${totalTime}ms`);
     console.log(`   - Aktywny URL: ${activeUrl}`);
+    console.log(`   - Mockup: ${finalMockupUrl ?? 'BRAK (błąd budowania)'}`);
 
     return NextResponse.json({
       success: true,
       cover_image_url: activeUrl,
       cache_bust_url: `${activeUrl}?t=${Date.now()}`,
+      final_mockup_url: finalMockupUrl,
       variants: newVariants,          // świeżo wygenerowany wariant (1)
       all_variants: allVariants,      // pełna pula (z archiwum)
       ebook: updatedEbook,
