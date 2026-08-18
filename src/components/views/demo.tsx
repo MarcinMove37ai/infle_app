@@ -879,8 +879,8 @@ const DemoView: React.FC<DemoViewProps> = ({
   //    cross-origin requests z custom domain klienta na app.inflee.app.
   //    Historyczne dane w bazie mają full URL-e — naprawiamy at-render-time
   //    bez ruszania bazy.
-  // 2) Google avatars (lh3.googleusercontent.com z =sNN-c suffix) — strip
-  //    rozmiar żeby pozwolić Next Image na request z parametrem `w` (resize).
+  // 2) Google avatars — sufiks rozmiaru (=sNN-c) ZOSTAJE; bez niego Google zwraca 404.
+  //    Gdy w bazie go nie ma, dopisujemy =s96-c (2x dla avatara 48px).
   const normalizeAvatarUrl = (url: string | undefined): string | undefined => {
     if (!url) return url;
 
@@ -890,12 +890,12 @@ const DemoView: React.FC<DemoViewProps> = ({
       return apiAssetsMatch[1]; // np. "/api/assets/uploads/profile-pictures/..."
     }
 
-    // Strip Google size suffix (=s96-c, =s256-c) — Next Image sam zażąda właściwego rozmiaru
-    if (url.startsWith('https://lh3.googleusercontent.com/') ||
-        url.startsWith('https://lh4.googleusercontent.com/') ||
-        url.startsWith('https://lh5.googleusercontent.com/') ||
-        url.startsWith('https://lh6.googleusercontent.com/')) {
-      return url.replace(/=s\d+-c$/, '');
+    // Google avatars: rozmiar MUSI zostać w URL-u. Tokeny /a/ACg8oc... bez sufiksu
+    // =sNN-c zwracają 404, a next/image pobiera adres dokładnie taki, jaki dostanie —
+    // niczego do niego nie dokleja. Ścinanie sufiksu psuło więc avatar na landingu,
+    // mimo że w Settings (zwykły <img> z pełnym URL-em z bazy) działał poprawnie.
+    if (/^https:\/\/lh[3-6]\.googleusercontent\.com\//.test(url)) {
+      return /=s\d+(-c)?$/.test(url) ? url : `${url}=s96-c`;
     }
 
     return url;
