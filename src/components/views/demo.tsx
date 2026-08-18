@@ -2783,7 +2783,7 @@ const DemoView: React.FC<DemoViewProps> = ({
         </div>
       </footer>
 
-      {/* Fade-in animation keyframes */}
+      {/* Fade-in animation keyframes + płynne przewijanie po sekcjach */}
       <style jsx global>{`
         @keyframes fadeIn {
           from { opacity: 0; }
@@ -2791,6 +2791,30 @@ const DemoView: React.FC<DemoViewProps> = ({
         }
         .animate-fadeIn {
           animation: fadeIn 0.5s ease-out forwards;
+        }
+
+        /* Płynne przewijanie dla wszystkich linków #anchor na LP:
+           nawigacja w nagłówku, drawer mobilny, CTA w hero i w sekcji korzyści.
+           Zero JS — przeglądarka animuje sama, więc działa też przy nawigacji
+           klawiaturą i przy wejściu na stronę z hashem w URL-u. */
+        html {
+          scroll-behavior: smooth;
+        }
+
+        /* Nagłówek jest fixed i ma 80px (h-20), więc bez tego docelowa sekcja
+           kończy pod nim schowana. scroll-margin-top odsuwa punkt docelowy —
+           działa dla każdego sposobu dotarcia do anchora, nie tylko kliknięcia.
+           +16px oddechu, żeby tytuł sekcji nie kleił się do krawędzi nagłówka. */
+        #hero, #problem, #promise, #benefits, #content, #faq, #signup {
+          scroll-margin-top: 96px;
+        }
+
+        /* Szacunek dla ustawień systemowych — użytkownicy z włączoną redukcją
+           animacji (wrażliwość na ruch, choroba lokomocyjna) dostają skok. */
+        @media (prefers-reduced-motion: reduce) {
+          html {
+            scroll-behavior: auto;
+          }
         }
       `}</style>
     </div>

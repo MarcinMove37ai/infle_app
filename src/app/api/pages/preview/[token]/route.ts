@@ -17,18 +17,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { assetUrl } from '@/lib/asset-url';
 
 // ─── Helpery ──────────────────────────────────────────────────────────────
 
-/** Konstruuje URL servowany przez /api/assets/uploads/* lub zwraca pełny URL. */
-function buildAssetUrl(path: string | null | undefined): string {
-  if (!path) return '';
-  if (path.startsWith('http://') || path.startsWith('https://')) return path;
-  if (path.startsWith('/uploads/')) {
-    return `/api/assets/uploads/${path.substring('/uploads/'.length)}`;
-  }
-  return `/api/assets/uploads/${path}`;
-}
+// Wspólny, idempotentny helper — patrz src/lib/asset-url.ts.
+// Stara lokalna kopia kończyła się catch-allem `/api/assets/uploads/${path}`, który
+// doklejał prefiks do ścieżek już go mających, i nie umiała doklejać cache-bustu.
+const buildAssetUrl = assetUrl;
 
 /** Zwraca pierwsze N znaków treści rozdziału z normalizacją whitespace + ellipsis. */
 function makeChapterPreview(content: string | null | undefined, maxLen = 120): string {
@@ -96,6 +92,9 @@ export async function GET(
             headerStyle: true,
             activeProfileSource: true,
             customProfilePicture: true,
+            // Źródło cache-bustu dla logo i avatara — pliki mają stałe nazwy,
+            // więc bez tego podgląd pokazuje wersję sprzed zmiany w Settings.
+            updatedAt: true,
           },
         },
       },
@@ -159,8 +158,11 @@ export async function GET(
       userId: page.userId,
       ebookId: page.ebookId,
       authorDisplayName,
-      authorLogoUrl: buildAssetUrl(authorLogoUrl),
+      // Cache-bust na updatedAt usera. Google (URL zewnętrzny) go nie potrzebuje —
+      // jego adres zmienia się sam przy podmianie zdjęcia.
+      authorLogoUrl: buildAssetUrl(authorLogoUrl, page.user?.updatedAt),
       profilePicture: buildAssetUrl(page.user?.profilePicture),
+      userUpdatedAt: page.user?.updatedAt ?? null,
 
       // ─── Header configuration — Landing Page Header Setup z Settings ───────
       // Frontend (DemoView) używa tych pól żeby zdecydować co pokazać w nagłówku LP:
@@ -170,7 +172,7 @@ export async function GET(
       // Fallback dla legacy users (null w bazie) → 'profile' jeśli ma profilePicture, inaczej 'none'
       headerStyle: page.user?.headerStyle ?? null,
       activeProfileSource: page.user?.activeProfileSource ?? null,
-      customProfilePicture: buildAssetUrl(page.user?.customProfilePicture),
+      customProfilePicture: buildAssetUrl(page.user?.customProfilePicture, page.user?.updatedAt),
 
       // Treść strony (nowy schemat — 7 sekcji jsonb)
       pageContent: page.content

@@ -10,6 +10,7 @@ import DemoView, { colorSchemes } from '@/components/views/demo';
 import DemoVideo from '@/components/views/demoVideo';
 import EditModeProvider, { useEditMode } from '@/contexts/EditModeContext';
 import type { PageContent } from '@/types/landing-page';
+import { assetUrl } from '@/lib/asset-url';
 
 // ───────────────────────────────────────────────────────────────────────────
 // Typy danych z preview API (/api/pages/preview/[token])
@@ -52,6 +53,9 @@ interface PageData {
   headerStyle?: 'profile' | 'logo' | 'none' | null;
   activeProfileSource?: 'custom' | 'google' | null;
   customProfilePicture?: string | null;
+
+  // Znacznik czasu ostatniej zmiany usera — źródło cache-bustu dla logo i avatara.
+  userUpdatedAt?: string | null;
 
   // Treść strony — nowy schemat 7 sekcji jsonb (lub null jeśli nie wygenerowana)
   pageContent: PageContent | null;
@@ -107,19 +111,10 @@ function setByPath(obj: any, path: string, value: string): void {
   cur[parts[parts.length - 1] as any] = value;
 }
 
-/**
- * Buduje URL do pliku w /uploads — dla relative path zwraca endpoint
- * /api/assets/uploads/..., dla pełnego URL zwraca bez zmian. Identyczny
- * wzorzec jak w PublicPageClient — żeby preview wyglądał jak public.
- */
-const buildAssetUrl = (path?: string | null): string => {
-  if (!path) return '';
-  if (path.startsWith('http://') || path.startsWith('https://')) return path;
-  if (path.startsWith('/uploads/')) {
-    return `/api/assets/uploads/${path.substring('/uploads/'.length)}`;
-  }
-  return `/api/assets/uploads/${path}`;
-};
+// Wspólny, idempotentny helper — patrz src/lib/asset-url.ts.
+// Stara lokalna kopia kończyła się catch-allem `/api/assets/uploads/${path}`, który
+// doklejał prefiks do ścieżek już go mających, i nie umiała doklejać cache-bustu.
+const buildAssetUrl = assetUrl;
 
 // ───────────────────────────────────────────────────────────────────────────
 // Tłumaczenia
@@ -1040,9 +1035,14 @@ const PreviewPageContent = ({ t, lang }: { t: typeof translations.pl; lang: 'pl'
               const hasAnyPic = !!pageData.profilePicture || !!pageData.customProfilePicture;
               const resolvedHeaderStyle: 'profile' | 'logo' | 'none' =
                 pageData.headerStyle ?? (hasAnyPic ? 'profile' : 'none');
+              // Cache-bust na userUpdatedAt — pliki mają stałe nazwy
+              // (USER_{id}_AVATAR.png, ..._PROFILE.png), więc bez tego podgląd
+              // pokazuje wersję sprzed zmiany w Settings.
+              // Google (URL zewnętrzny) bustu nie potrzebuje — jego adres zmienia się sam.
+              const userBust = pageData.userUpdatedAt;
               const googlePic = buildAssetUrl(pageData.profilePicture);
-              const customPic = buildAssetUrl(pageData.customProfilePicture);
-              const brandLogo = buildAssetUrl(pageData.authorLogoUrl);
+              const customPic = buildAssetUrl(pageData.customProfilePicture, userBust);
+              const brandLogo = buildAssetUrl(pageData.authorLogoUrl, userBust);
 
               return (
                 <DemoView
