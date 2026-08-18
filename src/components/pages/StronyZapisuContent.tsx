@@ -9,6 +9,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import { useAuth } from '@/hooks/useAuth';
 import { useReelSessionState, clearReelSession } from '@/hooks/useReelSessionState';
 import { ReelModal } from './ReelModal';
+import { assetUrl } from '@/lib/asset-url';
 
 // Generator rolek wyłączony przed premierą — funkcja nie jest jeszcze stabilna.
 // Cały kod (hook sesji, handlery, ReelModal) zostaje na miejscu; przełączenie
@@ -589,14 +590,10 @@ const PagesView = () => {
     }
   }, []);
 
-  const getAssetUrl = (coverImagePath: string | null | undefined) => {
-    if (!coverImagePath) return '';
-    if (coverImagePath.startsWith('/uploads/')) {
-      const filename = coverImagePath.substring('/uploads/'.length);
-      return `/api/assets/uploads/${filename}`;
-    }
-    return `/api/assets/uploads/${coverImagePath}`;
-  };
+  // Wspólny helper — patrz src/lib/asset-url.ts.
+  // Stary catch-all doklejał prefiks do ścieżek, które już go miały (GET /api/pages
+  // zwraca pełne /api/assets/... z cache-bustem), dając adresy z podwójnym prefiksem.
+  const getAssetUrl = assetUrl;
 
   // ─── Helper: zwraca URL strony do wyświetlenia user'owi ──────────────
   // Jeśli strona ma przypisaną aktywną custom domenę → zwraca https://<domain>

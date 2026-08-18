@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import Image from 'next/image';
 import EditableText from '@/components/ui/EditableText';
+import { assetUrl } from '@/lib/asset-url';
 import { useEditMode } from '@/contexts/EditModeContext';
 
 // ---------------------------------------------------------------------------
@@ -873,33 +874,11 @@ const DemoView: React.FC<DemoViewProps> = ({
   //   2. partnerLogoUrl (legacy)
   //   3. pageData fallbacks (profilePicture / user.profilePicture)
 
-  // Helper — normalizacja URL avatara/logo:
-  // 1) URL-e wskazujące na nasz /api/assets/* są konwertowane na relative
-  //    (strip protocol+host) żeby działały na każdej domenie i NIE forcowały
-  //    cross-origin requests z custom domain klienta na app.inflee.app.
-  //    Historyczne dane w bazie mają full URL-e — naprawiamy at-render-time
-  //    bez ruszania bazy.
-  // 2) Google avatars — sufiks rozmiaru (=sNN-c) ZOSTAJE; bez niego Google zwraca 404.
-  //    Gdy w bazie go nie ma, dopisujemy =s96-c (2x dla avatara 48px).
-  const normalizeAvatarUrl = (url: string | undefined): string | undefined => {
-    if (!url) return url;
-
-    // Strip absolute prefix dla self-hosted assets — działa na każdej domenie
-    const apiAssetsMatch = url.match(/^https?:\/\/[^/]+(\/api\/assets\/.*)/);
-    if (apiAssetsMatch) {
-      return apiAssetsMatch[1]; // np. "/api/assets/uploads/profile-pictures/..."
-    }
-
-    // Google avatars: rozmiar MUSI zostać w URL-u. Tokeny /a/ACg8oc... bez sufiksu
-    // =sNN-c zwracają 404, a next/image pobiera adres dokładnie taki, jaki dostanie —
-    // niczego do niego nie dokleja. Ścinanie sufiksu psuło więc avatar na landingu,
-    // mimo że w Settings (zwykły <img> z pełnym URL-em z bazy) działał poprawnie.
-    if (/^https:\/\/lh[3-6]\.googleusercontent\.com\//.test(url)) {
-      return /=s\d+(-c)?$/.test(url) ? url : `${url}=s96-c`;
-    }
-
-    return url;
-  };
+  // Normalizacja przez wspólny, IDEMPOTENTNY helper (src/lib/asset-url.ts).
+  // Nasze assety → ścięty host, ścieżka relatywna, bez ryzyka podwójnego prefiksu.
+  // Google → nietknięte, wraz z sufiksem =sNN-c (bez niego lh3 zwraca 404).
+  const normalizeAvatarUrl = (url: string | undefined): string | undefined =>
+    url ? assetUrl(url) || undefined : url;
 
   // Resolved avatar — wybór wg activeProfileSource (z normalizacją URL)
   const resolvedAvatarUrl = normalizeAvatarUrl((() => {
@@ -921,6 +900,8 @@ const DemoView: React.FC<DemoViewProps> = ({
   })());
 
   // Resolved brand logo — fallback do pageData.author_logo_url (legacy public path)
+  // Uwaga: dalsze członki kaskady to surowe wartości z bazy (bez cache-bustu).
+  // Preferujemy prop brandLogoUrl, który przyszedł już z bustem z PublicPageClient.
   const resolvedBrandLogoUrl = normalizeAvatarUrl(
     brandLogoUrl
     || pageData?.author_logo_url
@@ -1043,12 +1024,7 @@ const DemoView: React.FC<DemoViewProps> = ({
   const theme = colorSchemes[colorSchemeName] || colorSchemes.dark;
 
   // Logo URL processing
-  const logoUrl = (() => {
-    const raw = pageData?.author_logo_url;
-    if (!raw) return '/api/assets/uploads/logo_inflee.webp';
-    if (raw.startsWith('/uploads/')) return `/api/assets/${raw.slice('/uploads/'.length)}`;
-    return raw;
-  })();
+  const logoUrl = assetUrl(pageData?.author_logo_url) || '/api/assets/uploads/logo_inflee.webp';
 
   // Mockup URL — kaskadowo z możliwych źródeł.
   // Najpierw resolvedMockupUrl (zbudowany server-side w preview API i page.tsx),
@@ -1056,14 +1032,7 @@ const DemoView: React.FC<DemoViewProps> = ({
   const mockupUrl = (() => {
     if (pageData?.resolvedMockupUrl) return pageData.resolvedMockupUrl;
 
-    const buildAssetUrl = (path?: string | null): string => {
-      if (!path) return '';
-      if (path.startsWith('http://') || path.startsWith('https://')) return path;
-      if (path.startsWith('/uploads/')) {
-        return `/api/assets/uploads/${path.substring('/uploads/'.length)}`;
-      }
-      return `/api/assets/uploads/${path}`;
-    };
+    const buildAssetUrl = assetUrl;
 
     const ebook = pageData?.ebook;
     const fromEbook = ebook?.final_mockup_url || ebook?.cover_image_webp_url || ebook?.s3_file_key || ebook?.mockup_url;
@@ -1365,6 +1334,7 @@ const DemoView: React.FC<DemoViewProps> = ({
                       width={40}
                       height={40}
                       className="w-full h-full object-cover"
+                      unoptimized={/^https?:\/\//.test(resolvedAvatarUrl!)}
                     />
                   </div>
                 )}
@@ -1416,6 +1386,7 @@ const DemoView: React.FC<DemoViewProps> = ({
                       width={48}
                       height={48}
                       className="w-full h-full object-cover"
+                      unoptimized={/^https?:\/\//.test(resolvedAvatarUrl!)}
                     />
                   </div>
                 )}
@@ -1482,6 +1453,7 @@ const DemoView: React.FC<DemoViewProps> = ({
                     width={44}
                     height={44}
                     className="w-full h-full object-cover"
+                    unoptimized={/^https?:\/\//.test(resolvedAvatarUrl!)}
                   />
                 </div>
               )}

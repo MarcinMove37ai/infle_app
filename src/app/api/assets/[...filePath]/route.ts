@@ -51,12 +51,20 @@ export async function GET(
     const headers: Record<string, string> = {
       'Content-Type': contentType,
       'Content-Length': stats.size.toString(),
-      // Cache 30 dni dla static uploads — wystarczająco długo żeby Lighthouse
-      // i browsery efektywnie cache'owały, krótko enough żeby reupload tej
-      // samej nazwy pliku (np. profile picture overwrite) propagował się
-      // w sensownym czasie. NIE używamy `immutable` bo URL może być
-      // reused przy update'cie usera.
-      'Cache-Control': 'public, max-age=2592000',
+      // Pliki mają STAŁE nazwy (USER_{id}_AVATAR.png, ..._COVER.webp), więc URL nie
+      // zmienia się przy podmianie zawartości. 30-dniowy max-age powodował, że
+      // przeglądarka miesiąc trzymała starą grafikę i nie pytała serwera — to była
+      // realna przyczyna „starego logo/avatara", nie brak bustu.
+      //
+      // Rozwiązanie: adresy z ?t= (patrz assetUrl w src/lib/asset-url.ts) są unikalne
+      // dla danej wersji pliku → cache'ujemy je agresywnie. Adresy bez ?t= muszą być
+      // walidowane przy każdym użyciu; ETag na mtime+size sprawia, że koszt to 304,
+      // nie ponowne pobranie całego pliku.
+      'Cache-Control': req.nextUrl.searchParams.has('t')
+        ? 'public, max-age=31536000, immutable'
+        : 'public, max-age=0, must-revalidate',
+      'ETag': `"${stats.mtimeMs}-${stats.size}"`,
+      'Last-Modified': stats.mtime.toUTCString(),
     };
 
     // Attachment tylko dla nieobrazkowych plików (np. PDF download).
@@ -64,6 +72,11 @@ export async function GET(
     // w niektórych konfiguracjach browser+OS.
     if (!isInlineRenderable) {
       headers['Content-Disposition'] = `attachment; filename="${filename}"`;
+    }
+
+    // Warunkowy GET: jeśli klient ma aktualną wersję, oddajemy 304 bez ciała pliku.
+    if (req.headers.get('if-none-match') === headers['ETag']) {
+      return new NextResponse(null, { status: 304, headers: { ETag: headers['ETag'] } });
     }
 
     return new NextResponse(fileBuffer, { headers });

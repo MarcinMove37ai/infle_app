@@ -4,6 +4,7 @@ import React, { useEffect } from 'react';
 import DemoView, { colorSchemes } from '@/components/views/demo';
 import DemoVideo from '@/components/views/demoVideo';
 import type { PageContent } from '@/types/landing-page';
+import { assetUrl } from '@/lib/asset-url';
 
 // ───────────────────────────────────────────────────────────────────────────
 // Typy
@@ -32,38 +33,8 @@ const isValidColorScheme = (color: any): color is ColorSchemeKey =>
 // Helpery
 // ───────────────────────────────────────────────────────────────────────────
 
-const buildAssetUrl = (path?: string | null, bust?: string | Date | null): string => {
-  if (!path) return '';
-
-  // NASZ asset poznajemy po ścieżce /api/assets/, NIE po tym czy URL ma host.
-  // Endpointy author-settings i profile-picture zapisują do bazy pełny
-  // `${baseUrl}/api/assets/...`, więc test "zaczyna się od https" wyrzucał je
-  // razem z Google i gubił cache-bust — stąd logo i avatar nie reagowały na zmiany.
-  const assetsIdx = path.indexOf('/api/assets/');
-
-  // Prawdziwie zewnętrzne (Google) — bez zmian, ich URL zmienia się sam.
-  if (assetsIdx === -1 && (path.startsWith('http://') || path.startsWith('https://'))) {
-    return path;
-  }
-
-  // Ścinamy protokół+host → adres relatywny. Działa na app.inflee.app, na custom
-  // domenie i na localhoście, niezależnie od tego, w którym środowisku powstał wiersz.
-  const url =
-    assetsIdx !== -1
-      ? path.substring(assetsIdx)
-      : path.startsWith('/uploads/')
-        ? `/api/assets/uploads/${path.substring('/uploads/'.length)}`
-        : `/api/assets/uploads/${path}`;
-
-  // Assety użytkownika mają STAŁE nazwy (USER_{id}_AVATAR.png, ..._PROFILE.png).
-  // Podmiana pliku nie zmienia URL-a → przeglądarka serwuje starą wersję bez końca.
-  // Ten sam wzorzec co przy mockupie okładki: ?t=updated_at.
-  if (bust) {
-    const t = new Date(bust).getTime();
-    if (!Number.isNaN(t)) return `${url}?t=${t}`;
-  }
-  return url;
-};
+// Cała logika w jednym, idempotentnym helperze — patrz src/lib/asset-url.ts.
+const buildAssetUrl = assetUrl;
 
 /**
  * Resolve mockup URL — kaskada źródeł, fallback na wypadek gdy

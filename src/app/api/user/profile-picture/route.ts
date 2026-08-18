@@ -36,9 +36,12 @@ type ProfileSource = typeof VALID_PROFILE_SOURCES[number];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
 
+// Ścieżka RELATYWNA, bez hosta. Baza jest wspólna dla localhosta i produkcji,
+// więc absolutny URL z NEXT_PUBLIC_BASE_URL zapamiętywał środowisko, w którym
+// powstał wiersz: plik wgrany lokalnie był nieosiągalny z produkcji i odwrotnie.
+// Relatywna ścieżka rozwiązuje się zawsze względem domeny, która akurat renderuje.
 function buildPublicUrl(filename: string): string {
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
-  return `${baseUrl}/api/assets/uploads/profile-pictures/${filename}`;
+  return `/api/assets/uploads/profile-pictures/${filename}`;
 }
 
 async function removeExistingProfilePictures(userId: string, dir: string): Promise<void> {

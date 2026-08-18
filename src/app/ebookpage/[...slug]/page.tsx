@@ -6,6 +6,7 @@ import { notFound, redirect } from 'next/navigation';
 import { headers } from 'next/headers';
 import { prisma } from '@/lib/prisma';
 import PublicPageClient from './PublicPageClient';
+import { assetUrl, absoluteAssetUrl } from '@/lib/asset-url';
 
 type PublicPageProps = {
   params: Promise<{
@@ -168,27 +169,10 @@ async function getPageData(
     // -----------------------------------------------------------------
     // Resolve mockup URL — identycznie jak preview API
     // -----------------------------------------------------------------
-    const getAssetUrl = (imagePath: string | null | undefined): string => {
-      if (!imagePath) return '';
-      if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) return imagePath;
-      if (imagePath.startsWith('/uploads/')) {
-        const filename = imagePath.substring('/uploads/'.length);
-        return `/api/assets/uploads/${filename}`;
-      }
-      return `/api/assets/uploads/${imagePath}`;
-    };
-
-    const mockupUrlBase = getAssetUrl(
-      ebook?.final_mockup_url || ebook?.cover_image_webp_url
+    const mockupUrl = assetUrl(
+      ebook?.final_mockup_url || ebook?.cover_image_webp_url,
+      ebook?.updated_at
     );
-
-    // Cache-bust na updated_at ebooka — plik mockupu (_finalMOK.png) ma stałą
-    // nazwę, więc bez tego /_next/image serwuje starą zbuforowaną wersję po
-    // regeneracji okładki. ?t=updated_at zmienia URL źródłowy → świeży obraz.
-    const mockupBust = ebook?.updated_at ? new Date(ebook.updated_at).getTime() : '';
-    const mockupUrl = mockupUrlBase && mockupBust
-      ? `${mockupUrlBase}${mockupUrlBase.includes('?') ? '&' : '?'}t=${mockupBust}`
-      : mockupUrlBase;
 
 
     // Dołącz obliczone dane do obiektu strony
@@ -237,16 +221,7 @@ export async function generateMetadata({ params, searchParams }: PublicPageProps
     || (pageData.ebook as any)?.cover_image_url
     || '/default-image.jpg';
 
-  // Konwersja relative -> absolute path (przez /api/assets/ jeśli /uploads/)
-  const resolveImagePath = (path: string): string => {
-    if (path.startsWith('http://') || path.startsWith('https://')) return path;
-    if (path.startsWith('/uploads/')) {
-      return `${baseUrl}/api/assets/uploads/${path.substring('/uploads/'.length)}`;
-    }
-    return `${baseUrl}${path.startsWith('/') ? '' : '/'}${path}`;
-  };
-
-  const imageUrl = resolveImagePath(rawImage);
+  const imageUrl = absoluteAssetUrl(rawImage, baseUrl);
 
   // -----------------------------------------------------------------
   // Detect direct hit on origin host (connect/fallback.inflee.app).

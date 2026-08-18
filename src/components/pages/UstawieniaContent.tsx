@@ -17,6 +17,7 @@ import ProfilePictureCropModal from '@/components/ui/ProfilePictureCropModal';
 import BrandLogoModal from '@/components/ui/BrandLogoModal';
 import CustomDomainsSection from '@/components/pages/settings/CustomDomainsSection';
 import { signOut } from 'next-auth/react';
+import { assetUrl } from '@/lib/asset-url';
 
 interface Model {
   id: string;
@@ -346,12 +347,10 @@ const HEADER_PREVIEW_THEMES: HeaderPreviewTheme[] = [
 // Cache-busting dla assetów o STAŁYCH nazwach (USER_{id}_PROFILE.png, USER_{id}_AVATAR.png).
 // Backend nadpisuje plik pod tym samym URL-em, więc bez ?t= przeglądarka serwuje starą kopię.
 // Zewnętrzne URL-e (Google CDN) pomijamy — ich adres zmienia się sam przy podmianie zdjęcia.
-const withCacheBust = (url: string | null | undefined): string | null => {
-  if (!url) return url ?? null;
-  if (!url.includes('/api/assets/')) return url;
-  const sep = url.includes('?') ? '&' : '?';
-  return `${url}${sep}t=${Date.now()}`;
-};
+// Normalizacja + cache-bust przez wspólny helper (src/lib/asset-url.ts).
+// Zewnętrzne URL-e (Google CDN) przechodzą nietknięte.
+const withCacheBust = (url: string | null | undefined): string | null =>
+  url ? assetUrl(url, new Date()) : (url ?? null);
 
 // --- Tłumaczenia ---
 const translations = {
@@ -2057,11 +2056,7 @@ export default function SettingsContent() {
             const data = await response.json();
             const authorSettings: AuthorSettings = data.authorSettings;
 
-            let logoUrl = authorSettings.authorLogoUrl;
-            if (logoUrl) {
-              const separator = logoUrl.includes('?') ? '&' : '?';
-              logoUrl = `${logoUrl}${separator}t=${Date.now()}`;
-            }
+            const logoUrl = withCacheBust(authorSettings.authorLogoUrl);
 
             setSettings(prev => ({
               ...prev,
@@ -2073,8 +2068,10 @@ export default function SettingsContent() {
               imageModel: authorSettings.imageAiModel || 'imagen-3'
             }));
 
-            // Sync original URL (raw, do re-edycji w modalu)
-            setBrandLogoOriginalUrl(authorSettings.authorLogoOriginalUrl || null);
+            // Sync original URL (raw, do re-edycji w modalu) — też znormalizowany,
+            // bo handleBrandLogoEdit robi na nim fetch(); z obcym hostem poleciałby
+            // cross-origin albo mixed content.
+            setBrandLogoOriginalUrl(withCacheBust(authorSettings.authorLogoOriginalUrl));
 
             setLastSavedUsername(authorSettings.authorDisplayName || authorSettings.fallbackName);
 
@@ -2574,11 +2571,7 @@ export default function SettingsContent() {
         const data = await response.json();
         const authorSettings: AuthorSettings = data.authorSettings;
 
-        let newAvatarUrl = authorSettings.authorLogoUrl;
-        if (newAvatarUrl) {
-          const separator = newAvatarUrl.includes('?') ? '&' : '?';
-          newAvatarUrl = `${newAvatarUrl}${separator}t=${Date.now()}`;
-        }
+        const newAvatarUrl = withCacheBust(authorSettings.authorLogoUrl);
 
         setSettings(prev => ({
           ...prev,
@@ -2875,14 +2868,8 @@ export default function SettingsContent() {
       if (response.ok) {
         const data = await response.json();
         const authorSettings: AuthorSettings = data.authorSettings;
-        // Cache busting: backend nadpisuje plik pod tym samym URL'em
-        const cacheBust = (url: string | null): string | null => {
-          if (!url) return url;
-          const sep = url.includes('?') ? '&' : '?';
-          return `${url}${sep}t=${Date.now()}`;
-        };
-        const newLogoUrl = cacheBust(authorSettings.authorLogoUrl);
-        const newOrigUrl = cacheBust(authorSettings.authorLogoOriginalUrl);
+        const newLogoUrl = withCacheBust(authorSettings.authorLogoUrl);
+        const newOrigUrl = withCacheBust(authorSettings.authorLogoOriginalUrl);
         setSettings(prev => ({ ...prev, logo: newLogoUrl }));
         // Sync original URL — bez tego Edit później nie będzie miał skąd brać oryginału
         setBrandLogoOriginalUrl(newOrigUrl);

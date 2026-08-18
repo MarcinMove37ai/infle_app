@@ -319,8 +319,8 @@ export async function PUT(request: NextRequest) {
       // Zapisz raw bez przetwarzania sharp — chcemy original PIXEL-PERFECT do re-edycji
       await fs.writeFile(origFilePath, Buffer.from(origBuffer));
 
-      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
-      newOriginalUrl = `${baseUrl}/api/assets/uploads/avatars/${origFileName}`;
+      // Ścieżka relatywna — patrz komentarz w profile-picture/route.ts (wspólna baza).
+      newOriginalUrl = `/api/assets/uploads/avatars/${origFileName}`;
       console.log(`✅ Original raw zapisany: ${newOriginalUrl}`);
     }
 
@@ -426,9 +426,8 @@ export async function PUT(request: NextRequest) {
       // Zapisanie nowego pliku avatara
       await fs.writeFile(filePath, processedImageBuffer);
 
-      // Generowanie publicznego URL dla avatara
-      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
-      newAvatarUrl = `${baseUrl}/api/assets/uploads/avatars/${fileName}`;
+      // Ścieżka relatywna — patrz komentarz w profile-picture/route.ts (wspólna baza).
+      newAvatarUrl = `/api/assets/uploads/avatars/${fileName}`;
 
       console.log(`✅ Avatar zapisany: ${newAvatarUrl}`);
     }

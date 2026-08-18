@@ -15,6 +15,14 @@ const nextConfig: NextConfig = {
   // Next Image i tak konwertuje przez /_next/image proxy więc URL źródłowy
   // jest inputem, nie zagrożeniem (browser nie ładuje go bezpośrednio).
   images: {
+    // localPatterns — wymagane, żeby <Image> przyjął lokalne ścieżki z query stringiem.
+    // Bez tego Next.js odrzuca nasz cache-bust (?t=...) przy budowaniu src/srcset,
+    // obraz dostaje URL bez bustu i po podmianie pliku zostaje w cache optymalizatora.
+    // Pominięty `search` = dowolny query string dozwolony. Podanie search: '**'
+    // NIE jest poprawną składnią — Next traktuje to jako dosłowną wartość i nie dopasuje ?t=...
+    localPatterns: [
+      { pathname: '/api/assets/**' },
+    ],
     remotePatterns: [
       // Self-hosted assets — uploads serwowane przez nasz /api/assets/* endpoint
       // (profile pictures, ebook covers, mockup uploads, brand logos).
