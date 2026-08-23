@@ -427,7 +427,29 @@ export async function POST(request: NextRequest) {
     });
 
     const rawOutput = await callAnthropic(prompt, apiKey, model);
-    const seeds = parseSeeds(rawOutput);
+
+    // Parsowanie bywa zawodne: model potrafi wstawic niezescape'owany cudzyslow
+    // w opisie i JSON.parse sie wywala. Bez surowej odpowiedzi w logu nie da sie
+    // ustalic, co dokladnie zepsul — wiec logujemy ja, zanim rzucimy blad dalej.
+    // Uwaga: pozycja z komunikatu odnosi sie do WYCIETEGO JSON-a, nie do calego
+    // rawOutput, wiec okno ponizej jest orientacyjne (zwykle offset to 0-10 znakow).
+    let seeds: Seed[];
+    try {
+      seeds = parseSeeds(rawOutput);
+    } catch (parseError) {
+      const msg = parseError instanceof Error ? parseError.message : String(parseError);
+      const pos = Number(msg.match(/position (\d+)/)?.[1] ?? NaN);
+      console.error('❌ [generate-seeds] PARSE FAILED:', msg);
+      console.error('📏 [generate-seeds] dlugosc odpowiedzi:', rawOutput.length, 'model:', model);
+      if (Number.isFinite(pos)) {
+        console.error(
+          '🔍 [generate-seeds] okolica bledu:',
+          JSON.stringify(rawOutput.slice(Math.max(0, pos - 150), pos + 150)),
+        );
+      }
+      console.error('📄 [generate-seeds] RAW START>>>\n' + rawOutput + '\n<<<RAW END');
+      throw parseError;
+    }
 
     return NextResponse.json({ seeds });
   } catch (error) {
