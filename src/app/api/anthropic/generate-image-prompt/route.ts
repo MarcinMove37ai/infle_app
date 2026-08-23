@@ -3,59 +3,9 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { NextResponse } from 'next/server';
 import { getApiKeyForEndpoint, getUserAiSettings } from '@/lib/user-api-keys';
+import { callAnthropic, premiumModel, AnthropicError } from '@/lib/anthropic';
 
 export const runtime = 'nodejs';
-
-interface AnthropicMessage {
-  role: 'user' | 'assistant';
-  content: string;
-}
-
-interface AnthropicRequest {
-  model: string;
-  max_tokens: number;
-  messages: AnthropicMessage[];
-  temperature?: number;
-}
-
-// 🔄 FETCH WITH RETRY AND TIMEOUT
-async function fetchWithRetry(
-  url: string,
-  options: RequestInit,
-  maxRetries: number = 3,
-  timeout: number = 30000
-): Promise<Response> {
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      console.log(`🔄 Attempt ${attempt}/${maxRetries} to ${url}`);
-
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), timeout);
-
-      const response = await fetch(url, {
-        ...options,
-        signal: controller.signal
-      });
-
-      clearTimeout(timeoutId);
-      console.log(`✅ Fetch succeeded on attempt ${attempt}`);
-      return response;
-
-    } catch (error: any) {
-      console.error(`❌ Attempt ${attempt}/${maxRetries} failed:`, error.message);
-
-      if (attempt === maxRetries) {
-        throw new Error(`Failed after ${maxRetries} attempts: ${error.message}`);
-      }
-
-      const delay = 1000 * Math.pow(2, attempt - 1);
-      console.log(`⏳ Waiting ${delay}ms before retry...`);
-      await new Promise(resolve => setTimeout(resolve, delay));
-    }
-  }
-
-  throw new Error('Unexpected retry loop exit');
-}
 
 // 🎯 PROMPT CONFIGURATION FOR IMAGEN-3
 const PROMPT_CONFIGS = {
@@ -147,8 +97,9 @@ export async function POST(request: Request) {
     // ✅ LOGIKA KLUCZY API
     // Ilustracje rozdziałów to zadanie kreatywne wymagające spójnego art direction
     // w obrębie całej książki — używamy mocniejszego modelu (premium).
-    const BASIC_AI_MODEL = process.env.BASIC_AI_MODEL || 'claude-haiku-4-5';
-    const PREMIUM_AI_MODEL = process.env.PREMIUM_AI_MODEL || 'claude-sonnet-4-6';
+    // BASIC_AI_MODEL byl tu zadeklarowany i nigdy nieuzywany — modelToUse
+    // od poczatku startuje z premium.
+    const PREMIUM_AI_MODEL = premiumModel();
 
     let anthropicApiKey: string | null = null;
     let keySource: 'user' | 'env' | 'none' = 'none';
@@ -286,48 +237,32 @@ WYMAGANIA TECHNICZNE (bezwzględne):
 
 Napisz prompt po angielsku, długość około ${finalConfig.optimalLength} znaków. Zacznij prompt od precyzyjnego opisu sceny i fotorealistycznego stylu. NIE używaj słów-etykiet ani komentarzy — tylko gotowy prompt obrazu, bez prefiksu "PROMPT:".`;
 
-    // Temperatura: na tyle wysoka, by sceny rozdziałów były zróżnicowane treściowo,
-    // ale nie na tyle, by rozjechać spójny styl serii (ten trzyma instrukcja w promptcie).
-    // Regeneracja dostaje odrobinę więcej swobody dla wariantu sceny.
-    const temperature = forceRegenerate ? 0.7 : 0.55;
-
-    const requestBody: AnthropicRequest = {
-      model: modelToUse,
-      max_tokens: 600,
-      temperature: temperature,
-      messages: [{ role: 'user', content: prompt }]
-    };
-
     console.log(`📸 === SENDING PHOTOREALISTIC REQUEST ===`);
     console.log(`   - Provider: ${finalConfig.provider}`);
     console.log(`   - Model: ${targetModel}`);
-    console.log(`   - Temperature: ${temperature}`);
     console.log(`   - Target length: ${finalConfig.optimalLength} chars`);
     console.log(`   - Photo elements: ${JSON.stringify(photoElements, null, 2)}`);
 
-    const response = await fetchWithRetry(
-      'https://api.anthropic.com/v1/messages',
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': anthropicApiKey,
-          'anthropic-version': '2023-06-01'
-        },
-        body: JSON.stringify(requestBody)
-      },
-      3,
-      30000
-    );
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`❌ Błąd API Anthropic:`, errorText);
-      return NextResponse.json({ error: `Błąd podczas generowania promptu: ${errorText}` }, { status: response.status });
+    // max_tokens podniesione z 600: prompt do grafiki ma 300-500 slow, ale przy
+    // wlaczonym mysleniu jego tokeny tez licza sie do tego samego limitu.
+    let imagePrompt: string;
+    try {
+      const result = await callAnthropic({
+        apiKey: anthropicApiKey,
+        model: modelToUse,
+        prompt,
+        maxTokens: 2500,
+        maxAttempts: 3,
+        label: 'generate-image-prompt',
+      });
+      imagePrompt = result.text;
+    } catch (e) {
+      const status = e instanceof AnthropicError ? e.status : 500;
+      return NextResponse.json(
+        { error: `Błąd podczas generowania promptu: ${status}` },
+        { status },
+      );
     }
-
-    const responseData = await response.json();
-    let imagePrompt = responseData.content[0].text.trim();
 
     // Usuń ewentualny prefiks/cudzysłowy okalające
     imagePrompt = imagePrompt.replace(/^#+\s*PROMPT:?\s*/i, '').trim();
@@ -394,7 +329,7 @@ Napisz prompt po angielsku, długość około ${finalConfig.optimalLength} znak�
     console.log(`   No-minors clause: ${requiredElements['no_minors'] ? '✅' : '❌'}`);
     console.log(`   Chapter reference: ${requiredElements['chapter_ref'] ? '✅' : '❌'}`);
     console.log(`   Overall: ${(overallQuality * 100).toFixed(1)}%`);
-    console.log(`   Model: ${modelToUse}, Temperature: ${temperature}`);
+    console.log(`   Model: ${modelToUse}`);
     console.log(`📝 Preview: ${imagePrompt.substring(0, 150)}...`);
 
     return NextResponse.json({

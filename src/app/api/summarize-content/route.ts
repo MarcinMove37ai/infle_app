@@ -1,310 +1,290 @@
 // src/app/api/summarize-content/route.ts
-// Endpoint do podsumowywania treści przez AI
-// Przyjmuje pełną treść + docelową liczbę znaków
-// Przekazuje do AI z instrukcją skrócenia do określonej długości
-// Używa modelu wybranego przez użytkownika (z fallback na haiku)
+// Skracanie tresci zrodla przez AI.
+//
+// Wybor modelu zalezy WYLACZNIE od docelowej dlugosci — decyduje serwer, nie front:
+//   • do 5 000 znakow  → BASIC_AI_MODEL   (Haiku)
+//   • powyzej 5 000    → PREMIUM_AI_MODEL (Opus)
+//
+// Jezyk podsumowania = jezyk interfejsu uzytkownika, niezaleznie od jezyka zrodla.
 
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/lib/auth";
-import { getApiKeyForEndpoint, getUserAiSettings } from '@/lib/user-api-keys';
+import { getServerSession } from 'next-auth/next';
+import { authOptions } from '@/lib/auth';
+import { getApiKeyForEndpoint } from '@/lib/user-api-keys';
+import { getMaxSummaryLength } from '@/lib/planLimits';
 import { NextRequest, NextResponse } from 'next/server';
 
 export const runtime = 'nodejs';
 
-// Funkcja budowania promptu dla podsumowania treści
+/** Powyzej tej dlugosci schodzimy na model premium. */
+const PREMIUM_THRESHOLD = 5000;
+
+/** Twarde granice wejscia — niezalezne od planu. */
+const MIN_TARGET = 100;
+const MAX_TARGET = 10000;
+const MIN_CONTENT = 100;
+
+/** Timeout wywolania Anthropic (ms). Dlugie zrodla + Opus potrafia trwac. */
+const API_TIMEOUT_MS = 180_000;
+
+interface SummarizeRequest {
+  content: string;
+  targetLength: number;
+  title: string;
+  sourceType: 'web' | 'pdf';
+  sourceUrl?: string;
+  /** Jezyk interfejsu ('pl' | 'en'). Decyduje o jezyku podsumowania. */
+  lang?: string;
+}
+
+// ── Prompt ──────────────────────────────────────────────────────────────────
+//
+// Swiadomie KROTKI. Poprzednia wersja w polowie skladala sie z instrukcji typu
+// "POLICZ ZNAKI PRZED WYSLANIEM" — modele operuja na tokenach i znakow policzyc
+// nie potrafia, wiec te zdania nie dzialaly, a kosztowaly tokeny w kazdym zadaniu.
+// Dlugosc traktujemy jako cel przyblizony i weryfikujemy ja po stronie serwera.
 function buildSummaryPrompt(
   content: string,
   targetLength: number,
   title: string,
-  sourceType: 'web' | 'pdf'
+  sourceType: 'web' | 'pdf',
+  outputLanguage: string,
 ): string {
-  const minLength = Math.max(100, targetLength - Math.floor(targetLength * 0.1)); // -10%
-  const maxLength = targetLength + Math.floor(targetLength * 0.1); // +10%
+  const min = Math.max(MIN_TARGET, Math.round(targetLength * 0.9));
+  const max = Math.round(targetLength * 1.1);
 
-  let prompt = `ZADANIE: Stwórz podsumowanie o DOKŁADNIE ${targetLength} znaków (±10%).\n\n`;
+  return `You are condensing a source document so it can be used as background context for writing an ebook.
 
-  prompt += `============ INFORMACJE O ŹRÓDLE ============\n`;
-  prompt += `Tytuł: ${title}\n`;
-  prompt += `Typ: ${sourceType === 'web' ? 'Strona internetowa' : 'Dokument PDF'}\n`;
-  prompt += `Długość oryginału: ${content.length} znaków\n`;
-  prompt += `WYMAGANA długość podsumowania: ${targetLength} znaków\n`;
-  prompt += `Dozwolony zakres: ${minLength} - ${maxLength} znaków\n\n`;
+=== SOURCE ===
+Title: ${title}
+Type: ${sourceType === 'web' ? 'web page' : 'PDF document'}
+Original length: ${content.length} characters
 
-  prompt += `============ KRYTYCZNE WYMAGANIA DŁUGOŚCI ============\n`;
-  prompt += `🚨 ABSOLUTNIE KLUCZOWE - DŁUGOŚĆ PODSUMOWANIA:\n`;
-  prompt += `• Podsumowanie MUSI mieć między ${minLength} a ${maxLength} znaków\n`;
-  prompt += `• Idealnie: DOKŁADNIE ${targetLength} znaków\n`;
-  prompt += `• NIE WIĘCEJ niż ${maxLength} znaków - to jest MAKSIMUM BEZWZGLĘDNE\n`;
-  prompt += `• NIE MNIEJ niż ${minLength} znaków - to jest MINIMUM BEZWZGLĘDNE\n`;
-  prompt += `• Przed wysłaniem odpowiedzi POLICZ ZNAKI i upewnij się, że są w zakresie\n`;
-  prompt += `• Jeśli przekraczasz limit - USUŃ najmniej ważne fragmenty\n`;
-  prompt += `• Jeśli nie osiągasz minimum - DODAJ ważne szczegóły\n\n`;
+=== TASK ===
+Write a summary of roughly ${targetLength} characters (anything between ${min} and ${max} is fine).
 
-  prompt += `============ STRATEGIA OSIĄGNIĘCIA DŁUGOŚCI ============\n`;
-  prompt += `1. Najpierw wypisz GŁÓWNE TEMATY z treści\n`;
-  prompt += `2. Oblicz ile znaków możesz przeznaczyć na każdy temat\n`;
-  prompt += `3. Pisz podsumowanie, stale pilnując liczby znaków\n`;
-  prompt += `4. Po napisaniu POLICZ ZNAKI i dostosuj długość\n`;
-  prompt += `5. Usuń zbędne słowa jeśli za długie, dodaj szczegóły jeśli za krótkie\n\n`;
+=== LANGUAGE ===
+Write the summary in ${outputLanguage}, regardless of the language of the source material. Translate the substance rather than transliterating phrases.
 
-  prompt += `============ POZOSTAŁE WYMAGANIA ============\n`;
-  prompt += `• Zachowaj najważniejsze informacje i kluczowe punkty\n`;
-  prompt += `• Użyj jasnego, przystępnego języka polskiego\n`;
-  prompt += `• Zachowaj strukturę logiczną treści\n`;
-  prompt += `• Nie dodawaj własnych komentarzy czy interpretacji\n`;
-  prompt += `• Skup się na faktach i głównych tezach\n`;
-  prompt += `• Zachowaj najważniejsze szczegóły i dane liczbowe jeśli występują\n`;
-  prompt += `• Priorytetyzuj merytorykę nad ozdobnikami językowymi\n\n`;
+=== WHAT TO KEEP ===
+- Concrete facts: figures, dates, names, standards, model numbers, technical parameters.
+- The logical structure and ordering of the original.
+- Terminology the source itself uses, when an equivalent exists in ${outputLanguage}.
 
-  prompt += `============ TREŚĆ DO PODSUMOWANIA ============\n${content}\n\n`;
+=== WHAT TO LEAVE OUT ===
+- Your own commentary, evaluation or interpretation.
+- Navigation text, cookie notices, calls to action and other page furniture.
+- Any heading or lead-in such as "Summary:" — begin directly with the substance.
 
-  prompt += `============ FORMAT ODPOWIEDZI ============\n`;
-  prompt += `🎯 PAMIĘTAJ: Twoja odpowiedź musi mieć ${minLength}-${maxLength} znaków!\n`;
-  prompt += `Zwróć TYLKO podsumowanie bez dodatkowych komentarzy czy formatowania.\n`;
-  prompt += `Nie dodawaj fraz typu "Podsumowanie:", "Treść:", itp.\n`;
-  prompt += `Rozpocznij bezpośrednio od merytorycznej treści podsumowania.\n`;
-  prompt += `PRZED WYSŁANIEM POLICZ ZNAKI I UPEWNIJ SIĘ, ŻE SĄ W ZAKRESIE ${minLength}-${maxLength}!`;
-
-  return prompt;
+=== SOURCE CONTENT ===
+${content}`;
 }
 
-// Interfejs dla request body - przyjmuje pełną treść do podsumowania
-interface SummarizeRequest {
-  content: string;        // Pełna zeskrapowana treść (bez skracania)
-  targetLength: number;   // Docelowa liczba znaków dla podsumowania
-  title: string;         // Tytuł źródła
-  sourceType: 'web' | 'pdf'; // Typ źródła
-  sourceUrl?: string;    // URL źródła (opcjonalny)
-  model?: string;        // Opcjonalny model wysłany z frontendu
-}
-
-// Interfejs dla Anthropic API
-interface AnthropicMessage {
-  role: 'user' | 'assistant';
-  content: string;
-}
-
-interface AnthropicRequest {
-  model: string;
-  max_tokens: number;
-  messages: AnthropicMessage[];
-  temperature?: number;
-}
-
-// Interfejs dla response - zwracany do modala
-interface SummarizeResponse {
-  success: boolean;
-  summary?: string;
-  originalLength?: number;
-  summaryLength?: number;
-  compressionRatio?: number;
-  modelUsed?: string;
-  keySource?: string;
-  tokensUsed?: any;
-  error?: string;
+/**
+ * Odczyt odpowiedzi po TYPIE bloku, nie po indeksie.
+ * Nowsze modele (Opus 5 i pozniejsze) maja rozszerzone myslenie wlaczone domyslnie
+ * i moga zwrocic blok 'thinking' na pozycji zerowej — wtedy content[0].text jest
+ * undefined i cala sciezka sie wywala.
+ */
+function extractText(data: any): string {
+  const blocks = Array.isArray(data?.content) ? data.content : [];
+  return blocks
+    .filter((b: any) => b?.type === 'text' && typeof b.text === 'string')
+    .map((b: any) => b.text)
+    .join('\n')
+    .trim();
 }
 
 export async function POST(request: NextRequest) {
-  console.log('Rozpoczynam podsumowywanie treści...');
+  let pl = false; // jezyk komunikatow bledu; ustalany po sparsowaniu body
 
   try {
-    // 1. AUTORYZACJA I SESJA (identycznie jak w generate-single-chapter)
+    // 1. Sesja
     const session = await getServerSession(authOptions);
-    if (!session || !session.user) {
-      return NextResponse.json(
-        { error: 'Nie jesteś zalogowany. Zaloguj się, aby korzystać z tej funkcji.' },
-        { status: 401 }
-      );
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'You must be signed in to use this feature.' }, { status: 401 });
     }
 
-    // 2. PARSOWANIE REQUEST BODY
+    // 2. Body
     let body: SummarizeRequest;
     try {
       body = await request.json();
-    } catch (error) {
-      return NextResponse.json(
-        { error: 'Nieprawidłowy format danych JSON.' },
-        { status: 400 }
-      );
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON payload.' }, { status: 400 });
     }
 
-    const { content, targetLength, title, sourceType, sourceUrl, model: modelFromRequest } = body;
+    const { content, targetLength, title, sourceType, lang } = body;
+    pl = lang === 'pl';
 
-    // 3. WALIDACJA PODSTAWOWYCH DANYCH
+    // 3. Walidacja wejscia
     if (!content || !targetLength || !title) {
       return NextResponse.json(
-        { error: 'Nieprawidłowe dane wejściowe. Wymagana treść, długość docelowa i tytuł.' },
-        { status: 400 }
+        { error: pl ? 'Wymagane: treść, długość docelowa i tytuł.' : 'Required: content, target length and title.' },
+        { status: 400 },
       );
     }
 
-    // 4. WALIDACJA DŁUGOŚCI
-    if (content.length < 100) {
+    if (content.length < MIN_CONTENT) {
       return NextResponse.json(
-        { error: 'Treść jest za krótka do podsumowania (minimum 100 znaków).' },
-        { status: 400 }
+        {
+          error: pl
+            ? `Treść jest za krótka do skrócenia (minimum ${MIN_CONTENT} znaków).`
+            : `Content is too short to summarize (minimum ${MIN_CONTENT} characters).`,
+        },
+        { status: 400 },
       );
     }
 
-    // Ograniczenie tylko dla docelowej długości (nie dla oryginalnej treści)
-    if (targetLength < 100 || targetLength > 15000) {
+    if (targetLength < MIN_TARGET || targetLength > MAX_TARGET) {
       return NextResponse.json(
-        { error: 'Długość docelowa musi być między 100 a 15000 znaków.' },
-        { status: 400 }
+        {
+          error: pl
+            ? `Długość docelowa musi mieścić się między ${MIN_TARGET} a ${MAX_TARGET} znaków.`
+            : `Target length must be between ${MIN_TARGET} and ${MAX_TARGET} characters.`,
+        },
+        { status: 400 },
       );
     }
 
-    // Ostrzeżenie dla bardzo długich treści (ale nie blokujemy)
-    if (content.length > 100000) {
-      console.warn(`Bardzo długa treść do podsumowania: ${content.length} znaków`);
+    // 4. Egzekucja planu PO STRONIE SERWERA.
+    //    Wczesniej limit pilnowal wylacznie front, wiec zwyklym zadaniem HTTP
+    //    dalo sie ominac ograniczenia planu.
+    const role = (session.user as any).role as string | undefined;
+    const maxForPlan = getMaxSummaryLength(role);
+    if (targetLength > maxForPlan) {
+      return NextResponse.json(
+        {
+          error: pl
+            ? `Twój plan pozwala skracać do ${maxForPlan} znaków.`
+            : `Your plan allows summaries up to ${maxForPlan} characters.`,
+        },
+        { status: 403 },
+      );
     }
 
-    // 5. POBRANIE KLUCZA API ANTHROPIC (identycznie jak w generate-single-chapter)
-    const userId = session.user.id;
-
-    // ✅ DEFINICJE MODELI ZE ZMIENNYCH ŚRODOWISKOWYCH
-    const BASIC_AI_MODEL = process.env.BASIC_AI_MODEL || 'claude-3-5-haiku-20241022';
-    const PREMIUM_AI_MODEL = process.env.PREMIUM_AI_MODEL || 'claude-sonnet-4-20250514';
-
-    const { apiKey: anthropicApiKey, source: keySource } = await getApiKeyForEndpoint(
-      userId,
+    // 5. Klucz API
+    const { apiKey, source: keySource } = await getApiKeyForEndpoint(
+      session.user.id,
       'anthropic',
-      'ANTHROPIC_API_KEY'
+      'ANTHROPIC_API_KEY',
     );
-
-    if (!anthropicApiKey) {
+    if (!apiKey) {
       return NextResponse.json(
-        { error: 'Błąd konfiguracji - brak klucza API Anthropic' },
-        { status: 500 }
+        { error: pl ? 'Brak konfiguracji klucza API Anthropic.' : 'Anthropic API key is not configured.' },
+        { status: 500 },
       );
     }
 
-    // 6. ✅ WYBÓR MODELU Z USTAWIEŃ UŻYTKOWNIKA
-    const userAiSettings = await getUserAiSettings(userId);
+    // 6. Model — wylacznie wg dlugosci docelowej.
+    //    Fallbacki to biezaca generacja; wlasciwe wartosci ustawia srodowisko.
+    const BASIC_AI_MODEL = process.env.BASIC_AI_MODEL || 'claude-haiku-4-5-20251001';
+    const PREMIUM_AI_MODEL = process.env.PREMIUM_AI_MODEL || 'claude-opus-5';
+    const modelToUse = targetLength > PREMIUM_THRESHOLD ? PREMIUM_AI_MODEL : BASIC_AI_MODEL;
 
-    let modelToUse: string;
+    const outputLanguage = pl ? 'Polish' : 'English';
+    const prompt = buildSummaryPrompt(content, targetLength, title, sourceType, outputLanguage);
 
-    // Użyj 'modelFromRequest' (z body.model), jeśli zostało wysłane
-    if (modelFromRequest === "PREMIUM_AI_MODEL") {
-      modelToUse = PREMIUM_AI_MODEL;
-      console.log('🤖 Wybrano model PREMIUM (z żądania frontendu)');
-    } else {
-      // W przeciwnym razie użyj domyślnych ustawień użytkownika
-      modelToUse = userAiSettings.textAiModel === 'claude-3-sonnet'
-        ? PREMIUM_AI_MODEL
-        : BASIC_AI_MODEL;
-      console.log(`🤖 Wybrano model DOMYŚLNY (z ustawień użytkownika: ${userAiSettings.textAiModel})`);
-    }
-
-    console.log(`🤖 Używam modelu: ${modelToUse} (provider: ${userAiSettings.textAiProvider})`);
-    console.log(`🔑 Źródło klucza API: ${keySource} ${keySource === 'user' ? '(klucz użytkownika)' : '(klucz systemowy)'}`);
-
-    // 7. LOGGING KONTEKSTU
-    console.log('Kontekst podsumowania:', {
+    console.log('✂️ [summarize-content]', {
       originalLength: content.length,
-      targetLength: targetLength,
-      title: title,
-      sourceType: sourceType,
-      modelUsed: modelToUse,
-      keySource: keySource,
-      willSendFullContent: true
+      targetLength,
+      tier: targetLength > PREMIUM_THRESHOLD ? 'premium' : 'basic',
+      model: modelToUse,
+      outputLanguage,
+      keySource,
+      promptLength: prompt.length,
     });
 
-    // 8. BUDOWANIE PROMPTU dla podsumowania
-    const prompt = buildSummaryPrompt(content, targetLength, title, sourceType);
-    console.log(`Długość promptu: ${prompt.length} znaków`);
+    // 7. Wywolanie Anthropic.
+    //    Bez 'temperature' — nowsza generacja odrzuca niedomyslne parametry
+    //    samplingu i zwraca 400.
+    //    max_tokens liczymy ze ZNAKOW na TOKENY (~2 znaki/token to bezpieczny
+    //    zapas dla polskiego); poprzednio podstawiano znaki wprost jako tokeny.
+    const maxTokens = Math.min(16000, Math.max(1024, Math.ceil(targetLength / 2)));
 
-    // 9. ANTHROPIC API REQUEST
-    const requestBody: AnthropicRequest = {
-      model: modelToUse, // ✅ ZMIANA: Używaj modelu z ustawień użytkownika
-      max_tokens: Math.min(4000, Math.ceil(targetLength * 1.3)), // 30% buffer na podsumowanie
-      temperature: 0.3, // Niższa temperatura dla bardziej precyzyjnych podsumowań
-      messages: [
-        {
-          role: 'user',
-          content: prompt
-        }
-      ]
-    };
-
-    // 10. WYWOŁANIE ANTHROPIC API
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': anthropicApiKey,
-        'anthropic-version': '2023-06-01'
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
       },
-      body: JSON.stringify(requestBody)
+      body: JSON.stringify({
+        model: modelToUse,
+        max_tokens: maxTokens,
+        messages: [{ role: 'user', content: prompt }],
+      }),
+      signal: AbortSignal.timeout(API_TIMEOUT_MS),
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`Błąd API Anthropic dla podsumowania:`, errorText);
-      console.error(`Status: ${response.status}, klucz z: ${keySource}`);
+      const errorText = await response.text().catch(() => '');
+      console.error(`❌ [summarize-content] Anthropic ${response.status}:`, errorText.slice(0, 500));
       return NextResponse.json(
-        { error: `Błąd podczas podsumowywania treści: ${response.status}` },
-        { status: response.status }
+        {
+          error: pl
+            ? `Błąd podczas skracania treści (${response.status}).`
+            : `Summarization failed (${response.status}).`,
+        },
+        { status: response.status },
       );
     }
 
-    // 11. PRZETWARZANIE ODPOWIEDZI
-    const responseData = await response.json();
-    const rawSummary = responseData.content?.[0]?.text || '';
+    const data = await response.json();
+    const summary = extractText(data);
 
-    if (!rawSummary) {
+    if (!summary) {
+      const types = (Array.isArray(data?.content) ? data.content : []).map((b: any) => b?.type).join(', ');
+      console.error('❌ [summarize-content] brak bloku tekstowego. Typy:', types || 'brak', 'stop_reason:', data?.stop_reason);
       return NextResponse.json(
-        { error: 'AI nie zwróciło podsumowania treści.' },
-        { status: 500 }
+        { error: pl ? 'Model nie zwrócił podsumowania.' : 'The model returned no summary.' },
+        { status: 500 },
       );
     }
 
-    // Czyszczenie podsumowania z ewentualnych artefaktów
-    const cleanedSummary = rawSummary.trim();
-
-    // Walidacja wygenerowanego podsumowania
-    if (cleanedSummary.length === 0) {
-      return NextResponse.json(
-        { error: 'AI zwróciło puste podsumowanie.' },
-        { status: 500 }
+    // 8. Kontrola dlugosci — na serwerze, nie w prompcie.
+    //    Na razie tylko sygnalizujemy odchylenie w logach; jesli okaze sie czeste,
+    //    kolejnym krokiem jest jedno ponowienie z korekta.
+    const min = Math.max(MIN_TARGET, Math.round(targetLength * 0.9));
+    const max = Math.round(targetLength * 1.1);
+    if (summary.length < min || summary.length > max) {
+      console.warn(
+        `⚠️ [summarize-content] dlugosc poza zakresem: ${summary.length} (cel ${targetLength}, zakres ${min}-${max}, model ${modelToUse})`,
       );
     }
 
-    if (cleanedSummary.length >= content.length) {
-      console.warn('Podsumowanie nie jest krótsze od oryginału');
+    const compressionRatio = summary.length / content.length;
+    if (summary.length >= content.length) {
+      console.warn('⚠️ [summarize-content] podsumowanie nie jest krotsze od oryginalu');
     }
 
-    const compressionRatio = cleanedSummary.length / content.length;
+    console.log(
+      `✅ [summarize-content] ${content.length} → ${summary.length} znakow (${(compressionRatio * 100).toFixed(1)}%)`,
+      data?.usage ?? {},
+    );
 
-    console.log('Otrzymano odpowiedź z API Anthropic');
-    console.log(`Długość podsumowania: ${cleanedSummary.length} znaków`);
-    console.log(`Użycie tokenów:`, responseData.usage);
-    console.log(`Stopień kompresji: ${(compressionRatio * 100).toFixed(1)}%`);
-
-    // 12. ZWRÓCENIE WYNIKU DO MODALA
     return NextResponse.json({
       success: true,
-      summary: cleanedSummary,
+      summary,
       originalLength: content.length,
-      summaryLength: cleanedSummary.length,
-      compressionRatio: compressionRatio,
-      modelUsed: modelToUse, // ✅ DODANO: Zwracamy informację o użytym modelu
-      keySource: keySource,
-      tokensUsed: responseData.usage || null
+      summaryLength: summary.length,
+      compressionRatio,
+      modelUsed: modelToUse,
+      keySource,
+      tokensUsed: data?.usage || null,
     });
-
   } catch (error) {
-    console.error('Błąd podczas podsumowywania:', error);
+    const isTimeout = error instanceof Error && error.name === 'TimeoutError';
+    console.error('❌ [summarize-content] failed:', error);
     return NextResponse.json(
-      { error: 'Wewnętrzny błąd serwera podczas podsumowywania treści.' },
-      { status: 500 }
+      {
+        error: isTimeout
+          ? (pl ? 'Skracanie trwało zbyt długo. Spróbuj ponownie.' : 'Summarization timed out. Please try again.')
+          : (pl ? 'Wewnętrzny błąd serwera podczas skracania.' : 'Internal server error while summarizing.'),
+      },
+      { status: isTimeout ? 504 : 500 },
     );
   }
 }
 
 export async function GET() {
-  return NextResponse.json(
-    { error: 'Ta metoda nie jest obsługiwana. Użyj metody POST.' },
-    { status: 405 }
-  );
+  return NextResponse.json({ error: 'Use POST.' }, { status: 405 });
 }

@@ -3,6 +3,8 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { NextResponse } from 'next/server';
 import { getApiKeyForEndpoint } from '@/lib/user-api-keys';
+import { callAnthropic, premiumModel, AnthropicError } from '@/lib/anthropic';
+import { hasIntroAccess, PLAN_NAMES } from '@/lib/planLimits';
 import { prisma } from '@/lib/prisma'; // Zakładam że masz prisma client
 
 // Jawna definicja runtime
@@ -57,6 +59,20 @@ export async function POST(request: Request) {
     }
 
     const userId = session.user.id;
+
+    // Wstep jest funkcja planu Business i wyzej. Sprawdzamy TUTAJ, nie tylko na
+    // froncie — front to przegladarka uzytkownika i nie jest zabezpieczeniem.
+    // Stoi przed odczytem ebooka z bazy, zeby nie robic zbednej pracy.
+    if (!hasIntroAccess((session.user as any).role)) {
+      console.log(`⛔ [generate-intro] brak dostepu w planie uzytkownika ${userId}`);
+      return NextResponse.json(
+        {
+          error: 'INTRO_REQUIRES_UPGRADE',
+          requiredPlan: PLAN_NAMES.business,
+        },
+        { status: 403 },
+      );
+    }
 
     // ✅ KROK 1: Pobierz dane ebooka z bazy
     const ebook = await prisma.ebooks.findUnique({
@@ -142,7 +158,7 @@ export async function POST(request: Request) {
     }
 
     // ✅ KROK 5: ZAWSZE używaj premium model
-    const PREMIUM_AI_MODEL = process.env.PREMIUM_AI_MODEL || 'claude-sonnet-4-20250514';
+    const PREMIUM_AI_MODEL = premiumModel();
 
     console.log(`🤖 Używam modelu: ${PREMIUM_AI_MODEL} (premium - zawsze dla intro)`);
     console.log(`🔑 Źródło klucza API: ${keySource}`);
@@ -157,17 +173,9 @@ export async function POST(request: Request) {
       pl
     });
 
-    const requestBody: AnthropicRequest = {
-      model: PREMIUM_AI_MODEL,
-      max_tokens: 2000, // Wystarczająco dla 3 sekcji wstępu + CTA
-      temperature: 0.7,
-      messages: [
-        {
-          role: 'user',
-          content: prompt
-        }
-      ]
-    };
+    // max_tokens podniesione z 2000: przy wlaczonym mysleniu jego tokeny
+    // tez licza sie do limitu, a wstep to 3 sekcje plus CTA.
+    const MAX_TOKENS = 4000;
 
     console.log('Wysyłanie zapytania do Anthropic API...');
     console.log('Kontekst:', {
@@ -191,28 +199,23 @@ export async function POST(request: Request) {
     }
 
     // ✅ KROK 7: Wykonaj zapytanie do API Anthropic
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': anthropicApiKey,
-        'anthropic-version': '2023-06-01'
-      },
-      body: JSON.stringify(requestBody)
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Błąd API Anthropic:', errorText);
-      console.error(`Status: ${response.status}, klucz z: ${keySource}`);
+    let introContent: string;
+    try {
+      const result = await callAnthropic({
+        apiKey: anthropicApiKey,
+        model: PREMIUM_AI_MODEL,
+        prompt,
+        maxTokens: MAX_TOKENS,
+        label: 'generate-intro',
+      });
+      introContent = result.text;
+    } catch (e) {
+      const status = e instanceof AnthropicError ? e.status : 500;
       return NextResponse.json(
         { error: 'Błąd podczas generowania wstępu' },
-        { status: response.status }
+        { status },
       );
     }
-
-    const responseData = await response.json();
-    const introContent = responseData.content[0].text;
 
     console.log('Otrzymano odpowiedź z Anthropic API, długość:', introContent.length);
 

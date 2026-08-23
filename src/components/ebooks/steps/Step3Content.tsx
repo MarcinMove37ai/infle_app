@@ -1,4 +1,4 @@
-import React, { RefObject } from 'react';
+import React, { RefObject, useEffect } from 'react';
 import {
   AlertCircle, Loader, Sparkles, FileText, Check, Edit, Save, X,
   ChevronLeft, ChevronRight, BookOpen, ImageIcon, Info
@@ -28,7 +28,7 @@ interface Step3ContentProps {
   handleCancelEditContent: () => void;
   editingChapterContent: string;
   setEditingChapterContent: (content: string) => void;
-  contentEditRef: RefObject<HTMLTextAreaElement>;
+  contentEditRef: RefObject<HTMLTextAreaElement | null>;
   currentGeneratingIndex: number;
   setStep: (step: number) => void;
 }
@@ -63,13 +63,31 @@ export const Step3Content: React.FC<Step3ContentProps> = ({
   const activeChapter = tocItems.find(item => item.id === activeChapterId);
   const isIntroActive = activeChapterId === 'intro';
 
+  // Zawsze cos ma byc wybrane. Pilnuje tego SAM komponent, a nie handlery
+  // nawigacji — dzieki temu dziala niezaleznie od drogi wejscia do kroku 3
+  // (przejscie z kroku 2, zakonczenie generowania, ponowne otwarcie szkicu).
+  // Lapie tez przypadek, gdy wstep znika z listy po odznaczeniu checkboxa:
+  // aktywne 'intro' przestaje istniec, wiec przeskakujemy na pierwszy rozdzial.
+  useEffect(() => {
+    if (tocItems.length === 0) return;
+    const stillExists = tocItems.some(item => item.id === activeChapterId);
+    if (!stillExists) {
+      setActiveChapterId(tocItems[0].id);
+    }
+  }, [tocItems, activeChapterId, setActiveChapterId]);
+
+  // Wstep moze, ale NIE MUSI byc na liscie — zalezy od planu i wyboru usera.
+  // Dlatego numeracji nie da sie oprzec na stalym przesunieciu o jeden;
+  // sprawdzamy faktyczna zawartosc listy.
+  const hasIntroItem = tocItems.some(item => item.id === 'intro');
+  const chapterCount = hasIntroItem ? tocItems.length - 1 : tocItems.length;
+
   // Helper do wyświetlania numeru lub ikony
   const renderChapterNumber = (item: TocItem, index: number) => {
     if (item.id === 'intro') {
       return <Info size={14} className="text-blue-600" />;
     }
-    // Ponieważ intro jest zawsze na początku (index 0), właściwe rozdziały to index
-    return <span>{index}</span>;
+    return <span>{hasIntroItem ? index : index + 1}</span>;
   };
 
   return (
@@ -147,7 +165,9 @@ export const Step3Content: React.FC<Step3ContentProps> = ({
                <FileText size={16} className="mr-2 text-blue-500" />
             )}
             <span className="text-sm font-medium text-gray-700">
-              {isIntroActive ? 'Introduction' : `Chapter ${tocItems.findIndex(item => item.id === activeChapterId)} of ${tocItems.length - 1}`}
+              {isIntroActive
+                ? 'Introduction'
+                : `Chapter ${tocItems.findIndex(item => item.id === activeChapterId) + (hasIntroItem ? 0 : 1)} of ${chapterCount}`}
             </span>
           </div>
 

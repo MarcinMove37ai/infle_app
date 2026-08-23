@@ -71,13 +71,14 @@ export async function POST(request: Request) {
     }
 
     // ✅ NOWA LOGIKA: Pobierz ustawienia AI użytkownika
-    const BASIC_AI_MODEL = process.env.BASIC_AI_MODEL || 'claude-3-5-haiku-20241022';
-    const PREMIUM_AI_MODEL = process.env.PREMIUM_AI_MODEL || 'claude-sonnet-4-20250514';
+    // Spis tresci to szkielet calego ebooka — jedno wywolanie, ktore przesadza
+    // o strukturze kilkudziesieciu rozdzialow. Idziemy na PREMIUM swiadomie.
+    // Wczesniej porownywano z 'claude-3-sonnet' — identyfikatorem sprzed kilku
+    // generacji — wiec warunek byl zawsze falszywy i TOC leial na modelu podstawowym.
+    const PREMIUM_AI_MODEL = process.env.PREMIUM_AI_MODEL || 'claude-opus-5';
+    const modelToUse = PREMIUM_AI_MODEL;
 
     const userAiSettings = await getUserAiSettings(userId);
-    const modelToUse = userAiSettings.textAiModel === 'claude-3-sonnet'
-      ? PREMIUM_AI_MODEL
-      : BASIC_AI_MODEL;
 
     console.log(`🤖 Używam modelu: ${modelToUse} (provider: ${userAiSettings.textAiProvider})`);
     console.log(`🔑 Źródło klucza API: ${keySource} ${keySource === 'user' ? '(klucz użytkownika)' : '(klucz systemowy)'}`);
@@ -194,10 +195,12 @@ export async function POST(request: Request) {
     prompt += `  { "title": "Praktyczne zastosowania" }\n`;
     prompt += `]`;
 
+    // Bez 'temperature' — nowsza generacja odrzuca niedomyslne parametry samplingu (400).
+    // max_tokens z zapasem: 24 rozdzialy to ~700 tokenow JSON-a, ale przy wlaczonym
+    // mysleniu jego tokeny tez licza sie do limitu.
     const requestBody: AnthropicRequest = {
-      model: modelToUse, // ✅ ZMIANA: Używaj modelu z ustawień użytkownika
-      max_tokens: 1500, // Zwiększone ze względu na więcej kontekstu
-      temperature: 0.7,
+      model: modelToUse,
+      max_tokens: 4000,
       messages: [
         {
           role: 'user',
@@ -219,9 +222,11 @@ export async function POST(request: Request) {
       model: modelToUse,
       keySource: keySource
     });
-    console.log('=== PEŁNY PROMPT ===');
-    console.log(prompt);
-    console.log('=== KONIEC PROMPTU ===');
+    // Prompt zawiera pelna tresc wszystkich zrodel (do 100 tys. znakow kazde),
+    // wiec wypisywanie go w calosci zapychalo logi Railway i utrudnialo
+    // znalezienie czegokolwiek innego. Zostaje poczatek — reszta jest w bazie.
+    console.log(`=== PROMPT (${prompt.length} znakow), poczatek ===`);
+    console.log(prompt.slice(0, 600) + (prompt.length > 600 ? '\n…[obciete]' : ''));
 
     // Wykonaj zapytanie do API Anthropic z kluczem użytkownika lub systemowym
     const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -231,7 +236,8 @@ export async function POST(request: Request) {
         'x-api-key': anthropicApiKey, // ✅ ZMIANA: Używaj pobranego klucza
         'anthropic-version': '2023-06-01'
       },
-      body: JSON.stringify(requestBody)
+      body: JSON.stringify(requestBody),
+      signal: AbortSignal.timeout(180_000)
     });
 
     if (!response.ok) {
@@ -245,7 +251,24 @@ export async function POST(request: Request) {
     }
 
     const responseData = await response.json();
-    let tocContent = responseData.content[0].text;
+
+    // Odczyt po TYPIE bloku, nie po indeksie — Opus 5 i nowsze moga zwrocic
+    // blok 'thinking' na pozycji zerowej i wtedy .text jest undefined.
+    const blocks = Array.isArray(responseData?.content) ? responseData.content : [];
+    const tocContent: string = blocks
+      .filter((b: any) => b?.type === 'text' && typeof b.text === 'string')
+      .map((b: any) => b.text)
+      .join('\n')
+      .trim();
+
+    if (!tocContent) {
+      const types = blocks.map((b: any) => b?.type).join(', ') || 'brak blokow';
+      console.error('❌ [generate-toc] brak bloku tekstowego. Typy:', types, 'stop_reason:', responseData?.stop_reason);
+      return NextResponse.json(
+        { error: 'Model nie zwrócił spisu treści. Spróbuj ponownie.' },
+        { status: 500 }
+      );
+    }
 
     console.log('Otrzymano odpowiedź z Anthropic API, długość:', tocContent.length);
 

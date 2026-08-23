@@ -3,44 +3,10 @@ import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { NextResponse } from 'next/server';
 import { getApiKeyForEndpoint } from '@/lib/user-api-keys';
+import { callAnthropic, premiumModel, AnthropicError } from '@/lib/anthropic';
 
 export const runtime = 'nodejs';
 
-interface AnthropicMessage {
-  role: 'user' | 'assistant';
-  content: string;
-}
-
-interface AnthropicRequest {
-  model: string;
-  max_tokens: number;
-  messages: AnthropicMessage[];
-  temperature?: number;
-}
-
-async function fetchWithRetry(
-  url: string,
-  options: RequestInit,
-  maxRetries: number = 3,
-  timeout: number = 30000
-): Promise<Response> {
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      console.log(`🔄 Attempt ${attempt}/${maxRetries}`);
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), timeout);
-      const response = await fetch(url, { ...options, signal: controller.signal });
-      clearTimeout(timeoutId);
-      return response;
-    } catch (error: any) {
-      console.error(`❌ Attempt ${attempt}/${maxRetries} failed:`, error.message);
-      if (attempt === maxRetries) throw new Error(`Failed after ${maxRetries} attempts: ${error.message}`);
-      const delay = 1000 * Math.pow(2, attempt - 1);
-      await new Promise(resolve => setTimeout(resolve, delay));
-    }
-  }
-  throw new Error('Unexpected retry loop exit');
-}
 
 export async function POST(request: Request) {
   const isInternalRequest = request.headers.get('x-internal-request') === 'true';
@@ -104,7 +70,7 @@ export async function POST(request: Request) {
     // Okładka to zadanie kreatywne — używamy mocniejszego modelu (premium),
     // który potrafi przeanalizować treść i zaprojektować dopasowany kierunek
     // artystyczny, zamiast produkować bezpieczną sztampę.
-    const PREMIUM_AI_MODEL = process.env.PREMIUM_AI_MODEL || 'claude-sonnet-4-6';
+    const PREMIUM_AI_MODEL = premiumModel();
 
     // Zbuduj zwięzłą STRUKTURĘ TREŚCI książki na podstawie rozdziałów:
     // każdy rozdział = jego tytuł + krótki wycinek treści (pierwsze zdania).
@@ -182,38 +148,28 @@ Długość promptu: około 350-550 słów, bogaty i konkretny, po angielsku.
 
 Napisz TYLKO gotowy prompt (bez komentarzy, bez nagłówków, bez opisu swojej analizy). Zacznij od słowa "Create" — bez prefiksu "PROMPT:".`;
 
-    const requestBody: AnthropicRequest = {
-      model: PREMIUM_AI_MODEL,
-      max_tokens: 1200,
-      temperature: 0.65,
-      messages: [{ role: 'user', content: prompt }]
-    };
+    console.log(`📤 Wysyłanie do Claude (${PREMIUM_AI_MODEL}), prompt ${prompt.length} znakow...`);
 
-    console.log(`📤 Wysyłanie do Claude (${PREMIUM_AI_MODEL})...`);
-    console.log('📤 REQUEST TO ANTHROPIC:', JSON.stringify(requestBody, null, 2));
-    const response = await fetchWithRetry(
-      'https://api.anthropic.com/v1/messages',
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': anthropicApiKey,
-          'anthropic-version': '2023-06-01'
-        },
-        body: JSON.stringify(requestBody)
-      },
-      3,
-      30000
-    );
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`❌ Błąd Anthropic API:`, errorText);
-      return NextResponse.json({ error: `Błąd generowania promptu: ${errorText}` }, { status: response.status });
+    // max_tokens podniesione z 1200: brief okladki ma 350-550 slow, ale przy
+    // wlaczonym mysleniu jego tokeny tez licza sie do tego samego limitu.
+    let coverPrompt: string;
+    try {
+      const result = await callAnthropic({
+        apiKey: anthropicApiKey,
+        model: PREMIUM_AI_MODEL,
+        prompt,
+        maxTokens: 3000,
+        maxAttempts: 3,
+        label: 'generate-cover-prompt',
+      });
+      coverPrompt = result.text;
+    } catch (e) {
+      const status = e instanceof AnthropicError ? e.status : 500;
+      return NextResponse.json(
+        { error: `Błąd generowania promptu: ${status}` },
+        { status },
+      );
     }
-
-    const responseData = await response.json();
-    let coverPrompt = responseData.content[0].text.trim();
 
     // Usuń ewentualne cudzysłowy okalające
     coverPrompt = coverPrompt.replace(/^#+\s*PROMPT:?\s*/i, '').trim();

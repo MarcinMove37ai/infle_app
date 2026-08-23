@@ -4,6 +4,8 @@ import {
 } from 'lucide-react';
 import { ScrapedContent } from '../types';
 import { getChapterLimits } from '@/lib/chapterLimits';
+import LimitBadge from '@/components/ui/LimitBadge';
+import { getPlan } from '@/lib/planLimits';
 
 interface Step1DetailsProps {
   title: string;
@@ -33,12 +35,14 @@ interface Step1DetailsProps {
   isInitializing: boolean;
   seedSuggestions: { position: number; title: string; subtitle: string; description?: string }[];
   onInspireMe: () => void;
-  titleInputRef: RefObject<HTMLInputElement>;
-  subtitleInputRef: RefObject<HTMLInputElement>;
-  descriptionInputRef: RefObject<HTMLTextAreaElement>;
-  pdfInputRef: RefObject<HTMLInputElement>;
+  // React 19: useRef<T>(null) zwraca RefObject<T | null>, wiec typ propa musi
+  // dopuszczac null. Zachowanie w runtime bez zmian.
+  titleInputRef: RefObject<HTMLInputElement | null>;
+  subtitleInputRef: RefObject<HTMLInputElement | null>;
+  descriptionInputRef: RefObject<HTMLTextAreaElement | null>;
+  pdfInputRef: RefObject<HTMLInputElement | null>;
   highlightSources?: boolean;
-  sourcesRef?: RefObject<HTMLDivElement>;
+  sourcesRef?: RefObject<HTMLDivElement | null>;
   onDismissHighlight?: () => void;
   sourcesSpotlightHidden?: boolean;
   toggleSourcesSpotlightHidden?: (checked: boolean) => void;
@@ -97,20 +101,11 @@ export const Step1Details: React.FC<Step1DetailsProps> = ({
   const subtitleFromSeed = seedSuggestions.some((s) => s.subtitle === subtitle && subtitle.trim() !== '');
   const descriptionFromSeed = seedSuggestions.some((s) => (s.description || '') === description && description.trim() !== '');
 
-  // --- LOGIKA LIMITU ŹRÓDEŁ (Odtworzona z oryginału) ---
+  // --- LIMIT ŹRÓDEŁ ---
+  // Limity i nazwy planów czytamy z planLimits.ts (jedno źródło prawdy),
+  // zamiast trzymać je zaszyte w komponencie.
   const currentSourceCount = scrapedContent.length;
-  let maxSources = Infinity;
-  let roleName = "Unlimited"; // Domyślnie dla unlimited/god
-  const role = String(userRole).toLowerCase();
-
-  if (role === 'free' || role === 'free_ver' || role === 'rookie') {
-    maxSources = 1;
-    roleName = "Rookie";
-  } else if (role === 'creator') {
-    maxSources = 5;
-    roleName = "Creator";
-  }
-
+  const maxSources = getPlan(userRole).sources;
   const isAtSourceLimit = currentSourceCount >= maxSources;
 
   return (
@@ -202,7 +197,7 @@ export const Step1Details: React.FC<Step1DetailsProps> = ({
           </div>
 
           {/* Description Section */}
-          <div>
+          <div className="border-t border-gray-200 pt-6">
             <div className="flex items-center gap-2 mb-2">
               <label className="block text-sm font-medium text-gray-700">
                 Description and guidelines
@@ -235,22 +230,26 @@ export const Step1Details: React.FC<Step1DetailsProps> = ({
           <div
             ref={sourcesRef}
             className={`text-gray-700 transition-all duration-300 ${
-              highlightSources ? 'relative z-[61] rounded-xl border-2 border-indigo-500 p-4 ring-4 ring-indigo-500/15 bg-white' : ''
+              highlightSources
+                ? 'relative z-[61] rounded-xl border-2 border-indigo-500 p-4 ring-4 ring-indigo-500/15 bg-white'
+                : 'border-t border-gray-200 pt-6'
             }`}
           >
-            <div className="flex justify-between items-center mb-3">
+            {/* Naglowek sekcji — limit dotyczy SUMY zrodel (WWW + PDF),
+                wiec badge stoi nad kolumnami, a nie w ktorejkolwiek z nich. */}
+            <div className="flex justify-between items-center mb-3 min-h-[26px]">
               <label className="text-sm font-medium text-gray-700">
-                WWW Sources
+                Sources
                 <span className="text-gray-400 font-normal ml-1">(optional)</span>
               </label>
 
-              {/* Dynamic limit indicator */}
               {maxSources !== Infinity ? (
-                <span className={`text-xs font-medium px-2 py-1 rounded-full ${
-                  isAtSourceLimit ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'
-                }`}>
-                  Sources: {currentSourceCount} / {maxSources} ({roleName} Plan)
-                </span>
+                <LimitBadge
+                  aspect="sources"
+                  current={currentSourceCount}
+                  max={maxSources}
+                  role={userRole}
+                />
               ) : (
                 scrapedContent.length > 0 && (
                   <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full">
@@ -260,19 +259,28 @@ export const Step1Details: React.FC<Step1DetailsProps> = ({
               )}
             </div>
 
-            <div className="space-y-2">
-              {urlInputs.map((url, index) => (
-                <div key={index} className="flex items-center gap-2">
-                  <input
-                    type="url"
-                    value={url}
-                    onChange={(e) => handleUrlChange(index, e.target.value)}
-                    placeholder="https://example.com/article"
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    disabled={isGeneratingToc || isSaving || isScrapingUrls || isScrapingSingleUrl || isAtSourceLimit}
-                  />
-                  {url.trim() && !scrapedContent.find(item => item.url === url) && (
-                      <button
+            {/* WWW i PDF obok siebie — dwa rownorzedne sposoby dodania zrodla. */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-6">
+
+              {/* Kolumna 1 — zrodla WWW */}
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-2">
+                  Website URL
+                </label>
+
+                <div className="space-y-2">
+                  {urlInputs.map((url, index) => (
+                    <div key={index} className="flex items-center gap-2">
+                      <input
+                        type="url"
+                        value={url}
+                        onChange={(e) => handleUrlChange(index, e.target.value)}
+                        placeholder="https://example.com/article"
+                        className="flex-1 min-w-0 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        disabled={isGeneratingToc || isSaving || isScrapingUrls || isScrapingSingleUrl || isAtSourceLimit}
+                      />
+                      {url.trim() && !scrapedContent.find(item => item.url === url) && (
+                        <button
                           onClick={() => scrapeSingleUrl(url)}
                           disabled={
                             isInitializing ||
@@ -282,33 +290,33 @@ export const Step1Details: React.FC<Step1DetailsProps> = ({
                             isScrapingSingleUrl ||
                             isAtSourceLimit
                           }
-                          title={isAtSourceLimit ? "You have reached the source limit for your plan" : "Approve"}
-                          className={`px-3 py-2 text-sm rounded-lg transition-colors ${
+                          title={isAtSourceLimit ? "You have reached the source limit for your plan" : ""}
+                          className={`flex-shrink-0 px-3 py-2 text-sm rounded-lg transition-colors ${
                             isScrapingSingleUrl || isAtSourceLimit
                               ? 'bg-gray-400 text-white cursor-not-allowed'
                               : 'bg-blue-600 text-white hover:bg-blue-700 cursor-pointer'
                           }`}
-                      >
-                          {isScrapingSingleUrl ? <Loader size={14} className="animate-spin" /> : 'Approve'}
-                      </button>
-                    )}
+                        >
+                          {isScrapingSingleUrl ? <Loader size={14} className="animate-spin" /> : 'Get content'}
+                        </button>
+                      )}
 
-                    {url.trim() && scrapedContent.find(item => item.url === url) && (
-                      <span className="px-3 py-2 text-sm bg-green-100 text-green-700 rounded-lg border border-green-200 flex items-center">
-                        <Check size={14} className="mr-1" />
-                        Added
-                      </span>
-                  )}
+                      {url.trim() && scrapedContent.find(item => item.url === url) && (
+                        <span className="flex-shrink-0 px-3 py-2 text-sm bg-green-100 text-green-700 rounded-lg border border-green-200 flex items-center">
+                          <Check size={14} className="mr-1" />
+                          Added
+                        </span>
+                      )}
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              </div>
 
-            <div className="border-t border-gray-200 pt-4 mt-4 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
-              {/* PDF (lewa strona) */}
+              {/* Kolumna 2 — zrodla PDF */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-3">
-                  PDF Sources
-                  <span className="text-gray-400 font-normal ml-1">(optional, max 10MB)</span>
+                <label className="block text-xs font-medium text-gray-500 mb-2">
+                  PDF file
+                  <span className="font-normal text-gray-400 ml-1">(max 10MB)</span>
                 </label>
                 <button
                   onClick={handleOpenPdfDialog}
@@ -322,7 +330,7 @@ export const Step1Details: React.FC<Step1DetailsProps> = ({
                     isAtSourceLimit
                   }
                   title={isAtSourceLimit ? "You have reached the source limit for your plan" : "Choose PDF file"}
-                  className="flex items-center px-4 py-2 border border-dashed border-gray-300 rounded-lg transition-colors bg-white text-gray-700 hover:bg-gray-50 cursor-pointer disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
+                  className="w-full flex items-center justify-center px-4 py-2 border border-dashed border-gray-300 rounded-lg transition-colors bg-white text-gray-700 hover:bg-gray-50 cursor-pointer disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
                 >
                   {isUploadingPdf ? (
                     <><Loader size={16} className="animate-spin mr-2" /> Processing...</>
@@ -333,29 +341,6 @@ export const Step1Details: React.FC<Step1DetailsProps> = ({
                 <input type="file" ref={pdfInputRef} className="hidden" accept=".pdf,application/pdf" onChange={handlePdfUpload} />
               </div>
 
-              {/* Liczba rozdziałów (prawa strona na desktop, kompaktowy suwak) */}
-              <div className="w-full sm:w-60 sm:flex-shrink-0">
-                <div className="flex items-center justify-between mb-2">
-                  <label className="text-sm font-medium text-gray-700">Chapters</label>
-                  <span className="inline-flex items-center justify-center min-w-[26px] h-[22px] px-1.5 bg-indigo-50 text-indigo-600 text-xs font-semibold rounded-md">
-                    {chapterCount}
-                  </span>
-                </div>
-                <input
-                  type="range"
-                  min={chapterLimits.min}
-                  max={chapterLimits.max}
-                  step={1}
-                  value={chapterCount}
-                  onChange={(e) => setChapterCount(Number(e.target.value))}
-                  disabled={isGeneratingToc || isSaving || isScrapingUrls}
-                  className="w-full accent-indigo-600 cursor-pointer disabled:cursor-not-allowed"
-                />
-                <div className="flex items-center justify-between mt-1">
-                  <span className="text-[11px] text-gray-400">{chapterLimits.min}</span>
-                  <span className="text-[11px] text-gray-400">{chapterLimits.max}</span>
-                </div>
-              </div>
             </div>
 
             {scrapedContent.length > 0 && (
@@ -420,6 +405,35 @@ export const Step1Details: React.FC<Step1DetailsProps> = ({
                 </div>
               </div>
             )}
+          </div>
+
+          {/* Liczba rozdzialow — wlasny blok, poza sekcja zrodel.
+              Wczesniej siedzial wewnatrz sourcesRef i przygasal razem ze zrodlami
+              przy spotlighcie, choc nie ma z nimi nic wspolnego. */}
+          <div className="border-t border-gray-200 pt-6">
+            <div className="flex justify-between items-center mb-2">
+              <label className="text-sm font-medium text-gray-700">Chapters</label>
+              <LimitBadge
+                aspect="chapters"
+                current={chapterCount}
+                max={chapterLimits.max}
+                role={userRole}
+              />
+            </div>
+            <input
+              type="range"
+              min={chapterLimits.min}
+              max={chapterLimits.max}
+              step={1}
+              value={chapterCount}
+              onChange={(e) => setChapterCount(Number(e.target.value))}
+              disabled={isGeneratingToc || isSaving || isScrapingUrls}
+              className="w-full accent-indigo-600 cursor-pointer disabled:cursor-not-allowed"
+            />
+            <div className="flex items-center justify-between mt-1">
+              <span className="text-[11px] text-gray-400">{chapterLimits.min}</span>
+              <span className="text-[11px] text-gray-400">{chapterLimits.max}</span>
+            </div>
           </div>
         </div>
       </div>

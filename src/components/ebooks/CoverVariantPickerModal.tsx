@@ -19,6 +19,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { X, Check, Upload, ZoomIn, RefreshCw, ArrowLeft, Loader2, Plus, Info } from 'lucide-react';
+import LimitBadge from '@/components/ui/LimitBadge';
 
 export type CoverVariant = {
   url: string;
@@ -31,7 +32,7 @@ interface CoverVariantPickerModalProps {
   isOpen: boolean;
   variants: CoverVariant[];
   activeUrl?: string;
-  userRole?: string | null | undefined;        // opcjonalny, nieużywany — upsell usunięty z modala
+  userRole?: string | null | undefined;        // do LimitBadge — dymek z porownaniem planow
   variantLimit: number;                         // ile wariantów dozwolone na planie (getVariantLimit)
   cacheBust?: number;
   isLoading?: boolean;                          // dociąganie puli — szkielet zamiast siatki
@@ -53,6 +54,7 @@ export const CoverVariantPickerModal: React.FC<CoverVariantPickerModalProps> = (
   variants,
   activeUrl,
   variantLimit,
+  userRole,
   cacheBust,
   isLoading = false,
   isSelecting = false,
@@ -245,7 +247,14 @@ export const CoverVariantPickerModal: React.FC<CoverVariantPickerModalProps> = (
                     </span>
                     <div className="min-w-0">
                       <p className="text-[13px] font-medium text-gray-900">Generate another option</p>
-                      <p className="text-xs text-gray-500 mt-0.5">{generatedCount} of {variantLimit} used on your plan</p>
+                      <div className="mt-1">
+                        <LimitBadge
+                          aspect="variants"
+                          current={generatedCount}
+                          max={variantLimit}
+                          role={userRole}
+                        />
+                      </div>
                     </div>
                   </div>
                   <button
@@ -267,10 +276,18 @@ export const CoverVariantPickerModal: React.FC<CoverVariantPickerModalProps> = (
                     <Info size={17} />
                   </span>
                   <div className="min-w-0">
-                    <p className="text-[13px] font-medium text-gray-900">You've reached the cover limit for this ebook</p>
+                    <p className="text-[13px] font-medium text-gray-900">You&apos;ve reached the cover limit for this ebook</p>
                     <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">
-                      Go to <span className="font-medium text-gray-700">Settings → Manage plan</span> to increase your generation limits.
+                      You can still upload your own image. Higher plans include more generated options:
                     </p>
+                    <div className="mt-2">
+                      <LimitBadge
+                        aspect="variants"
+                        current={generatedCount}
+                        max={variantLimit}
+                        role={userRole}
+                      />
+                    </div>
                   </div>
                 </div>
               )}

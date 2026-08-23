@@ -14,16 +14,21 @@
 import type { Role } from '@prisma/client';
 
 export const IMAGE_VARIANT_LIMITS: Record<Role, number> = {
+  // Starter — jedna grafika, bez wyboru wariantow.
+  // Wczesniej rookie i free_ver mialy 2, a free i demo 1; wyrownane w dol,
+  // zeby wszystkie role Startera mialy identyczne limity (patrz planLimits.ts).
   free: 1,
-  free_ver: 2,   // trial rookie — dostaje tyle co rookie
+  free_ver: 1,
   demo: 1,
-  rookie: 2,
+  rookie: 1,
+  // Business
   creator: 3,
-  unlimited: 5,
   payd: 3,
-  premium: 5,
-  GOD: 5,
-  admin: 5,
+  // Scale
+  unlimited: 10,
+  premium: 10,
+  GOD: 10,
+  admin: 10,
 };
 
 // Bezpieczny domyślny limit, gdy rola jest nieznana/niepodana.
@@ -37,12 +42,4 @@ export function getVariantLimit(role: string | null | undefined): number {
   if (!role) return DEFAULT_VARIANT_LIMIT;
   const limit = (IMAGE_VARIANT_LIMITS as Record<string, number>)[role];
   return typeof limit === 'number' ? limit : DEFAULT_VARIANT_LIMIT;
-}
-
-/**
- * Czy dany plan w ogóle korzysta z wyboru wariantów (limit > 1).
- * Przydatne w UI, by zdecydować, czy pokazywać galerię wyboru, czy klasyczny pojedynczy obraz.
- */
-export function supportsVariantChoice(role: string | null | undefined): boolean {
-  return getVariantLimit(role) > 1;
 }

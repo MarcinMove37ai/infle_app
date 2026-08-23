@@ -2,7 +2,8 @@
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { NextResponse } from 'next/server';
-import { getApiKeyForEndpoint, getUserAiSettings } from '@/lib/user-api-keys';
+import { getApiKeyForEndpoint } from '@/lib/user-api-keys';
+import { callAnthropic, premiumModel } from '@/lib/anthropic';
 
 export const runtime = 'nodejs';
 
@@ -45,11 +46,12 @@ export async function POST(request: Request) {
       );
     }
 
-    // ✅ DEFINICJE MODELI ZE ZMIENNYCH ŚRODOWISKOWYCH
-    const BASIC_AI_MODEL = process.env.BASIC_AI_MODEL || 'claude-3-5-haiku-20241022';
-    const PREMIUM_AI_MODEL = process.env.PREMIUM_AI_MODEL || 'claude-sonnet-4-20250514';
+    // Tresc rozdzialow to wlasciwy produkt — zawsze model premium.
+    // Wczesniej decydowal warunek `textAiModel === 'claude-3-sonnet'`, czyli
+    // porownanie z identyfikatorem sprzed kilku generacji — zawsze falszywe.
+    // W praktyce cala tresc ebookow powstawala na modelu podstawowym.
+    const modelToUse = premiumModel();
 
-    // ✅ NOWA LOGIKA: Pobierz klucz API użytkownika z fallback na env var
     const userId = session.user.id;
     const { apiKey: anthropicApiKey, source: keySource } = await getApiKeyForEndpoint(
       userId,
@@ -65,14 +67,7 @@ export async function POST(request: Request) {
       );
     }
 
-    // ✅ NOWA LOGIKA: Pobierz ustawienia AI użytkownika
-    const userAiSettings = await getUserAiSettings(userId);
-    const modelToUse = userAiSettings.textAiModel === 'claude-3-sonnet'
-      ? PREMIUM_AI_MODEL
-      : BASIC_AI_MODEL;
-
-    console.log(`🤖 Używam modelu: ${modelToUse} (provider: ${userAiSettings.textAiProvider})`);
-    console.log(`🔑 Źródło klucza API: ${keySource} ${keySource === 'user' ? '(klucz użytkownika)' : '(klucz systemowy)'}`);
+    console.log(`🤖 Model: ${modelToUse} | klucz: ${keySource}`);
     console.log(`📚 Generowanie ${chapters.length} rozdziałów dla ebooka: "${title}"`);
 
     // Generowanie treści rozdziałów jeden po drugim
@@ -99,40 +94,16 @@ export async function POST(request: Request) {
 
       ${pl ? 'Napisz całą treść rozdziału w języku POLSKIM.' : 'Write the entire chapter content in ENGLISH.'}`;
 
-      const requestBody: AnthropicRequest = {
-        model: modelToUse, // ✅ ZMIANA: Używaj modelu z ustawień użytkownika
-        max_tokens: 2500,
-        temperature: 0.7,
-        messages: [
-          {
-            role: 'user',
-            content: prompt
-          }
-        ]
-      };
-
       try {
-        // Wykonanie zapytania do API Anthropic z kluczem użytkownika lub systemowym
-        const response = await fetch('https://api.anthropic.com/v1/messages', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-api-key': anthropicApiKey, // ✅ ZMIANA: Używaj pobranego klucza
-            'anthropic-version': '2023-06-01'
-          },
-          body: JSON.stringify(requestBody)
+        // max_tokens z zapasem: ~2500 znakow tresci to ok. 900 tokenow, ale przy
+        // wlaczonym mysleniu jego tokeny tez licza sie do limitu.
+        const { text: chapterContent } = await callAnthropic({
+          apiKey: anthropicApiKey,
+          model: modelToUse,
+          prompt,
+          maxTokens: 4000,
+          label: `generate-content:${index + 1}/${chapters.length}`,
         });
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error(`❌ Błąd API Anthropic dla rozdziału "${chapter.title}":`, errorText);
-          console.error(`Status: ${response.status}, klucz z: ${keySource}`);
-          errorCount++;
-          continue; // Kontynuuj z następnym rozdziałem
-        }
-
-        const responseData = await response.json();
-        const chapterContent = responseData.content[0].text;
 
         chaptersWithContent.push({
           id: chapter.id,

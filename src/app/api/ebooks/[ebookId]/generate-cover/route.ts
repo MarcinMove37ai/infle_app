@@ -128,14 +128,23 @@ export async function POST(
       return NextResponse.json({ error: 'Ebook nie został znaleziony' }, { status: 404 });
     }
 
-    if (!ebook.intro || ebook.intro.trim().length === 0) {
+    // Okladka opiera sie na TRESCI ksiazki. Rozdzialy sa zrodlem pierwszego wyboru,
+    // wstep zapasowym — dokladnie tak, jak przyjmuje to generate-cover-prompt.
+    // Wczesniej wymagany byl sam wstep, co po wprowadzeniu wstepu jako funkcji
+    // planu Business+ blokowalo okladke calkowicie dla planu Starter.
+    const hasIntro = !!ebook.intro && ebook.intro.trim().length > 0;
+    const chaptersWithContent = (ebook.ebook_chapters ?? []).filter(
+      (ch) => (ch.content ?? '').trim().length > 0
+    );
+
+    if (!hasIntro && chaptersWithContent.length === 0) {
       return NextResponse.json({
-        error: 'Brak wstępu (pole intro jest puste). Dodaj intro przed generowaniem okładki.'
+        error: 'Brak treści książki. Wygeneruj rozdziały (lub wstęp) przed generowaniem okładki.'
       }, { status: 400 });
     }
 
     console.log(`📖 Ebook: "${ebook.title}" ${ebook.subtitle ? `— "${ebook.subtitle}"` : ''}`);
-    console.log(`📝 Intro: ${ebook.intro.length} znaków`);
+    console.log(`📝 Zrodlo briefu: ${chaptersWithContent.length} rozdzialow z trescia, wstep: ${hasIntro ? `${ebook.intro!.length} znakow` : 'brak'}`);
 
     // Pobierz klucz Google API
     const { apiKey: googleApiKey } = await getApiKeyForEndpoint(

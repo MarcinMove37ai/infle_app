@@ -489,7 +489,7 @@ function IntroEditor({ ebookTitle, ebookSubtitle, initialText, onSave, onCancel 
 
 export interface ReelModalProps {
   // refs & control
-  reelModalRef: React.RefObject<HTMLDivElement>;
+  reelModalRef: React.RefObject<HTMLDivElement | null>;
   closeReelModal: () => void;
   currentLang: 'pl' | 'en';
   t: Record<string, string>;

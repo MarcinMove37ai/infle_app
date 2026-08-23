@@ -10,7 +10,7 @@ interface Step4GraphicsProps {
   subtitle: string;
   tocItems: TocItem[];
   coverData: EbookCoverData | null;
-  fileInputRef: RefObject<HTMLInputElement>;
+  fileInputRef: RefObject<HTMLInputElement | null>;
   handleFileChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
   imageRefreshTimestamp: number;
   handleImagePreview: (imageUrl: string | undefined, title: string, downloadName?: string) => void;

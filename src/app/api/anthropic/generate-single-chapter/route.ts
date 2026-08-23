@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { NextResponse } from 'next/server';
 import { getApiKeyForEndpoint, getUserAiSettings } from '@/lib/user-api-keys';
+import { callAnthropic, premiumModel, AnthropicError } from '@/lib/anthropic';
 
 export const runtime = 'nodejs';
 
@@ -71,13 +72,11 @@ export async function POST(request: Request) {
     }
 
     // NOWA LOGIKA: Pobierz ustawienia AI uzytkownika
-    const BASIC_AI_MODEL = process.env.BASIC_AI_MODEL || 'claude-3-5-haiku-20241022';
-    const PREMIUM_AI_MODEL = process.env.PREMIUM_AI_MODEL || 'claude-sonnet-4-20250514';
+    // Tresc rozdzialu to wlasciwy produkt — zawsze premium, jak spis tresci.
+    const MAX_TOKENS = 6000;
 
     const userAiSettings = await getUserAiSettings(userId);
-    const modelToUse = userAiSettings.textAiModel === 'claude-3-sonnet'
-      ? PREMIUM_AI_MODEL
-      : BASIC_AI_MODEL;
+    const modelToUse = premiumModel();
 
     console.log(`Uzywam modelu: ${modelToUse} (provider: ${userAiSettings.textAiProvider})`);
     console.log(`Zrodlo klucza API: ${keySource} ${keySource === 'user' ? '(klucz uzytkownika)' : '(klucz systemowy)'}`);
@@ -235,19 +234,6 @@ export async function POST(request: Request) {
     prompt += `=== FORMAT ODPOWIEDZI ===\n`;
     prompt += `Zwroc tylko czysta tresc rozdzialu bez dodatkowych komentarzy, tytulow czy formatowania.`;
 
-    // Przygotuj zadanie do Anthropic API
-    const requestBody: AnthropicRequest = {
-      model: modelToUse,
-      max_tokens: 4500, // ZWIEKSZONE z 4000 do 4500 dla dluzszej tresci
-      temperature: 0.8, // ZWIEKSZONE z 0.7 do 0.8 dla bardziej rozwiniętych odpowiedzi
-      messages: [
-        {
-          role: 'user',
-          content: prompt
-        }
-      ]
-    };
-
     console.log('Wysylanie zapytania do Anthropic API...');
     console.log('Kontekst rozdzialu:', {
       chapterTitle: chapter.title,
@@ -259,8 +245,7 @@ export async function POST(request: Request) {
       promptLength: prompt.length,
       model: modelToUse,
       keySource: keySource,
-      maxTokens: requestBody.max_tokens,
-      temperature: requestBody.temperature
+      maxTokens: MAX_TOKENS
     });
 
     // ROZBUDOWANE LOGOWANIE PROMPTU (bez polskich znakow w logach)
@@ -270,8 +255,7 @@ export async function POST(request: Request) {
     console.log('STATYSTYKI PROMPTU:');
     console.log(`   Dlugosc: ${prompt.length} znakow`);
     console.log(`   Model: ${modelToUse}`);
-    console.log(`   Max tokens: ${requestBody.max_tokens}`);
-    console.log(`   Temperature: ${requestBody.temperature}`);
+    console.log(`   Max tokens: ${MAX_TOKENS}`);
     console.log(`   Rozdzial: "${chapter.title}"`);
     console.log(`   E-book: "${title}"`);
     console.log(`   Zrodla: ${scrapedContent?.length || 0}`);
@@ -289,36 +273,34 @@ export async function POST(request: Request) {
     console.log(`   Test kodowania: "${testString}" ma ${testString.length} znakow`);
 
     console.log('='.repeat(80));
-    console.log('TRESC PROMPTU:');
+    console.log('POCZATEK PROMPTU:');
     console.log('-'.repeat(50));
-    console.log(prompt);
+    console.log(prompt.slice(0, 600) + (prompt.length > 600 ? '\n…[obciete]' : ''));
     console.log('-'.repeat(50));
-    console.log('KONIEC PROMPTU');
     console.log('='.repeat(80) + '\n');
 
-    // Wykonaj zapytanie do API Anthropic z kluczem uzytkownika lub systemowym
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': anthropicApiKey,
-        'anthropic-version': '2023-06-01'
-      },
-      body: JSON.stringify(requestBody)
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`Blad API Anthropic dla rozdzialu "${chapter.title}":`, errorText);
-      console.error(`Status: ${response.status}, klucz z: ${keySource}`);
+    let chapterContent: string;
+    let responseUsage: any = null;
+    try {
+      const result = await callAnthropic({
+        apiKey: anthropicApiKey,
+        model: modelToUse,
+        prompt,
+        maxTokens: MAX_TOKENS,
+        label: `generate-single-chapter:${chapter.title}`,
+      });
+      chapterContent = result.text;
+      responseUsage = result.usage;
+    } catch (e) {
+      const status = e instanceof AnthropicError ? e.status : 500;
       return NextResponse.json(
-        { error: `Blad podczas generowania tresci rozdzialu: ${response.status}` },
-        { status: response.status }
+        { error: `Blad podczas generowania tresci rozdzialu: ${status}` },
+        { status },
       );
     }
 
-    const responseData = await response.json();
-    const chapterContent = responseData.content[0].text;
+    // Zgodnosc z dalszym logowaniem, ktore odwoluje sie do responseData.usage.
+    const responseData = { usage: responseUsage };
     const contentLength = chapterContent.length;
 
     // ROZBUDOWANE LOGOWANIE ODPOWIEDZI (bez polskich znakow w logach)
@@ -342,9 +324,9 @@ export async function POST(request: Request) {
       console.warn(`   Oczekiwano: min ${expectedMinLength} znakow`);
       console.warn(`   Brakuje: ${expectedMinLength - contentLength} znakow`);
       console.warn(`   Model: ${modelToUse}`);
-      console.warn(`   Max tokens: ${requestBody.max_tokens}`);
+      console.warn(`   Max tokens: ${MAX_TOKENS}`);
       console.warn(`   Uzyte tokeny: ${responseData.usage?.output_tokens || 'nieznane'}`);
-      console.warn(`   Procent wykorzystania tokenow: ${((responseData.usage?.output_tokens || 0) / requestBody.max_tokens * 100).toFixed(1)}%`);
+      console.warn(`   Procent wykorzystania tokenow: ${((responseData.usage?.output_tokens || 0) / MAX_TOKENS * 100).toFixed(1)}%`);
     } else if (contentLength > expectedMaxLength) {
       console.log(`\nINFO: Tresc dluzsza niz oczekiwano (${contentLength} > ${expectedMaxLength})`);
     } else {
@@ -377,12 +359,11 @@ export async function POST(request: Request) {
     console.log(`   Odpowiedz: ${contentLength} znakow`);
     console.log(`   Ratio: ${(contentLength / prompt.length).toFixed(2)}`);
     console.log(`   Model: ${modelToUse}`);
-    console.log(`   Wykorzystane tokeny: ${responseData.usage?.output_tokens || 0}/${requestBody.max_tokens}`);
-    console.log(`   Wykorzystanie: ${((responseData.usage?.output_tokens || 0) / requestBody.max_tokens * 100).toFixed(1)}%`);
-
-    if ((responseData.usage?.output_tokens || 0) < requestBody.max_tokens * 0.5) {
+    console.log(`   Wykorzystane tokeny: ${responseData.usage?.output_tokens || 0}/${MAX_TOKENS}`);
+    console.log(`   Wykorzystanie: ${((responseData.usage?.output_tokens || 0) / MAX_TOKENS * 100).toFixed(1)}%`);
+    if ((responseData.usage?.output_tokens || 0) < MAX_TOKENS * 0.5) {
       console.log('   WNIOSEK: Model nie wykorzystuje dostepnych tokenow - mozliwa przyczyna:');
-      console.log('     1. Model Haiku naturalnie pisze krotko');
+      console.log('     1. Model naturalnie pisze krotko');
       console.log('     2. Model ignoruje instrukcje o dlugosci');
       console.log('     3. Prompt nie jest wystarczajaco jasny');
       console.log('   REKOMENDACJA: Rozważ uzycie modelu Sonnet dla dluzszych tekstow');

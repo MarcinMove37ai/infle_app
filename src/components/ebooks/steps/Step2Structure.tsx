@@ -4,6 +4,9 @@ import {
   MoreVertical, Sparkles, ChevronRight
 } from 'lucide-react';
 import { TocItem } from '../types';
+import LimitBadge from '@/components/ui/LimitBadge';
+import { hasIntroAccess } from '@/lib/planLimits';
+import { getChapterLimits } from '@/lib/chapterLimits';
 
 interface Step2StructureProps {
   title: string;
@@ -13,7 +16,7 @@ interface Step2StructureProps {
   editingItemId: string | null;
   editingItemTitle: string;
   setEditingItemTitle: (value: string) => void;
-  editItemInputRef: RefObject<HTMLInputElement>;
+  editItemInputRef: RefObject<HTMLInputElement | null>;
   handleKeyDown: (e: React.KeyboardEvent, action: () => void) => void;
   handleSaveEdit: () => void;
   isGeneratingContent: boolean;
@@ -30,11 +33,14 @@ interface Step2StructureProps {
   newItemTitle: string;
   setNewItemTitle: (value: string) => void;
   handleAddItem: () => void;
-  newItemInputRef: RefObject<HTMLInputElement>;
+  newItemInputRef: RefObject<HTMLInputElement | null>;
   setStep: (step: number) => void;
   contentGenerated: boolean;
   changeStep: (step: number) => void;
   generateChaptersContent: () => void;
+  /** Czy do ebooka ma zostac wygenerowany wstep (plan Business i wyzej). */
+  includeIntro: boolean;
+  setIncludeIntro: (value: boolean) => void;
 }
 
 export const Step2Structure: React.FC<Step2StructureProps> = ({
@@ -66,22 +72,15 @@ export const Step2Structure: React.FC<Step2StructureProps> = ({
   setStep,
   contentGenerated,
   changeStep,
-  generateChaptersContent
+  generateChaptersContent,
+  includeIntro,
+  setIncludeIntro
 }) => {
-  // --- LOGIKA LIMITU ROZDZIAŁÓW (Odtworzona z oryginału) ---
+  // --- LIMIT ROZDZIAŁÓW ---
+  // Czytamy z chapterLimits.ts, tak samo jak suwak w kroku 1 i endpoint generate-toc.
+  // Wczesniej byla tu wlasna kopia liczb (6/12) i nazw planow — trzecie miejsce do rozjechania.
   const currentChapterCount = tocItems.length;
-  let maxChapters = Infinity;
-  let roleName = "Unlimited";
-  const role = String(userRole).toLowerCase();
-
-  if (role === 'free' || role === 'free_ver' || role === 'rookie') {
-    maxChapters = 6;
-    roleName = "Rookie";
-  } else if (role === 'creator') {
-    maxChapters = 12;
-    roleName = "Creator";
-  }
-
+  const maxChapters = getChapterLimits(userRole).max;
   const isAtChapterLimit = currentChapterCount >= maxChapters;
 
   return (
@@ -103,6 +102,46 @@ export const Step2Structure: React.FC<Step2StructureProps> = ({
       </div>
 
       <div className="p-4 sm:p-6">
+        {/* Wstep — funkcja planu Business i wyzej. Stoi nad rozdzialami,
+            bo w gotowym ebooku pojawia sie przed nimi. */}
+        {(() => {
+          const introAvailable = hasIntroAccess(userRole);
+          return (
+            <div className="flex items-center justify-between gap-4 mb-5 pb-5 border-b border-gray-200">
+              <label
+                className={`flex items-center gap-2.5 min-w-0 ${
+                  introAvailable ? 'cursor-pointer' : 'cursor-not-allowed'
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  checked={introAvailable && includeIntro}
+                  onChange={(e) => setIncludeIntro(e.target.checked)}
+                  disabled={!introAvailable}
+                  className="w-4 h-4 flex-shrink-0 accent-indigo-700 cursor-pointer disabled:cursor-not-allowed"
+                />
+                <span className="min-w-0">
+                  <span className={`text-sm font-medium ${introAvailable ? 'text-gray-800' : 'text-gray-400'}`}>
+                    Add an intro
+                  </span>
+                  <span className={`hidden sm:inline text-sm ml-1.5 ${introAvailable ? 'text-gray-400' : 'text-gray-300'}`}>
+                    — a short opening written from your ebook structure
+                  </span>
+                </span>
+              </label>
+
+              <div className="flex-shrink-0">
+                <LimitBadge
+                  aspect="intro"
+                  current={introAvailable ? 1 : 0}
+                  max={1}
+                  role={userRole}
+                />
+              </div>
+            </div>
+          );
+        })()}
+
         <div className="mb-6">
           <div className="text-sm font-semibold text-gray-800 mb-3 flex items-center justify-between">
             <div className="flex items-center">
@@ -110,19 +149,12 @@ export const Step2Structure: React.FC<Step2StructureProps> = ({
               Chapters ({currentChapterCount})
             </div>
 
-            {maxChapters !== Infinity ? (
-              <span className={`text-xs font-medium px-2 py-1 rounded-full ${
-                isAtChapterLimit ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'
-              }`}>
-                Chapters: {currentChapterCount} / {maxChapters} ({roleName} Plan)
-              </span>
-            ) : (
-              tocItems.length > 0 && (
-                <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full">
-                  {tocItems.length} chapters
-                </span>
-              )
-            )}
+            <LimitBadge
+              aspect="chapters"
+              current={currentChapterCount}
+              max={maxChapters}
+              role={userRole}
+            />
           </div>
 
           <div className="space-y-2 mb-4 max-h-[380px] overflow-y-auto pr-2 custom-scrollbar">

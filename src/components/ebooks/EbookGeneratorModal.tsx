@@ -3,6 +3,7 @@
 "use client"
 import React, { useState, useRef, useEffect } from 'react';
 import SourcePreviewModal from '@/components/ebooks/SourcePreviewModal';
+import { hasIntroAccess } from '@/lib/planLimits';
 import { useAuth } from '@/hooks/useAuth';
 import { X, AlertCircle, ArrowRight, RefreshCw } from 'lucide-react';
 
@@ -188,6 +189,8 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose, lang 
 
   // NEW STATE for Intro
   const [introContent, setIntroContent] = useState('');
+  // Wstep domyslnie WLACZONY — dla planow bez dostepu i tak nie zostanie wywolany.
+  const [includeIntro, setIncludeIntro] = useState(true);
 
   // Seedy z zaproszenia (3 propozycje tytułów) — spotlight na kroku 1 dla NOWEGO ebooka.
   const [seedSuggestions, setSeedSuggestions] = useState<{ position: number; title: string; subtitle: string; description?: string }[]>([]);
@@ -200,7 +203,7 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose, lang 
   // Brak seedów po załadowaniu → cicho zamykamy. Cache `inflee_has_seeds` chroni userów bez seedów
   // przed migotaniem nakładki przy kolejnych otwarciach.
   useEffect(() => {
-    if (!isOpen || ebookId) return; // tylko nowy ebook
+    if (!isOpen) return;
     let hidden = false;
     let knownNoSeeds = false;
     try {
@@ -208,7 +211,11 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose, lang 
       knownNoSeeds = localStorage.getItem('inflee_has_seeds') === '0';
     } catch {}
     let cancelled = false;
-    if (!hidden && !knownNoSeeds) {
+    // Seedy pobieramy ZAWSZE przy otwarciu — zasilaja przycisk "Inspire me",
+    // ktory ma byc dostepny rowniez po powrocie do zapisanego szkicu (ebookId ustawione).
+    // Samo AUTOMATYCZNE pokazanie nakladki zostaje zarezerwowane dla nowego ebooka.
+    const isNewEbook = !ebookId;
+    if (isNewEbook && !hidden && !knownNoSeeds) {
       setShowSeedSpotlight(true);
       setSeedsLoading(true);
     }
@@ -1733,8 +1740,12 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose, lang 
       console.log(`🚀 Starting parallel generation of ${tocItems.length} chapters...`);
 
       try {
-        // 1. Start parallel Intro Generation (fire and forget inside logic, state will handle UI)
-        generateIntro();
+        // 1. Wstep rownolegle z rozdzialami — tylko gdy user go chce i ma dostep.
+        //    hasIntroAccess pilnuje planu takze tutaj, zeby nie strzelac w endpoint,
+        //    ktory i tak odpowie 403.
+        if (includeIntro && hasIntroAccess(userRole)) {
+          generateIntro();
+        }
 
         // 2. Start Chapters Generation
         const chaptersToGenerate = [...tocItems];
@@ -1857,9 +1868,13 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose, lang 
         });
 
         if (tocItems.length > 0) {
-          // Default to Intro if enabled, otherwise first chapter
-          setActiveChapterId('intro');
-          console.log(`🎯 Set active chapter to Intro`);
+          // Wstep jako domyslny TYLKO gdy jest na liscie (plan + wybor usera),
+          // inaczej pierwszy rozdzial — bez pustego "Select a chapter from the list".
+          const defaultActiveId = (includeIntro && hasIntroAccess(userRole))
+            ? 'intro'
+            : tocItems[0].id;
+          setActiveChapterId(defaultActiveId);
+          console.log(`🎯 Set active chapter to ${defaultActiveId}`);
         }
 
         console.log('🔄 Synchronizing chapter status...');
@@ -2602,14 +2617,18 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose, lang 
   };
 
   // Prepare Step 3 items (Intro + Chapters)
+  // Wstep trafia na liste TYLKO gdy user go wlaczyl I ma go w planie.
+  // Dziala w obie strony: wylaczenie checkboxa usuwa go z listy nawet wtedy,
+  // gdy tresc zostala wczesniej wygenerowana i siedzi w introContent.
+  const showIntro = includeIntro && hasIntroAccess(userRole);
   const introItem: TocItem = {
     id: 'intro',
-    title: 'Wstęp',
+    title: pl ? 'Wstęp' : 'Introduction',
     content: introContent,
     position: -1,
     image_url: undefined // Intro doesn't have an explicit image in this editor flow
   };
-  const step3TocItems = [introItem, ...tocItems];
+  const step3TocItems = showIntro ? [introItem, ...tocItems] : tocItems;
 
   return (
     <div className="max-w-5xl mx-auto p-0 sm:p-6">
@@ -2764,6 +2783,8 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose, lang 
           contentGenerated={contentGenerated}
           changeStep={changeStep}
           generateChaptersContent={generateChaptersContent}
+          includeIntro={includeIntro}
+          setIncludeIntro={setIncludeIntro}
         />
       )}
 
@@ -2851,6 +2872,7 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose, lang 
       )}
 
       <SourcePreviewModal
+        lang={lang}
         isVisible={sourcePreviewModal.isVisible}
         sourceType={sourcePreviewModal.sourceType || 'web'}
         content={sourcePreviewModal.content}
@@ -2909,6 +2931,7 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose, lang 
         chapterTitle={tocItems.find(i => i.id === chapterPickerId)?.title}
         variants={chapterVariants}
         activeUrl={tocItems.find(i => i.id === chapterPickerId)?.image_url}
+        userRole={userRole}
         variantLimit={getVariantLimit(userRole)}
         cacheBust={imageRefreshTimestamp}
         isLoading={isChapterPickerLoading}
@@ -2988,6 +3011,9 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose, lang 
 
             {/* Karty */}
             <div className="px-6 pt-5 pb-6">
+              <p className="text-[13px] font-medium text-gray-700 mb-3">
+                {pl ? 'Wybierz jeden z poniższych tytułów:' : 'Use one of the titles below:'}
+              </p>
               <div className="space-y-2.5">
                 {seedsLoading ? (
                   [0, 1, 2].map((i) => (
@@ -3018,21 +3044,15 @@ function EbookGeneratorContent({ isOpen, ebookId, onEbookCreated, onClose, lang 
 
               {!seedsLoading && (
                 <>
-                  <div className="flex items-center justify-between gap-3 mt-4 flex-wrap">
-                    <button
-                      type="button"
-                      onClick={() => { /* placeholder — logika z generatorem później */ }}
-                      className="inline-flex items-center gap-1.5 border border-gray-300 hover:bg-gray-50 px-3 py-1.5 rounded-lg cursor-pointer text-[13px] text-gray-700 transition-colors"
-                    >
-                      <RefreshCw size={14} />
-                      Generate a new set
-                    </button>
+                  {/* Seedy sa wystawiane raz, razem z kodem zaproszenia (/api/my-seeds),
+                      wiec nie ma czego regenerowac — user wybiera jeden albo pisze wlasny. */}
+                  <div className="flex items-center justify-end mt-4">
                     <button
                       type="button"
                       onClick={handleWriteMyOwn}
                       className="text-[13px] text-gray-500 hover:text-gray-700 cursor-pointer transition-colors"
                     >
-                      or write my own
+                      {pl ? 'albo napisz własny' : 'or write your own'}
                     </button>
                   </div>
 

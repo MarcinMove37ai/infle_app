@@ -25,5 +25,5 @@ export function getChapterLimits(role?: string | null): ChapterLimits {
     return { min: 4, max: 12, default: 12 };
   }
   // unlimited / god / wszystko inne
-  return { min: 4, max: 15, default: 15 };
+  return { min: 4, max: 24, default: 24 };
 }

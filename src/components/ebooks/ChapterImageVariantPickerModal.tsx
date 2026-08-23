@@ -13,6 +13,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { X, Check, Upload, ZoomIn, RefreshCw, ArrowLeft, Loader2, Plus, Info } from 'lucide-react';
+import LimitBadge from '@/components/ui/LimitBadge';
 
 export type ChapterImageVariant = {
   url: string;
@@ -27,6 +28,7 @@ interface ChapterImageVariantPickerModalProps {
   variants: ChapterImageVariant[];
   activeUrl?: string;
   variantLimit: number;            // ile wariantów dozwolone na planie (z getVariantLimit)
+  userRole?: string | null | undefined; // do LimitBadge — dymek z porownaniem planow
   cacheBust?: number;
   isLoading?: boolean;             // dociąganie puli — pokazuj szkielet zamiast siatki
   isSelecting?: boolean;
@@ -46,6 +48,7 @@ export const ChapterImageVariantPickerModal: React.FC<ChapterImageVariantPickerM
   variants,
   activeUrl,
   variantLimit,
+  userRole,
   cacheBust,
   isLoading = false,
   isSelecting = false,
@@ -238,7 +241,14 @@ export const ChapterImageVariantPickerModal: React.FC<ChapterImageVariantPickerM
                     </span>
                     <div className="min-w-0">
                       <p className="text-[13px] font-medium text-gray-900">Generate another option</p>
-                      <p className="text-xs text-gray-500 mt-0.5">{generatedCount} of {variantLimit} used on your plan</p>
+                      <div className="mt-1">
+                        <LimitBadge
+                          aspect="variants"
+                          current={generatedCount}
+                          max={variantLimit}
+                          role={userRole}
+                        />
+                      </div>
                     </div>
                   </div>
                   <button
@@ -260,10 +270,18 @@ export const ChapterImageVariantPickerModal: React.FC<ChapterImageVariantPickerM
                     <Info size={17} />
                   </span>
                   <div className="min-w-0">
-                    <p className="text-[13px] font-medium text-gray-900">You've reached the image limit for this chapter</p>
+                    <p className="text-[13px] font-medium text-gray-900">You&apos;ve reached the image limit for this chapter</p>
                     <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">
-                      Go to <span className="font-medium text-gray-700">Settings → Manage plan</span> to increase your generation limits.
+                      You can still upload your own image. Higher plans include more generated options:
                     </p>
+                    <div className="mt-2">
+                      <LimitBadge
+                        aspect="variants"
+                        current={generatedCount}
+                        max={variantLimit}
+                        role={userRole}
+                      />
+                    </div>
                   </div>
                 </div>
               )}
