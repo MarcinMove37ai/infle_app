@@ -284,7 +284,25 @@ async function callAnthropic(prompt: string, apiKey: string, model: string): Pro
     throw new Error(`Anthropic API ${response.status}: ${errorText.slice(0, 200)}`);
   }
   const data = await response.json();
-  return data.content[0].text;
+
+  // NIE zakladamy, ze content[0] to tekst. Nowsze modele (Opus 5 i pozniejsze)
+  // maja rozszerzone myslenie wlaczone domyslnie i moga zwrocic blok 'thinking'
+  // na pierwszej pozycji — wtedy .text jest undefined i cala sciezka sie wywala.
+  // Filtrujemy po TYPIE i sklejamy wszystkie bloki tekstowe.
+  const blocks = Array.isArray(data?.content) ? data.content : [];
+  const text = blocks
+    .filter((b: any) => b?.type === 'text' && typeof b.text === 'string')
+    .map((b: any) => b.text)
+    .join('\n')
+    .trim();
+
+  if (!text) {
+    const types = blocks.map((b: any) => b?.type).join(', ') || 'brak blokow';
+    throw new Error(
+      `Odpowiedz modelu bez bloku tekstowego (typy: ${types}, stop_reason: ${data?.stop_reason ?? '?'})`,
+    );
+  }
+  return text;
 }
 
 // Parsowanie odpowiedzi → dokładnie 3 seedy.
