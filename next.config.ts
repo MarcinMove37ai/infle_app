@@ -22,6 +22,7 @@ const nextConfig: NextConfig = {
     // NIE jest poprawną składnią — Next traktuje to jako dosłowną wartość i nie dopasuje ?t=...
     localPatterns: [
       { pathname: '/api/assets/**' },
+      { pathname: '/**' },
     ],
     remotePatterns: [
       // Self-hosted assets — uploads serwowane przez nasz /api/assets/* endpoint
